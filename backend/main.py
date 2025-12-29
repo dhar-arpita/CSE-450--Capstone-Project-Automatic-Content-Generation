@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from typing import List
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from sqlalchemy.orm import Session
+from fastapi.middleware.cors import CORSMiddleware
 
 # Import our modular files
 import settings
@@ -12,6 +13,7 @@ import models
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. Startup Logic: Runs when server starts
+    # Before the app accepts a single request, it ensures your SQL Database exists and your Qdrant Vector Database is ready.
     print("Starting up: Creating tables and vector DB...")
     settings.Base.metadata.create_all(bind=settings.engine)
     services.init_vector_db()
@@ -23,6 +25,13 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI with lifespan
 app = FastAPI(title="RAG & User API Prototype", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all methods (POST, GET, OPTIONS, etc.)
+    allow_headers=["*"],  # Allows all headers
+)
 
 @app.get("/")
 def home():
@@ -92,3 +101,11 @@ async def create_flashcard(topic: str):
         "source": best_match.payload["filename"],
         "page": best_match.payload["page"]
     }
+    
+# @app.delete("/reset-memory/")
+# async def reset_memory():
+#     success = services.reset_vector_db()
+#     if success:
+#         return {"message": "✅ All PDFs have been wiped from memory. You can start fresh!"}
+#     else:
+#         raise HTTPException(status_code=500, detail="Failed to reset database.")    
