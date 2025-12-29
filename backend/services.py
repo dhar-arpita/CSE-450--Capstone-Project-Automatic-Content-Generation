@@ -71,6 +71,7 @@ def process_and_store_pdf(file_bytes, filename):
     for page_num, page in enumerate(pdf_reader.pages):
         text = page.extract_text()
         if text:
+            #time.sleep(2)
             vector = get_embedding(text, is_query=False)
             
             if vector:
@@ -182,3 +183,22 @@ def create_user(db: Session, user: UserCreate):
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(User).offset(skip).limit(limit).all()
+
+
+# --- ADD THIS TO THE BOTTOM OF services.py ---
+
+# def reset_vector_db():
+#     """Wipes all data and recreates the collection."""
+#     try:
+#         # 1. Delete the existing collection (Wipe memory)
+#         qdrant_client.delete_collection(collection_name=COLLECTION_NAME)
+        
+#         # 2. Re-create the empty collection immediately
+#         qdrant_client.create_collection(
+#             collection_name=COLLECTION_NAME,
+#             vectors_config=VectorParams(size=768, distance=Distance.COSINE),
+#         )
+#         return True
+#     except Exception as e:
+#         print(f"Error resetting DB: {e}")
+#         return False
