@@ -15,7 +15,10 @@ async def lifespan(app: FastAPI):
     # 1. Startup Logic: Runs when server starts
     # Before the app accepts a single request, it ensures your SQL Database exists and your Qdrant Vector Database is ready.
     print("Starting up: Creating tables and vector DB...")
+    
+    #settings.Base.metadata.drop_all(bind=settings.engine)   # delete everything
     settings.Base.metadata.create_all(bind=settings.engine)
+
     services.init_vector_db()
     
     yield  # The application runs here
