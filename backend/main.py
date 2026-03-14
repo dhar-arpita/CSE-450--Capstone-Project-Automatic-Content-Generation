@@ -48,6 +48,14 @@ def create_user(user: models.UserCreate, db: Session = Depends(settings.get_db))
         raise HTTPException(status_code=400, detail="Email already registered")
     return db_user
 
+@app.post("/login/")
+def login_user(email: str, password: str, db: Session = Depends(settings.get_db)):
+    from models import User
+    user = db.query(User).filter(User.email == email, User.password == password).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+    return {"user_id": user.user_id, "name": user.name, "email": user.email, "role": user.role}
+
 @app.get("/users/", response_model=List[models.UserResponse])
 def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(settings.get_db)):
     return services.get_users(db, skip=skip, limit=limit)

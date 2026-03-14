@@ -1,28 +1,22 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { signup, getUsers } from "./api";
+
+
+import { signup, login } from "./api";
 
 export function Login() {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      // 1. Fetch all users (Simulated Auth)
-      const { data } = await getUsers();
-      
-      // 2. Check if email exists
-      const user = data.find((u) => u.email === email);
-      
-      if (user) {
-        localStorage.setItem("user", JSON.stringify(user)); // Save user session
-        navigate("/dashboard");
-      } else {
-        alert("User not found! Please sign up.");
-      }
+      const { data } = await login(email, password);
+      localStorage.setItem("user", JSON.stringify(data));
+      navigate("/dashboard");
     } catch (err) {
-      alert("Connection Error. Is backend running?");
+      alert("Invalid email or password");
     }
   };
 
@@ -30,20 +24,27 @@ export function Login() {
     <div style={{ padding: "50px", textAlign: "center" }}>
       <h2>Login</h2>
       <input 
-        placeholder="Enter your email" 
+        placeholder="Email" 
         value={email}
         onChange={(e) => setEmail(e.target.value)} 
+        style={{ padding: "10px", width: "250px", marginBottom: "10px" }}
+      />
+      <br />
+      <input 
+        placeholder="Password" 
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)} 
         style={{ padding: "10px", width: "250px" }}
       />
       <br /><br />
-      <button onClick={handleLogin} style={{ padding: "10px 20px" }}>Enter</button>
+      <button onClick={handleLogin} style={{ padding: "10px 20px" }}>Login</button>
       <p>No account? <a href="/signup">Sign up here</a></p>
     </div>
   );
 }
-
 export function Signup() {
-  const [form, setForm] = useState({ name: "", email: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "teacher" });
   const navigate = useNavigate();
 
   const handleSignup = async (e) => {
@@ -69,6 +70,13 @@ export function Signup() {
       <input 
         placeholder="Email" 
         onChange={(e) => setForm({...form, email: e.target.value})} 
+        style={{ padding: "10px", width: "250px", marginBottom: "10px" }}
+      />
+      <br />
+      <input 
+        placeholder="Password" 
+        type="password"
+        onChange={(e) => setForm({...form, password: e.target.value})} 
         style={{ padding: "10px", width: "250px" }}
       />
       <br /><br />

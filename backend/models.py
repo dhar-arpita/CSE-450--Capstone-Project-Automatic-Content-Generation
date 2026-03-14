@@ -8,7 +8,10 @@ from settings import Base
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
-
+    password: str
+    role: str
+    
+    
 class UserResponse(BaseModel):
     user_id: int
     name: str

@@ -31,3 +31,4 @@ export const askQuestion = (question) => {
 };
 
 export default api;
+export const login = (email, password) => api.post(`/login/?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`);

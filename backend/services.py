@@ -5,6 +5,7 @@ import json
 from pypdf import PdfReader
 from qdrant_client.http.models import Distance, VectorParams, PointStruct
 from sqlalchemy.orm import Session
+from models import User, UserCreate, Teacher
 
 # Import configured clients and models
 from settings import qdrant_client, genai, COLLECTION_NAME, EMBEDDING_MODEL
@@ -175,10 +176,25 @@ def create_user(db: Session, user: UserCreate):
     if db_user:
         return None 
     
-    new_user = User(name=user.name, email=user.email)
+ 
+    new_user = User(
+        name=user.name,
+        email=user.email,
+        password=user.password,
+        role=user.role
+    )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
+    
+    # If role is teacher, also create teacher record
+    if user.role == "teacher":
+        from datetime import date
+        new_teacher = Teacher(teacher_id=new_user.user_id, join_date=date.today())
+        db.add(new_teacher)
+        db.commit()
+    
+
     return new_user
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
