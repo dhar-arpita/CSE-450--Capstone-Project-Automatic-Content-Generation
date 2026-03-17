@@ -1,3 +1,4 @@
+# models.py - This file defines the SQLAlchemy models that represent the database schema for our application. It includes tables for users, classes, subjects, chapters, topics, learning objectives, upload requests, ingestion jobs, content embeddings, teacher sessions, generated content, feedback, saved content, learning sessions, student interactions, remediation decisions, and topic performance. Each model corresponds to a table in the database and defines the structure of the data we will be working with.
 from sqlalchemy import TIMESTAMP, Column, Integer, String, Text, Boolean, Date, BigInteger, Numeric, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
