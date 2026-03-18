@@ -17,12 +17,14 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
+SMART_MODEL = "gemini-2.5-flash"
+FAST_MODEL = "gemini-3.1-flash-lite-preview"
 # Initialize the Gemini client — this replaces the old genai.configure() call
 gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
 
 # Qdrant setup — uses cloud if URL is provided, otherwise falls back to local memory
 if QDRANT_URL:
-    qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY)
+    qdrant_client = QdrantClient(url=QDRANT_URL, api_key=QDRANT_API_KEY,timeout=30)
 else:
     print("QDRANT_URL not found, using local memory.")
     qdrant_client = QdrantClient(location=":memory:")

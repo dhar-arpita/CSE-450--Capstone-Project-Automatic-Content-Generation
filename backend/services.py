@@ -22,7 +22,7 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct, Paylo
 from sqlalchemy.orm import Session
 
 # Import the new gemini_client instead of the old genai object
-from settings import qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
+from settings import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
 from models import User, UserCreate, Teacher
 # for delete specific pdf from qdrant................................................
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
@@ -408,3 +408,43 @@ def delete_file_from_system(filename: str, db: Session):
 #     except Exception as e:
 #         print(f"Error resetting DB: {e}")
 #         return False
+
+
+
+
+
+
+
+
+def analyze_worksheet_style(file_bytes: bytes) -> str:
+    from pdf2image import convert_from_bytes
+    import base64
+
+    images = convert_from_bytes(file_bytes, first_page=1, last_page=1)
+    if not images:
+        return ""
+
+    buffer = io.BytesIO()
+    images[0].save(buffer, format="PNG")
+    buffer.seek(0)
+
+    try:
+        response = gemini_client.models.generate_content(
+            model=SMART_MODEL,
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {
+                            "mime_type": "image/png",
+                            "data": base64.b64encode(buffer.read()).decode()
+                        }},
+                        {"text": "Analyze this worksheet's visual style. Describe: layout, colors, fonts, mascot/characters, borders, problem arrangement, icons. Be detailed enough for another designer to recreate the style."}
+                    ]
+                }
+            ]
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Style analysis error: {e}")
+        return ""
