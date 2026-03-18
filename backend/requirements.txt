@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+pydantic
+python-dotenv
+google-generativeai
+qdrant-client
+pypdf
+python-multipart
+email-validator
+google-genai
