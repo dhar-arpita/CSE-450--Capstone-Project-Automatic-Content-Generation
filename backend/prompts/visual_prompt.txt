@@ -7,8 +7,10 @@ SAMPLE WORKSHEET STYLE:
 {style_description}
 
 YOUR TASK:
+Try to maintain the format of style description.Sample_Worksheet_stype is your first priority.
 For each problem that has "needs_diagram": true, generate SVG code for the diagram described.
-Also generate a cute robot mascot SVG that will appear on the worksheet.
+Also generate a cute robot mascot SVG that will appear on the worksheet.Besides,any cute dog/doll
+that children love the most can be created.
 
 SVG RULES:
 1. Use simple, clean shapes — children must understand them easily

@@ -17,7 +17,7 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-SMART_MODEL = "gemini-2.5-flash"
+SMART_MODEL = "gemini-3.1-flash-lite-preview"
 FAST_MODEL = "gemini-3.1-flash-lite-preview"
 # Initialize the Gemini client — this replaces the old genai.configure() call
 gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
