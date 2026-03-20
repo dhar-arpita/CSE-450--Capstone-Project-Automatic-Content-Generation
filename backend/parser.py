@@ -19,7 +19,7 @@ def describe_page_with_vision(image) -> str:
     
     try:
         response = gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3.1-flash-lite-preview",
             contents =[
                 {
                     "role":"user",
