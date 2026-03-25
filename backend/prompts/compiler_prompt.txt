@@ -18,6 +18,17 @@ YOUR TASK:
 Compile all the problems and visuals into ONE beautiful, print-ready HTML worksheet.
 Follow the STYLE description above — match its layout, colors, fonts.Always maintain the 
 format .Try to be creative.
+
+CRITICAL RULE: You MUST include ALL problems. NEVER write "remaining problems omitted" 
+or skip any problem. If there are 5 problems, show all 5. If there are 12, show all 12. 
+Every single problem must appear in the HTML. No shortcuts.
+
+MATH ACCURACY IS NON-NEGOTIABLE:
+- Every answer in the Answer Key must be mathematically correct
+- Every SVG diagram must show the EXACT number of objects stated in the problem
+- Double-check: if problem says 36 + 21, the answer MUST be 57, not 56 or 58
+- Verify every calculation before including it
+
 HTML RULES:
 1. Use inline CSS only (no external stylesheets)
 2. Page size: A4 (210mm x 297mm)
@@ -31,6 +42,20 @@ HTML RULES:
 10. Add the robot mascot in the top-right corner of the header
 11. Include space for student name and date at the top
 12. Problems should have enough white space for students to write answers
+
+PAGE LAYOUT RULES:
+- Total page width: 210mm (A4). Content width: 170mm max.
+- NEVER let any element overflow outside the page boundary
+- SVG diagrams must have max-width: 150px and be placed INSIDE the problem box
+- Use "overflow: hidden" on all container divs
+- If a problem has both text and SVG, use flexbox with the text taking 60% and SVG taking 40%
+- Example layout for problem with diagram:
+  <div style="display: flex; align-items: center;">
+    <div style="flex: 0.6;">problem text here</div>
+    <div style="flex: 0.4; text-align: center;"><svg...></svg></div>
+  </div>
+- All SVG viewBox must fit within their container — no absolute positioning
+- Test: if you print this page on A4 paper, nothing should be cut off
 
 STRUCTURE:
 - Header (title + mascot/any little cute baby + name/date fields)

@@ -291,6 +291,12 @@ def find_best_match(topic: str):
         return MockPoint()
     return None
 
+
+
+def load_prompt_template(filename: str) -> str:
+    with open(f"prompts/{filename}", "r") as f:
+        return f.read()
+
 # --- USER LOGIC ---
 def create_user(db: Session, user: UserCreate):
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -427,6 +433,8 @@ def analyze_worksheet_style(file_bytes: bytes) -> str:
     buffer = io.BytesIO()
     images[0].save(buffer, format="PNG")
     buffer.seek(0)
+    
+    template = load_prompt_template("style_format_prompt.txt")
 
     try:
         response = gemini_client.models.generate_content(
@@ -439,7 +447,7 @@ def analyze_worksheet_style(file_bytes: bytes) -> str:
                             "mime_type": "image/png",
                             "data": base64.b64encode(buffer.read()).decode()
                         }},
-                        {"text": "Analyze this worksheet's visual style. Describe: layout, colors, fonts, mascot/characters, borders, problem arrangement, icons. Be detailed enough for another designer to recreate the style."}
+                        {"text": template}
                     ]
                 }
             ]

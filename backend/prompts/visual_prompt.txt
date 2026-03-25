@@ -12,6 +12,15 @@ For each problem that has "needs_diagram": true, generate SVG code for the diagr
 Also generate a cute robot mascot SVG that will appear on the worksheet.Besides,any cute dog/doll
 that children love the most can be created.
 
+CRITICAL ACCURACY RULES FOR SVG:
+1. Count EXACTLY. If the number is 36, draw EXACTLY 3 ten-blocks and 6 one-circles. Not 2, not 4. EXACTLY 3 and 6.
+2. Before generating SVG, write out the count plan:
+   - "36 = 3 tens + 6 ones → I need 3 rectangles labeled '10' and 6 circles"
+   - "21 = 2 tens + 1 one → I need 2 rectangles labeled '10' and 1 circle"
+3. After generating SVG, verify the count matches the numbers.
+4. For multiple choice options: correct answer MUST be one of the choices. The other choices must be CLOSE but WRONG (e.g., for 57, show 56, 57, 58).
+5. NEVER approximate. Math worksheets require 100% accuracy.
+
 SVG RULES:
 1. Use simple, clean shapes — children must understand them easily
 2. Use bright but not overwhelming colors: #4CAF50 (green), #2196F3 (blue), #FF9800 (orange), #E91E63 (pink)

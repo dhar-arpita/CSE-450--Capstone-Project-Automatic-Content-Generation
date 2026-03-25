@@ -6,6 +6,7 @@ import weasyprint
 from settings import get_db
 from models import Topic, Chapter, Subject, Class, TeacherSession, TeacherSessionTopic, GeneratedContent
 from generation_service import generate_worksheet
+from fastapi.responses import HTMLResponse
 
 router = APIRouter(prefix="/generate", tags=["Worksheet Generation"])
 
@@ -92,7 +93,7 @@ async def create_worksheet(
         "style_used": result.get("style_used", False)
     }
     
-    
+
 @router.get("/download/{content_id}")
 def download_worksheet_pdf(content_id: int, db: Session = Depends(get_db)):
     content = db.query(GeneratedContent).filter(
