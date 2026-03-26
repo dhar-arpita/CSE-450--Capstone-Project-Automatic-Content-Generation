@@ -16,6 +16,7 @@ import time
 import uuid
 import io
 import json
+from google.genai import types
 from pypdf import PdfReader
 # from qdrant_client.http.models import Distance, VectorParams, PointStruct
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, PayloadSchemaType
@@ -450,7 +451,10 @@ def analyze_worksheet_style(file_bytes: bytes) -> str:
                         {"text": template}
                     ]
                 }
-            ]
+            ],
+            config=types.GenerateContentConfig(
+            temperature=0.3
+    )
         )
         return response.text.strip()
     except Exception as e:

@@ -2,6 +2,7 @@ import json
 from agents.content_agent import load_prompt_template
 from settings import gemini_client
 from settings import gemini_client, SMART_MODEL
+from google.genai import types
 
 
 def run_visual_agent(localization_output: dict, style_description: str = "") -> dict:
@@ -29,7 +30,10 @@ def run_visual_agent(localization_output: dict, style_description: str = "") -> 
 
     response = gemini_client.models.generate_content(
         model=SMART_MODEL,
-        contents=prompt
+        contents=prompt,
+        config=types.GenerateContentConfig(
+        temperature=0.5
+    )
     )
 
     raw = response.text.replace("```json", "").replace("```", "").strip()

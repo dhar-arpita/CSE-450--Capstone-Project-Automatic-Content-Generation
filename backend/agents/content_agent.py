@@ -1,6 +1,7 @@
 import json
 from settings import gemini_client
 from settings import gemini_client, SMART_MODEL
+from google.genai import types
 
 
 
@@ -45,6 +46,9 @@ def run_content_agent(
     response = gemini_client.models.generate_content(
         model=SMART_MODEL,
         contents=prompt,
+        config=types.GenerateContentConfig(
+        temperature=0.3
+    )
         
     )
 

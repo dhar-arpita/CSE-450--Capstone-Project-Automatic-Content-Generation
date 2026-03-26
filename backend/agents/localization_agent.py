@@ -2,7 +2,7 @@ import json
 from agents.content_agent import load_prompt_template
 from settings import gemini_client
 from settings import gemini_client, FAST_MODEL
-
+from google.genai import types
 
 
 
@@ -22,7 +22,10 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
 
     response = gemini_client.models.generate_content(
         model=FAST_MODEL,
-        contents=prompt
+        contents=prompt,
+        config=types.GenerateContentConfig(
+        temperature=0.6
+    )
     )
 
     raw = response.text.replace("```json", "").replace("```", "").strip()
