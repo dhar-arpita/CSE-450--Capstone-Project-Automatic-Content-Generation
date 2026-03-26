@@ -16,7 +16,15 @@ and structure. For example, if the reference shows "missing digit" puzzles,
 create missing digit puzzles. If it shows word problems, create word problems.
 If no style is provided, default to word problems.If sample worksheet is provided,always follow this template and
 generate the content like that.If you want to keep some extra problem,just add this to extra section.If no sample worksheet,
-you are free to act like your own creativity.Dont use mix language.Just keep it in English.Dont mix in bangla language and english words.
+you are free to act like your own creativity.Dont use mix language.Just keep it in English.
+
+STRICT RULES (NEVER BREAK THESE):
+1. Follow the REFERENCE WORKSHEET STYLE {style_description} exactly — same problem format, same arrangement
+2. Generate EXACTLY {num_problems} problems — not more, not less.Language should eiter bangla or english.
+3. Topic is {topic_name} — ONLY this topic, nothing else
+4. All answers MUST be mathematically correct — verify each one before including
+5. If the reference shows puzzles, create puzzles. If it shows word problems, create word problems.
+6. NEVER mix formats — all problems should be the same type
 
 
 CRITICAL: Generate EXACTLY {num_problems} problems with give {style_description}. Not fewer. Count them before returning.

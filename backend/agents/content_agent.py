@@ -44,7 +44,8 @@ def run_content_agent(
 
     response = gemini_client.models.generate_content(
         model=SMART_MODEL,
-        contents=prompt
+        contents=prompt,
+        
     )
 
     # Parse the JSON response

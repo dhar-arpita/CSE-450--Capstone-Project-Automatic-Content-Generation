@@ -4,7 +4,10 @@ PROBLEMS TO LOCALIZE:
 {problems_json}
 
 YOUR TASK:
+
 Rewrite each problem using Bangladeshi cultural context while keeping the exact same mathematical operation and answer.
+You need to change only names and give bangladeshi context.No need to change the format taht i am giving you.Let everything in
+English.
 
 LOCALIZATION RULES:
 ***MOST IMPORTANT RULE: if there are any sample provided follow the sample worksheet data,math problems,examples.****
