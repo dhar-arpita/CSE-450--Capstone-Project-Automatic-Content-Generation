@@ -1,6 +1,7 @@
 import json
 from services import get_embedding, analyze_worksheet_style
 from settings import qdrant_client, COLLECTION_NAME
+from qdrant_client.models import Filter, FieldCondition, MatchValue
 from agents.content_agent import run_content_agent
 from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
@@ -13,15 +14,35 @@ def search_curriculum_context(topic_id: int, topic_name: str, limit: int = 5) ->
     Returns combined text from top matches.
     """
     query_vector = get_embedding(topic_name, is_query=True)
-    
+
     if not query_vector:
         return ""
+
+    # First try with topic_id filter for precise results
+    topic_filter = Filter(
+        must=[
+            FieldCondition(
+                key="topic_id",
+                match=MatchValue(value=topic_id),
+            )
+        ]
+    )
 
     results = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
+        query_filter=topic_filter,
         limit=limit
     ).points
+
+    # Fallback: if no results with filter, retry without it
+    if not results:
+        print("we are in the fallback seciton ")
+        results = qdrant_client.query_points(
+            collection_name=COLLECTION_NAME,
+            query=query_vector,
+            limit=limit
+        ).points
 
     if not results:
         return "No curriculum content found for this topic."

@@ -1,52 +1,47 @@
-
 You are an expert mathematics curriculum designer for NCTB Bangladesh primary education.
 
 CURRICULUM CONTEXT (from the uploaded textbook):
 {curriculum_context}
 
-REFERENCE WORKSHEET STYLE (from uploaded sample):
-{style_description}
-
-YOUR TASK:
-
-Create exactly {num_problems} mathematics problems.First try to follow the {style_description}.if there are just maths,no words problem,ypu really dont need to localize or change or put any general name.
-This is the most crucial and important rule.{style_description} is your first priority for mathmatical format.Just try to change the math to be very unique and match it with specific difficulty level.
-If a reference style is provided, generate problems that follow a SIMILLAR FORMAT 
-and structure. For example, if the reference shows "missing digit" puzzles, 
-create missing digit puzzles. If it shows word problems, create word problems.
-If no style is provided, default to word problems.If sample worksheet is provided,always follow this template and
-generate the content like that.If you want to keep some extra problem,just add this to extra section.If no sample worksheet,
-you are free to act like your own creativity.Dont use mix language.Just keep it in English.
-
-STRICT RULES (NEVER BREAK THESE):
-1. Follow the REFERENCE WORKSHEET STYLE {style_description} exactly — same problem format, same arrangement
-2. Generate EXACTLY {num_problems} problems — not more, not less.Language should eiter bangla or english.
-3. Topic is {topic_name} — ONLY this topic, nothing else
-4. All answers MUST be mathematically correct — verify each one before including
-5. If the reference shows puzzles, create puzzles. If it shows word problems, create word problems.
-6. NEVER mix formats — all problems should be the same type
-
-
-CRITICAL: Generate EXACTLY {num_problems} problems with give {style_description}. Not fewer. Count them before returning.
-
-DETAILS:
+WORKSHEET DETAILS:
 - Class: {class_name}
 - Subject: {subject_name}
 - Chapter: {chapter_name}
 - Topic: {topic_name}
 - Difficulty: {difficulty}
 
-DIFFICULTY GUIDELINES:
-- Easy: Single-step problems, small numbers, direct application of concept
-- Medium: Two-step problems, moderate numbers, requires some reasoning.Try to be unique choosing math problms according to the topic 
-- Hard: Multi-step problems, larger numbers, requires deeper understanding.Try to give the hardest math so that deeper conceptual understanding is needed.
+TASK:
+Generate exactly {num_problems} problems on {topic_name}.
+- Language: English only. Do not use Bangla or mix languages.
+- All problems must be based strictly on the curriculum context above.
+
+STYLE RULES:
+- If the following style description contains specific formatting guidance, follow that format exactly. If it describes puzzles, generate puzzles. If it describes word problems, generate word problems. If it describes computation problems, generate computation problems.
+- If the style description says "No reference style provided", generate a mix of computation problems and word problems appropriate for {topic_name}.
+
+Style description: {style_description}
+
+DIFFICULTY GUIDELINES (Class 3, ages 8-9):
+- Easy: Single-step, numbers typically under 100, direct application. Example: simple addition like 32 + 24, or identify the place value of a single digit.
+- Medium: May require two steps, numbers up to 1000, requires some reasoning. Example: addition with one carry like 245 + 137, or compare two 3-digit numbers.
+- Hard: Multi-step, numbers up to 10000, deeper understanding needed. Example: addition with double carry like 367 + 258, or arrange 4-5 similar numbers in order.
 
 RULES:
-1. Every problem MUST be based strictly on the curriculum context provided above
-2. Each problem must have exactly one correct answer
-3. Include clear step-by-step solution for each problem
-4. Mark which problems need a visual diagram to help students understand
-5. Problems should progress from slightly easier to slightly harder
+1. Every problem must come from the curriculum context provided above.
+2. Each problem must have exactly one correct answer.
+3. Include step-by-step solution for each problem.
+4. Mark problems that benefit from a visual diagram (set needs_diagram to true).
+5. Problems should progress from slightly easier to slightly harder.
+6. For diagram_type, only use types relevant to {topic_name}.
+7. Do NOT include the answer inside the question text — the student must solve it.
+8. Generate EXACTLY {num_problems} problems — count them before returning.
+
+SELF-CHECK:
+Before returning your response, verify:
+1. You have exactly {num_problems} problems in the array.
+2. Re-compute every answer — check that the math is correct.
+3. Every problem is about {topic_name} and nothing else.
+4. The JSON is valid with no trailing commas.
 
 OUTPUT FORMAT (return ONLY valid JSON, no markdown):
 {{
@@ -55,9 +50,9 @@ OUTPUT FORMAT (return ONLY valid JSON, no markdown):
             "id": 1,
             "question": "the problem text",
             "answer": "the correct answer",
-            "solution_steps": ["step 1 explanation", "step 2 explanation"],
+            "solution_steps": ["step 1", "step 2"],
             "needs_diagram": true,
-            "diagram_type": "pie_chart | bar_model | number_line | grid | shapes | none",
+            "diagram_type": "number_line | grid | bar_model | place_value_chart | shapes | none",
             "diagram_description": "what the diagram should show"
         }}
     ]

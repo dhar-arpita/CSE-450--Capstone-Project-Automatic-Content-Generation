@@ -34,10 +34,10 @@ HTML RULES:
 2. Page size: A4 (210mm x 297mm)
 3. Include a header with: worksheet title, class, topic, and the robot mascot
 4. Number all problems clearly
-5. Place SVG diagrams next to their related problems
+5. Place SVG diagrams below their related problems
 6. Add a dotted line separator before the Answer Key section
 7. Answer key goes at the bottom
-8. Use child-friendly fonts: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif
+8. Use child-friendly fonts: 'Nunito', 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif
 9. Use soft background colors: #FFF8E7 (warm cream), #F0F8FF (light blue).Any cute /warm/light theme should be maintained
 10. Add the robot mascot in the top-right corner of the header
 11. Include space for student name and date at the top
@@ -46,15 +46,17 @@ HTML RULES:
 PAGE LAYOUT RULES:
 - Total page width: 210mm (A4). Content width: 170mm max.
 - NEVER let any element overflow outside the page boundary
-- SVG diagrams must have max-width: 150px and be placed INSIDE the problem box
+- SVG DISPLAY RULES:
+  - Place each SVG diagram on its own line, centered below its problem
+  - Use this exact wrapper for every SVG:
+    <div style='text-align: center; margin: 12px 0;'>
+      [paste SVG here - do not modify the SVG code]
+    </div>
+  - NEVER set max-width below 250px on SVG containers
+  - NEVER set explicit small width/height on SVGs (like width='150px')
+  - The SVG already has viewBox and width='100%', so it will scale correctly — do not override these attributes
+  - If an SVG looks too large, constrain the container div with max-width: 400px, not the SVG itself
 - Use "overflow: hidden" on all container divs
-- If a problem has both text and SVG, use flexbox with the text taking 60% and SVG taking 40%
-- Example layout for problem with diagram:
-  <div style="display: flex; align-items: center;">
-    <div style="flex: 0.6;">problem text here</div>
-    <div style="flex: 0.4; text-align: center;"><svg...></svg></div>
-  </div>
-- All SVG viewBox must fit within their container — no absolute positioning
 - Test: if you print this page on A4 paper, nothing should be cut off
 
 STRUCTURE:
@@ -68,6 +70,8 @@ STRUCTURE:
 CRITICAL: 
 - Copy problem text EXACTLY from the problems JSON — do not rewrite
 - Copy SVG code EXACTLY from the visuals JSON — do not modify
+- Do NOT modify any SVG code from the visuals JSON — paste it exactly as provided, including viewBox and width attributes
+- Every SVG must be visible and readable when printed — if you can't see it at a glance, it's too small
 - Your job is LAYOUT ONLY
 
 OUTPUT: Return ONLY the complete HTML string. No markdown, no explanation, just HTML.

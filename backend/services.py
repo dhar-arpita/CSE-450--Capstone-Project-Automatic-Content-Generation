@@ -46,7 +46,16 @@ def init_vector_db():
         )
         print("Ensured payload index exists for 'filename'.")
     except Exception as e:
-        # If the index already exists, Qdrant might throw a minor error, which we can safely ignore.
+        pass
+
+    try:
+        qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="topic_id",
+            field_schema=PayloadSchemaType.INTEGER,
+        )
+        print("Ensured payload index exists for 'topic_id'.")
+    except Exception as e:
         pass
 
 # # --- AI & RAG LOGIC ---

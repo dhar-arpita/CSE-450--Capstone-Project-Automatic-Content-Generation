@@ -1,0 +1,54 @@
+[Source: 10_Subtraction_of_Three-Digit_Numbers.txt, Page 1]
+Topic : Subtraction of Three digit numbers 
+context : In this stage, students practice subtracting larger numbers where each digit in the top number (minuend) is greater than or equal to the digit below it (subtrahend). This reinforces place value alignment (Hundreds, Tens, Ones) without the complexity of regrouping.
+Learning Outcome : 
+1. Students will perform 3-digit subtraction by aligning digits according to their place value. 
+2. Students will master the concept of borrowing from the Tens place to the Ones, and from the Hundreds place to the Tens. 
+3. Students will solve word problems involving the subtraction of 3-digit numbers.
+Examples : 
+1. Vertical Subtraction:
+  H  T  O
+   6  7  8
+-  2  3  5
+----------
+   4  4  3
+
+Step 1 (Ones): 8−5=3
+Step 2 (Tens): 7−3=4
+Step 3 (Hundreds): 6−2=
+
+---
+
+[Source: 10_Subtraction_of_Three-Digit_Numbers.txt, Page 1]
+-  2  3  5
+----------
+   4  4  3
+
+Step 1 (Ones): 8−5=3
+Step 2 (Tens): 7−3=4
+Step 3 (Hundreds): 6−2=4
+Horizontal Subtraction: 894−571=323
+(Logic: Subtract each column: 4−1=3, 9−7=2, 8−5=3)
+
+Exercise : 
+1.Solve Vertically: a) 456−123=___
+b) 789−456=___
+c) 555−222=___
+d) 807−304=___
+e) 960−450=___
+Calculate Horizontally: a) 642−321=___
+b) 738−515=___
+Word Problems: a) A box contains 485 marbles. If 230 marbles are given to a friend, how many marbles are left in the box?
+b) There are 675 trees in an orchard. Among them, 350 are mango trees. How many other trees are there?
+c) Roni has 950 taka. He bought a book for 420 taka. How much money does he have now?
+
+Difficulty Level : 
+Easy : Subtracting only 1 or 2-digit numbers from a 3-digit number (e.g., 456−3 or 456−24).
+Medium : Standard 3-digit
+
+---
+
+[Source: 10_Subtraction_of_Three-Digit_Numbers.txt, Page 1]
+g only 1 or 2-digit numbers from a 3-digit number (e.g., 456−3 or 456−24).
+Medium : Standard 3-digit subtraction where all digits are non-zero (e.g., 876−342).
+Hard : Problems involving zeros in the middle or end of the numbers (e.g., 905−402) and word problems requiring logical setup.
