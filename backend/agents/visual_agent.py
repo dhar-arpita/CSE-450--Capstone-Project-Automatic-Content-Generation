@@ -5,17 +5,37 @@ from settings import gemini_client, SMART_MODEL
 from google.genai import types
 
 
-def run_visual_agent(localization_output: dict, style_description: str = "") -> dict:
+def run_visual_agent(localization_output: dict, style_description: str = "", topic_config: dict = None) -> dict:
     """
     Agent 3: Creates SVG diagrams for problems that need visuals
     and a robot mascot character.
     """
 
-    # Filter only problems that need diagrams
-    problems_needing_visuals = [
-        p for p in localization_output["localized_problems"]
-        if p.get("needs_diagram", False)
-    ]
+    # Build format-specific visual instructions
+    visual_format_guide = ""
+    if topic_config:
+        formats = topic_config.get("formats", [])
+        parts = []
+        for fmt in formats:
+            if fmt.get("visual_instruction"):
+                parts.append(
+                    f"FOR FORMAT '{fmt['key']}':\n"
+                    f"  {fmt['visual_instruction']}"
+                )
+        visual_format_guide = "\n\n".join(parts)
+
+    # Filter only problems that need diagrams, include format_type
+    problems_needing_visuals = []
+    for p in localization_output["localized_problems"]:
+        if p.get("needs_diagram", False):
+            visual_problem = {
+                "problem_id": p["id"],
+                "format_type": p.get("format_type", "vertical_computation"),
+                "localized_question": p.get("localized_question", ""),
+                "diagram_type": p.get("diagram_type", ""),
+                "diagram_description": p.get("diagram_description", "")
+            }
+            problems_needing_visuals.append(visual_problem)
 
     if not problems_needing_visuals and not style_description:
         print("[Visual Agent] No visuals needed, skipping.")
@@ -25,7 +45,8 @@ def run_visual_agent(localization_output: dict, style_description: str = "") -> 
 
     prompt = template.format(
         problems_json=json.dumps(problems_needing_visuals, indent=2),
-        style_description=style_description or "Clean, colorful, child-friendly math worksheet style."
+        style_description=style_description or "Clean, colorful, child-friendly math worksheet style.",
+        visual_format_guide=visual_format_guide or "No specific format guide available. Use clean, child-friendly diagrams appropriate for the problem type."
     )
 
     response = gemini_client.models.generate_content(

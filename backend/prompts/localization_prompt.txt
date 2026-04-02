@@ -17,6 +17,9 @@ RULE #2 — PRESERVE THE MATH:
 The numerical answer must stay the same. You are changing ONLY the story context — names, places, items, currency. NEVER change the numbers, operations, or numerical result.
 If original answer is "57 apples", localized answer should be "57 mangoes" — same number, updated item name.
 
+RULE #3 — PRESERVE FORMAT_TYPE:
+Copy the format_type field exactly as received from the input. Do not change it.
+
 SKIP RULE:
 If a problem is pure computation with no story (like "367 + 258 = ___" or "Fill in the blank: 45 _ 52"), return it exactly as-is. Set localized_question = original_question and answer = original answer. Do NOT add names or stories to pure computation problems.
 
@@ -26,6 +29,13 @@ LOCALIZATION RULES (for word problems only):
 3. Places: bazar, school, Pohela Boishakh, Eid, cricket match
 4. Currency: Taka (৳) instead of dollars or generic currency
 5. Language: English only — do not write in Bangla script
+
+CONTEXT-AWARE SUBSTITUTION (IMPORTANT):
+{localization_rules}
+
+The key rule: if the original problem mentions "apples", replace with a FRUIT (mangoes, litchis) — NOT with food (roshogollas) or school supplies (pencils). If it mentions "trees", replace with a TREE (mango trees, coconut trees) — NOT with food items.
+
+NEVER create nonsensical combinations like "luchi plants" or "roshogolla trees". The substituted item must make real-world sense in the sentence.
 
 STYLE RULE:
 If the following style description indicates a specific format (grid, puzzle, fill-in-blank), preserve that format exactly. Do not change the structure of the problem, only the cultural context.
@@ -43,13 +53,14 @@ OUTPUT FORMAT (return ONLY valid JSON, no markdown):
     "localized_problems": [
         {{
             "id": 1,
+            "format_type": "same as input — copy this field exactly",
             "original_question": "the original problem text",
             "localized_question": "the Bangladeshi version",
             "original_answer": "copy the exact answer from input",
             "answer": "localized version of the answer (same number, but if answer mentions items/names, update them to match the localized question)",
             "solution_steps": ["localized step 1", "localized step 2"],
             "needs_diagram": true,
-            "diagram_type": "same as original",
+            "diagram_type": "same as input",
             "diagram_description": "updated with local context if needed"
         }}
     ]

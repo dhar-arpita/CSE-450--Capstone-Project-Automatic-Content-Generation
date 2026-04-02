@@ -2,48 +2,82 @@
   "problems": [
     {
       "id": 1,
-      "question": "A shop had 348 apples. They sold 5 apples. How many apples are left?",
-      "answer": "343 apples",
+      "format_type": "vertical_computation",
+      "question": "Subtract the following numbers vertically:\n  H  T  O\n  3  4  5\n-     2\n----------\n",
+      "answer": "343",
       "solution_steps": [
-        "Write the numbers vertically, aligning the digits by place value (Hundreds, Tens, Ones).",
-        "Subtract the Ones digits: 8 - 5 = 3. Write 3 in the Ones place.",
-        "Subtract the Tens digits: There are no Tens to subtract from 4, so 4 remains. Write 4 in the Tens place.",
-        "Subtract the Hundreds digits: There are no Hundreds to subtract from 3, so 3 remains. Write 3 in the Hundreds place.",
-        "The number of apples left is 343."
+        "Align the numbers vertically according to their place values (Hundreds, Tens, Ones).",
+        "Subtract the digits in the Ones place: 5 - 2 = 3. Write 3 in the Ones place.",
+        "Subtract the digits in the Tens place: 4 - 0 = 4. Write 4 in the Tens place.",
+        "Subtract the digits in the Hundreds place: 3 - 0 = 3. Write 3 in the Hundreds place.",
+        "The final answer is 343."
       ],
       "needs_diagram": true,
-      "diagram_type": "place_value_chart",
-      "diagram_description": "A place value chart showing 3 hundreds, 4 tens, and 8 ones, with 5 ones being removed from the Ones column."
+      "diagram_type": "vertical_column_chart",
+      "diagram_description": "A vertical subtraction problem showing 345 minus 2, aligned by place value."
     },
     {
       "id": 2,
-      "question": "There are 579 books in a library. On Monday, 23 books were borrowed. How many books are left in the library?",
-      "answer": "556 books",
+      "format_type": "horizontal_computation",
+      "question": "Calculate horizontally: 578 - 35 = ___",
+      "answer": "543",
       "solution_steps": [
-        "Write the numbers vertically, aligning the digits by place value (Hundreds, Tens, Ones).",
-        "Subtract the Ones digits: 9 - 3 = 6. Write 6 in the Ones place.",
-        "Subtract the Tens digits: 7 - 2 = 5. Write 5 in the Tens place.",
-        "Subtract the Hundreds digits: There are no Hundreds to subtract from 5, so 5 remains. Write 5 in the Hundreds place.",
-        "The number of books left in the library is 556."
+        "Subtract the Ones digits: 8 - 5 = 3.",
+        "Subtract the Tens digits: 7 - 3 = 4.",
+        "Subtract the Hundreds digits: 5 - 0 = 5.",
+        "Combine the results to get the final answer: 543."
       ],
-      "needs_diagram": true,
-      "diagram_type": "place_value_chart",
-      "diagram_description": "A place value chart showing 5 hundreds, 7 tens, and 9 ones, with 2 tens and 3 ones being removed from their respective columns."
+      "needs_diagram": false
     },
     {
       "id": 3,
-      "question": "A baker made 685 cookies. He gave 42 cookies to a school event. How many cookies does the baker have now?",
-      "answer": "643 cookies",
+      "format_type": "word_problem",
+      "question": "A farmer has 237 chickens. He sells 5 chickens. How many chickens are left?",
+      "answer": "232 chickens",
       "solution_steps": [
-        "Write the numbers vertically, aligning the digits by place value (Hundreds, Tens, Ones).",
-        "Subtract the Ones digits: 5 - 2 = 3. Write 3 in the Ones place.",
-        "Subtract the Tens digits: 8 - 4 = 4. Write 4 in the Tens place.",
-        "Subtract the Hundreds digits: There are no Hundreds to subtract from 6, so 6 remains. Write 6 in the Hundreds place.",
-        "The baker has 643 cookies now."
+        "Identify the total number of chickens: 237.",
+        "Identify the number of chickens sold: 5.",
+        "To find out how many chickens are left, subtract the sold chickens from the total: 237 - 5.",
+        "Subtract the Ones: 7 - 5 = 2.",
+        "The Tens and Hundreds digits remain the same as there is nothing to subtract from them: 3 and 2.",
+        "So, 237 - 5 = 232.",
+        "There are 232 chickens left."
       ],
-      "needs_diagram": true,
-      "diagram_type": "place_value_chart",
-      "diagram_description": "A place value chart showing 6 hundreds, 8 tens, and 5 ones, with 4 tens and 2 ones being removed from their respective columns."
+      "needs_diagram": false
+    },
+    {
+      "id": 4,
+      "format_type": "word_problem",
+      "question": "There are 489 books in a library. If 63 books are borrowed, how many books are still in the library?",
+      "answer": "426 books",
+      "solution_steps": [
+        "Identify the total number of books: 489.",
+        "Identify the number of books borrowed: 63.",
+        "To find the remaining books, subtract the borrowed books from the total: 489 - 63.",
+        "Subtract the Ones digits: 9 - 3 = 6.",
+        "Subtract the Tens digits: 8 - 6 = 2.",
+        "The Hundreds digit remains the same: 4.",
+        "So, 489 - 63 = 426.",
+        "There are 426 books still in the library."
+      ],
+      "needs_diagram": false
+    },
+    {
+      "id": 5,
+      "format_type": "word_problem",
+      "question": "A baker baked 756 cookies. He sold 42 cookies in the morning. How many cookies does he have left to sell?",
+      "answer": "714 cookies",
+      "solution_steps": [
+        "Identify the total number of cookies baked: 756.",
+        "Identify the number of cookies sold: 42.",
+        "To find the number of cookies left, subtract the sold cookies from the total: 756 - 42.",
+        "Subtract the Ones digits: 6 - 2 = 4.",
+        "Subtract the Tens digits: 5 - 4 = 1.",
+        "The Hundreds digit remains the same: 7.",
+        "So, 756 - 42 = 714.",
+        "The baker has 714 cookies left to sell."
+      ],
+      "needs_diagram": false
     }
   ]
 }

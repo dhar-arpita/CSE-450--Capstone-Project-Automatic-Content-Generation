@@ -6,6 +6,7 @@ from agents.content_agent import run_content_agent
 from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
 from agents.compiler_agent import run_compiler_agent
+from prompt_bank import get_topic_config
 
 
 def search_curriculum_context(topic_id: int, topic_name: str, limit: int = 5) -> str:
@@ -89,6 +90,10 @@ def generate_worksheet(
     curriculum_context = search_curriculum_context(topic_id, topic_name)
     print(f"[Pipeline] Found context ({len(curriculum_context)} chars)")
 
+    # Step 1.5: Load topic-specific prompt bank config
+    topic_config = get_topic_config(topic_name)
+    print(f"[Pipeline] Loaded config for '{topic_name}' — formats: {[f['key'] for f in topic_config['formats']]}")
+
     # Step 2: Agent 1 — Content Agent
     print("\n[Pipeline] Running Content Agent...")
     content_output = run_content_agent(
@@ -99,7 +104,8 @@ def generate_worksheet(
         difficulty=difficulty,
         num_problems=num_problems,
         curriculum_context=curriculum_context,
-        style_description=style_description
+        style_description=style_description,
+        topic_config=topic_config
     )
 
     if not content_output.get("problems"):
@@ -107,7 +113,11 @@ def generate_worksheet(
 
     # Step 3: Agent 2 — Localization Agent
     print("\n[Pipeline] Running Localization Agent...")
-    localization_output = run_localization_agent(content_output, style_description=style_description)
+    localization_output = run_localization_agent(
+        content_output,
+        style_description=style_description,
+        topic_config=topic_config
+    )
 
     if not localization_output.get("localized_problems"):
         # Fallback: use original problems without localization
@@ -116,6 +126,7 @@ def generate_worksheet(
             "localized_problems": [
                 {
                     "id": p["id"],
+                    "format_type": p.get("format_type", "word_problem"),
                     "localized_question": p["question"],
                     "answer": p["answer"],
                     "solution_steps": p["solution_steps"],
@@ -129,7 +140,11 @@ def generate_worksheet(
 
     # Step 4: Agent 3 — Visual Agent
     print("\n[Pipeline] Running Visual Agent...")
-    visual_output = run_visual_agent(localization_output, style_description)
+    visual_output = run_visual_agent(
+        localization_output,
+        style_description,
+        topic_config=topic_config
+    )
 
     # Step 5: Agent 4 — Compiler Agent
     print("\n[Pipeline] Running Compiler Agent...")

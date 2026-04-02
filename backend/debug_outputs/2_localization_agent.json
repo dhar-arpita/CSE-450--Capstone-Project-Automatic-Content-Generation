@@ -2,54 +2,92 @@
   "localized_problems": [
     {
       "id": 1,
-      "original_question": "A shop had 348 apples. They sold 5 apples. How many apples are left?",
-      "localized_question": "A shop at the bazar had 348 mangoes. They sold 5 mangoes. How many mangoes are left?",
-      "original_answer": "343 apples",
-      "answer": "343 mangoes",
+      "format_type": "vertical_computation",
+      "original_question": "Subtract the following numbers vertically:\n  H  T  O\n  3  4  5\n-     2\n----------\n",
+      "localized_question": "Subtract the following numbers vertically:\n  H  T  O\n  3  4  5\n-     2\n----------\n",
+      "original_answer": "343",
+      "answer": "343",
       "solution_steps": [
-        "Write the numbers vertically, aligning the digits by place value (Hundreds, Tens, Ones).",
-        "Subtract the Ones digits: 8 - 5 = 3. Write 3 in the Ones place.",
-        "Subtract the Tens digits: There are no Tens to subtract from 4, so 4 remains. Write 4 in the Tens place.",
-        "Subtract the Hundreds digits: There are no Hundreds to subtract from 3, so 3 remains. Write 3 in the Hundreds place.",
-        "The number of mangoes left is 343."
+        "Align the numbers vertically according to their place values (Hundreds, Tens, Ones).",
+        "Subtract the digits in the Ones place: 5 - 2 = 3. Write 3 in the Ones place.",
+        "Subtract the digits in the Tens place: 4 - 0 = 4. Write 4 in the Tens place.",
+        "Subtract the digits in the Hundreds place: 3 - 0 = 3. Write 3 in the Hundreds place.",
+        "The final answer is 343."
       ],
       "needs_diagram": true,
-      "diagram_type": "place_value_chart",
-      "diagram_description": "A place value chart showing 3 hundreds, 4 tens, and 8 ones, with 5 ones being removed from the Ones column."
+      "diagram_type": "vertical_column_chart",
+      "diagram_description": "A vertical subtraction problem showing 345 minus 2, aligned by place value."
     },
     {
       "id": 2,
-      "original_question": "There are 579 books in a library. On Monday, 23 books were borrowed. How many books are left in the library?",
-      "localized_question": "There are 579 books in the school library. On Monday, 23 books were borrowed by students. How many books are left in the school library?",
-      "original_answer": "556 books",
-      "answer": "556 books",
+      "format_type": "horizontal_computation",
+      "original_question": "Calculate horizontally: 578 - 35 = ___",
+      "localized_question": "Calculate horizontally: 578 - 35 = ___",
+      "original_answer": "543",
+      "answer": "543",
       "solution_steps": [
-        "Write the numbers vertically, aligning the digits by place value (Hundreds, Tens, Ones).",
-        "Subtract the Ones digits: 9 - 3 = 6. Write 6 in the Ones place.",
-        "Subtract the Tens digits: 7 - 2 = 5. Write 5 in the Tens place.",
-        "Subtract the Hundreds digits: There are no Hundreds to subtract from 5, so 5 remains. Write 5 in the Hundreds place.",
-        "The number of books left in the school library is 556."
+        "Subtract the Ones digits: 8 - 5 = 3.",
+        "Subtract the Tens digits: 7 - 3 = 4.",
+        "Subtract the Hundreds digits: 5 - 0 = 5.",
+        "Combine the results to get the final answer: 543."
       ],
-      "needs_diagram": true,
-      "diagram_type": "place_value_chart",
-      "diagram_description": "A place value chart showing 5 hundreds, 7 tens, and 9 ones, with 2 tens and 3 ones being removed from their respective columns."
+      "needs_diagram": false
     },
     {
       "id": 3,
-      "original_question": "A baker made 685 cookies. He gave 42 cookies to a school event. How many cookies does the baker have now?",
-      "localized_question": "Rahim the baker made 685 roshogollas. He gave 42 roshogollas to a school event. How many roshogollas does Rahim have now?",
-      "original_answer": "643 cookies",
-      "answer": "643 roshogollas",
+      "format_type": "word_problem",
+      "original_question": "A farmer has 237 chickens. He sells 5 chickens. How many chickens are left?",
+      "localized_question": "Rahim has 237 mangoes. He sells 5 mangoes. How many mangoes are left?",
+      "original_answer": "232 chickens",
+      "answer": "232 mangoes",
       "solution_steps": [
-        "Write the numbers vertically, aligning the digits by place value (Hundreds, Tens, Ones).",
-        "Subtract the Ones digits: 5 - 2 = 3. Write 3 in the Ones place.",
-        "Subtract the Tens digits: 8 - 4 = 4. Write 4 in the Tens place.",
-        "Subtract the Hundreds digits: There are no Hundreds to subtract from 6, so 6 remains. Write 6 in the Hundreds place.",
-        "Rahim has 643 roshogollas now."
+        "Identify the total number of mangoes: 237.",
+        "Identify the number of mangoes sold: 5.",
+        "To find out how many mangoes are left, subtract the sold mangoes from the total: 237 - 5.",
+        "Subtract the Ones: 7 - 5 = 2.",
+        "The Tens and Hundreds digits remain the same as there is nothing to subtract from them: 3 and 2.",
+        "So, 237 - 5 = 232.",
+        "There are 232 mangoes left."
       ],
-      "needs_diagram": true,
-      "diagram_type": "place_value_chart",
-      "diagram_description": "A place value chart showing 6 hundreds, 8 tens, and 5 ones, with 4 tens and 2 ones being removed from their respective columns."
+      "needs_diagram": false
+    },
+    {
+      "id": 4,
+      "format_type": "word_problem",
+      "original_question": "There are 489 books in a library. If 63 books are borrowed, how many books are still in the library?",
+      "localized_question": "There are 489 books in a school library. If 63 books are borrowed, how many books are still in the library?",
+      "original_answer": "426 books",
+      "answer": "426 books",
+      "solution_steps": [
+        "Identify the total number of books: 489.",
+        "Identify the number of books borrowed: 63.",
+        "To find the remaining books, subtract the borrowed books from the total: 489 - 63.",
+        "Subtract the Ones digits: 9 - 3 = 6.",
+        "Subtract the Tens digits: 8 - 6 = 2.",
+        "The Hundreds digit remains the same: 4.",
+        "So, 489 - 63 = 426.",
+        "There are 426 books still in the library."
+      ],
+      "needs_diagram": false
+    },
+    {
+      "id": 5,
+      "format_type": "word_problem",
+      "original_question": "A baker baked 756 cookies. He sold 42 cookies in the morning. How many cookies does he have left to sell?",
+      "localized_question": "Fatima baked 756 pithas. She sold 42 pithas in the morning. How many pithas does she have left to sell?",
+      "original_answer": "714 cookies",
+      "answer": "714 pithas",
+      "solution_steps": [
+        "Identify the total number of pithas baked: 756.",
+        "Identify the number of pithas sold: 42.",
+        "To find the number of pithas left, subtract the sold pithas from the total: 756 - 42.",
+        "Subtract the Ones digits: 6 - 2 = 4.",
+        "Subtract the Tens digits: 5 - 4 = 1.",
+        "The Hundreds digit remains the same: 7.",
+        "So, 756 - 42 = 714.",
+        "Fatima has 714 pithas left to sell."
+      ],
+      "needs_diagram": false
     }
   ]
 }

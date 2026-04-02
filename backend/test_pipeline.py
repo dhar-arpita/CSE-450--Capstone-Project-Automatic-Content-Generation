@@ -118,7 +118,7 @@ def run_test():
     SUBJECT_NAME  = "Mathematics"
     CHAPTER_NAME  = "Subtraction"
     DIFFICULTY    = "easy"
-    NUM_PROBLEMS  = 3
+    NUM_PROBLEMS  = 5
 
     print(_header("PIPELINE DEBUG TEST"))
     print(f"  Topic    : {TOPIC_NAME}")

@@ -10,49 +10,61 @@ WORKSHEET DETAILS:
 - Topic: {topic_name}
 - Difficulty: {difficulty}
 
+AVAILABLE QUESTION FORMATS FOR THIS TOPIC:
+{format_instructions}
+
+FORMAT MIX GUIDANCE:
+{mix_guidance}
+
+NUMBER RANGE FOR {difficulty} DIFFICULTY:
+{number_range}
+
 TASK:
 Generate exactly {num_problems} problems on {topic_name}.
+- Use a MIX of the formats listed above — include at least 2 different format types for variety.
 - Language: English only. Do not use Bangla or mix languages.
-- All problems must be based strictly on the curriculum context above.
+- Base all problems on the curriculum context above.
+- Use numbers within the specified range for this difficulty level.
 
 STYLE RULES:
-- If the following style description contains specific formatting guidance, follow that format exactly. If it describes puzzles, generate puzzles. If it describes word problems, generate word problems. If it describes computation problems, generate computation problems.
-- If the style description says "No reference style provided", generate a mix of computation problems and word problems appropriate for {topic_name}.
+- If the following style description contains specific formatting guidance, follow that format exactly, overriding the format mix above.
+- If the style description says "No reference style provided", use the format mix guidance above.
 
 Style description: {style_description}
 
-DIFFICULTY GUIDELINES (Class 3, ages 8-9):
-- Easy: Single-step, numbers typically under 100, direct application. Example: simple addition like 32 + 24, or identify the place value of a single digit.
-- Medium: May require two steps, numbers up to 1000, requires some reasoning. Example: addition with one carry like 245 + 137, or compare two 3-digit numbers.
-- Hard: Multi-step, numbers up to 10000, deeper understanding needed. Example: addition with double carry like 367 + 258, or arrange 4-5 similar numbers in order.
+IMPORTANT FORMAT RULES:
+- Only use format_type values from the AVAILABLE QUESTION FORMATS list above. Do NOT invent new format types.
+- For computation problems (addition/subtraction), NEVER put ASCII art or vertical column layout in the question text. Write the question as a simple sentence like 'Solve: 345 - 2 = ___'. The Visual Agent will create the visual column diagram separately.
+- The question field must contain ONLY readable text, never ASCII formatting with dashes, spaces, or column alignment.
 
 RULES:
-1. Every problem must come from the curriculum context provided above.
+1. Each problem must specify its format_type (from the format keys listed above).
 2. Each problem must have exactly one correct answer.
 3. Include step-by-step solution for each problem.
-4. Mark problems that benefit from a visual diagram (set needs_diagram to true).
+4. Set needs_diagram based on the format's needs_diagram flag.
 5. Problems should progress from slightly easier to slightly harder.
-6. For diagram_type, only use types relevant to {topic_name}.
-7. Do NOT include the answer inside the question text — the student must solve it.
-8. Generate EXACTLY {num_problems} problems — count them before returning.
+6. Do NOT include the answer inside the question text — the student must solve it.
+7. Generate EXACTLY {num_problems} problems — count them before returning.
 
 SELF-CHECK:
 Before returning your response, verify:
 1. You have exactly {num_problems} problems in the array.
-2. Re-compute every answer — check that the math is correct.
-3. Every problem is about {topic_name} and nothing else.
-4. The JSON is valid with no trailing commas.
+2. At least 2 different format_types are used (unless {num_problems} < 3).
+3. Re-compute every answer — check that the math is correct.
+4. All numbers are within the specified range for {difficulty}.
+5. The JSON is valid with no trailing commas.
 
 OUTPUT FORMAT (return ONLY valid JSON, no markdown):
 {{
     "problems": [
         {{
             "id": 1,
+            "format_type": "vertical_computation",
             "question": "the problem text",
             "answer": "the correct answer",
             "solution_steps": ["step 1", "step 2"],
             "needs_diagram": true,
-            "diagram_type": "number_line | grid | bar_model | place_value_chart | shapes | none",
+            "diagram_type": "vertical_column_chart",
             "diagram_description": "what the diagram should show"
         }}
     ]

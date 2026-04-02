@@ -12,6 +12,22 @@ For each problem that has "needs_diagram": true, generate SVG code for the diagr
 Also generate a cute robot mascot SVG that will appear on the worksheet.Besides,any cute dog/doll
 that children love the most can be created.
 
+FORMAT-SPECIFIC VISUAL INSTRUCTIONS:
+{visual_format_guide}
+
+CRITICAL: Each problem now includes a "format_type" field. Use the matching visual instruction above for that format. Do NOT improvise a different visual style — follow the format instruction exactly.
+
+Key visual templates:
+- vertical_computation / missing_digits: Clean grid with H/T/O columns, digits in cells, '?' or '◆' for blanks. NO complex block diagrams.
+- missing_numbers_grid: Table of cells, some filled, some showing '?'
+- comparison_symbols: Two large numbers with empty circle between them
+- ordering: Scattered number boxes + arrow-connected empty boxes below
+- magic_triangle: 6 circles in triangle shape, lines connecting sides
+- equation_building: Row of empty boxes with operation symbol circles
+- count_and_match: Block grouping visual + 3 option boxes below
+- bar_model: Simple rectangular bar divided into labeled parts
+- match_columns: Two columns of boxes for drawing match lines
+
 CRITICAL ACCURACY RULES FOR SVG:
 0. DIAGRAMS ARE FOR STUDENTS, NOT ANSWER KEYS. The diagram must help the student VISUALIZE the problem, not reveal the answer.
    - For addition/subtraction: show the operands as blocks/objects, but put a '?' or empty box where the answer should be
