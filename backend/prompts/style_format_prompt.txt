@@ -1,0 +1,19 @@
+Analyze this worksheet in complete detail. Describe these 6 dimensions:
+
+1. VISUAL STYLE: Layout structure, colors, fonts, borders, background, spacing between elements.
+
+2. PROBLEM FORMAT: How exactly are problems structured? Are they word problems, 
+                   fill-in-blank, missing digits with symbols, multiple choice, column calculations, puzzles, or something else? Describe the exact format.
+
+3. PROBLEM TYPES: What mathematical operations are used? What number ranges? Single-step or multi-step? Are there carrying/borrowing involved?
+
+4. ARRANGEMENT: How many problems on the page? How are they arranged — vertical list, grid (how many columns x rows), side by side? 
+                How much space between problems?
+
+5. SPECIAL ELEMENTS: Any mascot/character (describe its appearance in detail)? Speech bubbles? Icons?
+                     Headers? Decorative borders? Special symbols used in problems?
+
+6. DIFFICULTY PATTERN: Are all problems the same difficulty? Do they get progressively harder? 
+                       How does difficulty change from first to last problem?
+
+Be extremely specific and detailed. Another AI will use your description to generate a worksheet that matches this one's format and style exactly.

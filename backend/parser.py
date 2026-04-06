@@ -3,47 +3,74 @@
 
 # 'io' lets us treat raw bytes as a file-like object without saving to disk
 import io
-
-# 'List' and 'Dict' are used for type hints to make the code more readable
 from typing import List, Dict
+import pdfplumber
+from pdf2image import convert_from_bytes
+from settings import gemini_client
+import base64
+
 
 # PdfReader is the library that reads and parses PDF files
-from pypdf import PdfReader
-
+def describe_page_with_vision(image) -> str:
+    
+    image_bytes = io.BytesIO()
+    image.save(image_bytes, format='PNG')
+    image_bytes.seek(0)
+    
+    try:
+        response = gemini_client.models.generate_content(
+            model="gemini-3.1-flash-lite-preview",
+            contents =[
+                {
+                    "role":"user",
+                    "parts": [
+                        {"inline_data": {"mime_type": "image/png", "data": base64.b64encode(image_bytes.read()).decode()}},
+                        {"text": "Describe ALL mathematical content, diagrams, figures, charts, and visual elements on this page in detail. Include any numbers, labels, measurements, or data shown in images. Be specific and precise."}
+                    ]
+                    
+                }
+            ]
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Vision API error:{e}")
+        return ""
 
 def extract_text_from_pdf(file_bytes: bytes) -> List[Dict]:
-    """
-    Reads a PDF from raw bytes and extracts text from each page individually.
-    Returns a list where each item represents one page: {'page_num': int, 'text': str}
-    """
-
-    # Wrap the raw bytes in a BytesIO object so PdfReader can treat it like a file
     pdf_file = io.BytesIO(file_bytes)
-
-    # Create a PdfReader instance that can read and parse the in-memory PDF
-    reader = PdfReader(pdf_file)
-
-    # This list will hold one dictionary per page that has readable text
     pages = []
+    
+ 
+    with pdfplumber.open(pdf_file) as pdf:
+        for page_num, page in enumerate(pdf.pages):
+            tables = page.extract_tables()
+            text = page.extract_text() or ""
 
-    # Loop through every page in the PDF, with 'page_num' starting at 0
-    for page_num, page in enumerate(reader.pages):
+            table_text = ""
+            for table in tables:
+                for row in table:
+                    row_text = " | ".join(cell.strip() for cell in row if cell)
+                    table_text += row_text + "\n"
 
-        # Extract all readable text from the current page
-        text = page.extract_text()
+            combined = text.strip()
+            if table_text.strip():
+                combined += "\n\n[Table Content]\n" + table_text.strip()
+                
+            
+                
+            if page.images:
+              page_images = convert_from_bytes(file_bytes, first_page=page_num+1, last_page=page_num+1)
+              vision_text = describe_page_with_vision(page_images[0])
+            else:
+              vision_text = ""    
+            if vision_text.strip():
+                    combined += "\n\n[Visual Content]\n" + vision_text.strip()
+    
 
-        # Only include this page if it actually has non-empty text
-        # (some pages may be images or blank)
-        if text and text.strip():
-            pages.append({
-                # Use 1-based page numbering so it's human-readable
-                "page_num": page_num + 1,
-                # Strip leading/trailing whitespace from the extracted text
-                "text": text.strip()
-            })
+            if combined.strip():
+                pages.append({"page_num": page_num + 1, "text": combined})
 
     return pages
-
 
 def extract_text_from_txt(file_bytes: bytes) -> List[Dict]:
     """

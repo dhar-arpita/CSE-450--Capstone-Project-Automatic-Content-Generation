@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photosynthesis Adventure! 🌿☀️</title>
+    <!-- Google Fonts for a fun, readable style -->
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@400;700&family=Fredoka+One&display=swap" rel="stylesheet">
+    <style>
+        /* General Body Styles */
+        body {
+            font-family: 'Comic Neue', cursive, sans-serif;
+            background: linear-gradient(to bottom right, #FFEAA7, #96CEB4); /* Yellow to Green gradient */
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        /* Main Container for the Worksheet */
+        .container {
+            max-width: 900px;
+            margin: 20px auto;
+            background-color: #ffffff;
+            padding: 30px 40px;
+            border-radius: 30px;
+            box-shadow: 0 12px 25px rgba(0, 0, 0, 0.2);
+            border: 4px dotted #DDA0DD; /* Purple dotted border */
+        }
+
+        /* Header Section Styles */
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 4em;
+            color: #FF6B6B; /* Red */
+            text-shadow: 5px 5px #4ECDC4; /* Teal shadow */
+            margin: 0;
+            padding: 15px 0;
+            border-bottom: 6px wavy #45B7D1; /* Blue wavy border */
+            display: inline-block;
+            background: linear-gradient(45deg, #FF6B6B, #DDA0DD); /* Gradient text color */
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            line-height: 1.2;
+        }
+
+        .header p {
+            font-size: 1.8em;
+            color: #45B7D1; /* Blue */
+            margin-top: 15px;
+            font-weight: bold;
+        }
+
+        /* Mascot and Instructions Area */
+        .mascot-area {
+            display: flex;
+            align-items: center;
+            background-color: #FFEAA7; /* Yellow */
+            border: 3px dashed #FF6B6B; /* Red dashed */
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 35px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .mascot-area img {
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            margin-right: 20px;
+            background-color: #DDA0DD; /* Purple placeholder */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9em;
+            color: white;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+            object-fit: cover;
+            border: 3px solid #4ECDC4; /* Teal border for mascot */
+        }
+
+        .speech-bubble {
+            position: relative;
+            background: #4ECDC4; /* Teal */
+            border-radius: .8em;
+            padding: 18px 25px;
+            color: white;
+            font-size: 1.2em;
+            line-height: 1.5;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15);
+            flex-grow: 1;
+        }
+
+        .speech-bubble:after {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 0;
+            height: 0;
+            border: 20px solid transparent;
+            border-right-color: #4ECDC4;
+            border-left: 0;
+            border-bottom: 0;
+            margin-top: -10px;
+            margin-left: -20px;
+        }
+
+        /* Word Bank Styles */
+        .word-bank {
+            background-color: #96CEB4; /* Green */
+            border: 3px solid #45B7D1; /* Blue solid */
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 40px;
+            text-align: center;
+            box-shadow: 0 5px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .word-bank h3 {
+            font-family: 'Fredoka One', cursive;
+            color: #333;
+            font-size: 1.8em;
+            margin-top: 0;
+            margin-bottom: 15px;
+            text-shadow: 1px 1px #FFEAA7; /* Yellow shadow */
+        }
+
+        .word-bank .words {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .word-bank .words span {
+            display: inline-block;
+            background-color: #FFEAA7; /* Yellow */
+            color: #333;
+            padding: 10px 18px;
+            margin: 5px;
+            border-radius: 10px;
+            border: 2px dashed #FF6B6B; /* Red dashed */
+            cursor: grab;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .word-bank .words span:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        /* Question Card Styles */
+        .question-card {
+            background-color: #F9F9F9;
+            border: 3px solid #DDA0DD; /* Purple */
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 40px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+            position: relative;
+        }
+
+        .question-card h3 {
+            font-family: 'Fredoka One', cursive;
+            color: #FF6B6B; /* Red */
+            font-size: 2em;
+            margin-top: 0;
+            border-bottom: 3px dashed #4ECDC4; /* Teal dashed */
+            padding-bottom: 12px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+        }
+        .question-card h3 span { /* For emojis next to question number */
+            margin-right: 10px;
+        }
+
+        .question-card p.question-text {
+            font-size: 1.3em;
+            line-height: 1.7;
+            margin-bottom: 25px;
+            color: #555;
+        }
+
+        .question-card .marks {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background-color: #45B7D1; /* Blue */
+            color: white;
+            padding: 8px 15px;
+            border-radius: 12px;
+            font-size: 1em;
+            font-weight: bold;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Input Field Styles */
+        .input-field, .textarea-field {
+            width: calc(100% - 24px); /* Account for padding */
+            padding: 15px;
+            margin-top: 15px;
+            border: 2px solid #96CEB4; /* Green */
+            border-radius: 10px;
+            font-size: 1.2em;
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            font-family: 'Comic Neue', cursive, sans-serif;
+            color: #333;
+        }
+
+        .input-field:focus, .textarea-field:focus {
+            border-color: #4ECDC4; /* Teal */
+            box-shadow: 0 0 10px rgba(78, 205, 196, 0.7);
+            outline: none;
+            background-color: #F8FFFF; /* Slightly lighter background on focus */
+        }
+
+        .textarea-field {
+            min-height: 120px;
+            resize: vertical;
+        }
+
+        /* Visual Area Styles */
+        .visual-area {
+            margin-top: 30px;
+            padding: 20px;
+            background-color: #EAF4F4; /* Light teal */
+            border: 2px dotted #4ECDC4; /* Teal dotted */
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .visual-area img {
+            max-width: 80%; /* Smaller image for children's worksheet */
+            height: auto;
+            border-radius: 12px;
+            box-shadow: 0 5px 12px rgba(0, 0, 0, 0.15);
+            margin-bottom: 10px;
+        }
+        .visual-area p.visual-caption {
+            font-size: 1em;
+            color: #666;
+            margin-top: 10px;
+            font-style: italic;
+        }
+
+        /* Answer Key Section Styles */
+        .answer-key {
+            margin-top: 60px;
+            padding-top: 40px;
+            border-top: 5px double #DDA0DD; /* Purple double border */
+            page-break-before: always; /* Starts on a new page */
+        }
+
+        .answer-key h2 {
+            font-family: 'Fredoka One', cursive;
+            font-size: 3em;
+            color: #FF6B6B; /* Red */
+            text-align: center;
+            margin-bottom: 35px;
+            text-shadow: 3px 3px #FFEAA7; /* Yellow shadow */
+        }
+
+        /* Answer Card Styles */
+        .answer-card {
+            background-color: #FFFDF0; /* Light yellow */
+            border: 3px solid #FFEAA7; /* Yellow */
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .answer-card h4 {
+            font-family: 'Fredoka One', cursive;
+            color: #45B7D1; /* Blue */
+            font-size: 1.6em;
+            margin-top: 0;
+            border-bottom: 2px solid #96CEB4; /* Green */
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+        .answer-card h4 span { /* For emojis next to question number */
+            margin-right: 10px;
+        }
+
+        .answer-card p {
+            font-size: 1.15em;
+            color: #333;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+
+        .answer-card .solution-steps {
+            margin-top: 20px;
+            background-color: #F0F8FF; /* Alice Blue */
+            border-left: 5px solid #4ECDC4; /* Teal */
+            padding: 15px 20px;
+            border-radius: 8px;
+            box-shadow: inset 0 1px 5px rgba(0,0,0,0.05);
+        }
+
+        .answer-card .solution-steps p {
+            margin: 8px 0;
+            font-size: 1.05em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Photosynthesis Adventure! 🌿☀️</h1>
+            <p>Class 5 Science Challenge: Discover How Plants Make Food!</p>
+        </div>
+
+        <div class="mascot-area">
+            <img src="https://via.placeholder.com/90/DDA0DD/FFFFFF?text=Planty" alt="Friendly Plant Mascot. A cartoon plant with a happy face.">
+            <div class="speech-bubble">
+                Hey future scientists! 👋 Planty the Leaf is here to guide you through the amazing world of Photosynthesis! Let's explore how plants make their own food and help all living things on Earth! Good luck! ✨
+            </div>
+        </div>
+
+        <div class="word-bank">
+            <h3>🌱 Magic Words Bank! 🌱</h3>
+            <div class="words">
+                <span>Photosynthesis (সালোকসংশ্লেষণ)</span>
+                <span>Chlorophyll (ক্লোরোফিল)</span>
+                <span>Carbon dioxide (কার্বন ডাই অক্সাইড)</span>
+                <span>Oxygen (অক্সিজেন)</span>
+                <span>Sunlight (সূর্যালোক)</span>
+                <span>Water</span>
+                <span>Glucose (Food)</span>
+            </div>
+            <p style="font-size: 0.9em; color: #555; margin-top: 15px;">(Use these words to help you answer some questions!)</p>
+        </div>
+
+        <!-- Question 1 -->
+        <div class="question-card">
+            <h3><span>🌳</span> Question 1: What does the Papaya Need?</h3>
+            <span class="marks">2 Marks</span>
+            <p class="question-text">Rahim planted a small papaya sapling in his backyard in Bogura. Every morning, he waters it carefully and it sits under the bright morning sun. What two important things does the papaya sapling get from its surroundings that help it make its own food?</p>
+            <input type="text" class="input-field" placeholder="Write your two answers here...">
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_1_pie_chart.png" alt="Papaya's Photosynthesis Needs: Sunlight & Water Pie Chart">
+                <p class="visual-caption">This chart shows the papaya's main needs for making food: Sunlight and Water.</p>
+            </div>
+        </div>
+
+        <!-- Question 2 -->
+        <div class="question-card">
+            <h3><span>🍆</span> Question 2: Brinjal's Green Secret!</h3>
+            <span class="marks">2 Marks</span>
+            <p class="question-text">Fatema's mother explained that their brinjal plants in Comilla grew big and healthy because they made their own food inside their green leaves. What is the name of the process by which these plants make their food, and what gives their leaves the green color essential for this process?</p>
+            <input type="text" class="input-field" placeholder="Process name, and green substance name...">
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_2_pie_chart.png" alt="Brinjal's Food Production: Role of Chlorophyll Pie Chart">
+                <p class="visual-caption">A pie chart illustrating Brinjal's Food Production and the key role of Chlorophyll.</p>
+            </div>
+        </div>
+
+        <!-- Question 3 -->
+        <div class="question-card">
+            <h3><span>🌳</span> Question 3: Banyan Tree's Gift!</h3>
+            <span class="marks">2 Marks</span>
+            <p class="question-text">Rima and her younger brother love to play under the shade of the big banyan tree by the pond in their village in Barisal. They always feel the air is fresher there. What essential gas do the banyan tree and other plants release into the air that makes it feel fresher and that all living things need to breathe?</p>
+            <input type="text" class="input-field" placeholder="The essential gas is...">
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_4_pie_chart.png" alt="Banyan Tree's Contributions: Oxygen & Food Pie Chart">
+                <p class="visual-caption">This chart highlights the Banyan tree's contributions: Oxygen for breathing and Food for plants.</p>
+            </div>
+        </div>
+
+        <!-- Question 4 -->
+        <div class="question-card">
+            <h3><span>🍚</span> Question 4: Rice Plant's Recipe!</h3>
+            <span class="marks">4 Marks</span>
+            <p class="question-text">Karim's father explained that the green rice plants in Mymensingh take water from the field and something invisible from the air, along with sunlight, to create rice grains. What are these two essential things that rice plants take from the air and the ground, and what is the green substance in their leaves called, all necessary for making rice?</p>
+            <textarea class="textarea-field" placeholder="Describe the two things from air/ground and the green substance..."></textarea>
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_3_pie_chart.png" alt="Rice Plant's Needs for Making Food Pie Chart">
+                <p class="visual-caption">A pie chart showing the Rice Plant's Needs for Making Food, including Carbon Dioxide, Water, Sunlight, and Chlorophyll.</p>
+            </div>
+        </div>
+
+        <!-- Question 5 -->
+        <div class="question-card">
+            <h3><span>💧☀️</span> Question 5: Why Water & Sun for Papaya?</h3>
+            <span class="marks">4 Marks</span>
+            <p class="question-text">Rahim waters his papaya sapling in Bogura every morning, and it sits under the bright sun. Explain why both watering the plant and ensuring it gets sunlight are important for the sapling to produce its own food.</p>
+            <textarea class="textarea-field" placeholder="Explain the importance of water and sunlight..."></textarea>
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_1_pie_chart.png" alt="Papaya's Photosynthesis Needs: Sunlight & Water Pie Chart">
+                <p class="visual-caption">This chart shows the papaya's main needs for making food: Sunlight and Water.</p>
+            </div>
+        </div>
+
+        <!-- Question 6 -->
+        <div class="question-card">
+            <h3><span>🌬️🐄</span> Question 6: Banyan Tree's Fresh Air!</h3>
+            <span class="marks">4 Marks</span>
+            <p class="question-text">Rima and her brother feel the air is fresher and cooler under the big banyan tree in Barisal, and a cow grazes peacefully nearby. Explain why plants like the banyan tree make the air feel fresher and are so important for living things like humans and cows.</p>
+            <textarea class="textarea-field" placeholder="Explain the role of plants in making air fresh and their importance..."></textarea>
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_4_pie_chart.png" alt="Banyan Tree's Contributions: Oxygen & Food Pie Chart">
+                <p class="visual-caption">This chart highlights the Banyan tree's contributions: Oxygen for breathing and Food for plants.</p>
+            </div>
+        </div>
+
+        <!-- Question 7 -->
+        <div class="question-card">
+            <h3><span>🍌🥭</span> Question 7: Nabil's Garden Secrets!</h3>
+            <span class="marks">6 Marks</span>
+            <p class="question-text">Nabil has banana, mango, and jute plants in his garden in Narayanganj, all with green leaves. He knows they need water, sunlight, and a gas from the air to make their own food. While making food, they also release a gas that helps humans and animals survive. Name the four essential components Nabil's plants need to make their food, and the two important products they create during this process.</p>
+            <textarea class="textarea-field" placeholder="List the 4 components and 2 products..."></textarea>
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_5_pie_chart.png" alt="Photosynthesis: Inputs and Products Pie Chart">
+                <p class="visual-caption">This chart summarizes the essential inputs and important products of Photosynthesis.</p>
+            </div>
+        </div>
+
+        <!-- Question 8 -->
+        <div class="question-card">
+            <h3><span>🌳🦌</span> Question 8: Sundarbans' Mangrove Magic!</h3>
+            <span class="marks">6 Marks</span>
+            <p class="question-text">Masud saw towering mangrove trees with rich green leaves in the Sundarbans. His guide explained that these trees make their own food, which helps them grow tall and strong, creating a habitat for many animals, like the deer. Explain how the mangrove trees grow tall and strong, and why this process is not only important for the trees themselves but also for animals like the deer in the Sundarbans.</p>
+            <textarea class="textarea-field" placeholder="Explain the process and its importance for trees and deer..."></textarea>
+            <div class="visual-area">
+                <img src="generated_worksheets/images/visual_6_pie_chart.png" alt="Importance of Mangrove Photosynthesis Pie Chart">
+                <p class="visual-caption">This chart shows the importance of Mangrove Photosynthesis for Plant Growth and Food for Animals.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Answer Key Section -->
+    <div class="container answer-key">
+        <h2>Answer Key 🔑</h2>
+
+        <!-- Answer 1 -->
+        <div class="answer-card">
+            <h4><span>🌳</span> Question 1 Answer:</h4>
+            <p><strong>Answer:</strong> Sunlight and Water.</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: The scenario mentions the sapling gets 'bright morning sun' and Rahim 'waters it carefully'.</p>
+                <p>Step 2: These two elements, sunlight and water, are essential for plants to make their own food through photosynthesis.</p>
+            </div>
+        </div>
+
+        <!-- Answer 2 -->
+        <div class="answer-card">
+            <h4><span>🍆</span> Question 2 Answer:</h4>
+            <p><strong>Answer:</strong> The process is Photosynthesis (সালোকসংশ্লেষণ), and the green substance is Chlorophyll (ক্লোরোফিল).</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: The process by which plants make their own food is called Photosynthesis.</p>
+                <p>Step 2: The green color in plant leaves is due to a substance called Chlorophyll, which is crucial for capturing sunlight during photosynthesis.</p>
+            </div>
+        </div>
+
+        <!-- Answer 3 -->
+        <div class="answer-card">
+            <h4><span>🌳</span> Question 3 Answer:</h4>
+            <p><strong>Answer:</strong> Oxygen (অক্সিজেন).</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: Plants perform photosynthesis, taking in carbon dioxide and releasing another gas.</p>
+                <p>Step 2: The gas released that is vital for living things to breathe and makes the air feel fresher is Oxygen.</p>
+            </div>
+        </div>
+
+        <!-- Answer 4 -->
+        <div class="answer-card">
+            <h4><span>🍚</span> Question 4 Answer:</h4>
+            <p><strong>Answer:</strong> The invisible thing from the air is Carbon dioxide (কার্বন ডাই অক্সাইড). The thing from the ground is Water. The green substance in their leaves is Chlorophyll (ক্লোরোফিল).</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: Plants absorb water from the ground (soil) through their roots.</p>
+                <p>Step 2: Plants take an invisible gas called carbon dioxide from the air.</p>
+                <p>Step 3: The green pigment in their leaves, called chlorophyll, is responsible for capturing sunlight, which is also needed for the process.</p>
+            </div>
+        </div>
+
+        <!-- Answer 5 -->
+        <div class="answer-card">
+            <h4><span>💧☀️</span> Question 5 Answer:</h4>
+            <p><strong>Answer:</strong> Water and sunlight are two essential components for photosynthesis. Plants absorb water from the soil and use the energy from sunlight, along with carbon dioxide, to produce their own food (glucose) and grow.</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: Plants need raw materials and energy to make food.</p>
+                <p>Step 2: Water is absorbed by the roots from the soil and is a necessary raw material for photosynthesis.</p>
+                <p>Step 3: Sunlight provides the energy required for the chemical reaction of photosynthesis, converting carbon dioxide and water into food.</p>
+            </div>
+        </div>
+
+        <!-- Answer 6 -->
+        <div class="answer-card">
+            <h4><span>🌬️🐄</span> Question 6 Answer:</h4>
+            <p><strong>Answer:</strong> Plants like the banyan tree perform photosynthesis, a process where they take in carbon dioxide and release oxygen into the air. This oxygen is vital for humans and animals (like the cow) to breathe and survive, thus making the air feel 'fresher' and supporting all life.</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: Plants conduct photosynthesis, absorbing carbon dioxide from the air.</p>
+                <p>Step 2: During this process, they release oxygen as a byproduct.</p>
+                <p>Step 3: Oxygen is the gas that humans and animals need to breathe for their survival, which contributes to fresher air.</p>
+            </div>
+        </div>
+
+        <!-- Answer 7 -->
+        <div class="answer-card">
+            <h4><span>🍌🥭</span> Question 7 Answer:</h4>
+            <p><strong>Answer:</strong> The four essential components Nabil's plants need are: Carbon dioxide, Water, Sunlight, and Chlorophyll. The two important products they create are: Glucose (food) and Oxygen.</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: Identify the inputs needed for photosynthesis: 'a gas from the air' is carbon dioxide, 'water', 'sunlight', and 'green leaves' imply chlorophyll.</p>
+                <p>Step 2: Identify the outputs of photosynthesis: 'make their own food' is glucose, and 'release a gas that helps humans and animals survive' is oxygen.</p>
+            </div>
+        </div>
+
+        <!-- Answer 8 -->
+        <div class="answer-card">
+            <h4><span>🌳🦌</span> Question 8 Answer:</h4>
+            <p><strong>Answer:</strong> Mangrove trees grow tall and strong by performing photosynthesis. In this process, they use sunlight, water, carbon dioxide (from the air), and chlorophyll (in their green leaves) to produce their own food (glucose). This food provides the energy and building blocks for the trees to grow. This process is crucial not only for the trees because the food they make sustains their life and growth, but also for animals like the deer. The deer eat the leaves and twigs of these mangrove trees, obtaining the energy and nutrients from the food the trees produced. Without photosynthesis by the mangrove trees, the deer would not have a food source and could not survive, highlighting its importance for the entire Sundarbans ecosystem.</p>
+            <div class="solution-steps">
+                <p><strong>Solution:</strong></p>
+                <p>Step 1: Explain how plants grow tall and strong: by making their own food through photosynthesis using sunlight, water, carbon dioxide, and chlorophyll.</p>
+                <p>Step 2: Explain the importance for the plants themselves: the food provides energy for their growth and survival.</p>
+                <p>Step 3: Explain the importance for other living organisms (like deer): animals eat plants to get the energy and nutrients from the food produced by photosynthesis, thus forming the base of the food chain.</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

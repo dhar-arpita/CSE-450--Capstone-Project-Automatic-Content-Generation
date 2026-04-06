@@ -1,0 +1,61 @@
+[Pipeline] Running LLM blind verification agent...
+INFO:     127.0.0.1:41418 - "POST /generate/worksheet HTTP/1.1" 500 Internal Server Error
+ERROR:    Exception in ASGI application
+Traceback (most recent call last):
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/uvicorn/protocols/http/h11_impl.py", line 410, in run_asgi
+    result = await app(  # type: ignore[func-returns-value]
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 60, in __call__
+    return await self.app(scope, receive, send)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/fastapi/applications.py", line 1160, in __call__
+    await super().__call__(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/applications.py", line 107, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+    raise exc
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+    await self.app(scope, receive, _send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 95, in __call__
+    await self.simple_response(scope, receive, send, request_headers=headers)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 153, in simple_response
+    await self.app(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+    await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+    await self.app(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/routing.py", line 716, in __call__
+    await self.middleware_stack(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/routing.py", line 736, in app
+    await route.handle(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/routing.py", line 290, in handle
+    await self.app(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/fastapi/routing.py", line 130, in app
+    await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+    raise exc
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+    await app(scope, receive, sender)
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/fastapi/routing.py", line 116, in app
+    response = await f(request)
+               ^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/fastapi/routing.py", line 670, in app
+    raw_response = await run_endpoint_function(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/venv/lib/python3.12/site-packages/fastapi/routing.py", line 324, in run_endpoint_function
+    return await dependant.call(**values)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/generation_routes.py", line 42, in create_worksheet
+    result = generate_worksheet(
+             ^^^^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/generation_service.py", line 114, in generate_worksheet
+    content_output = run_verification_agent(content_output)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/media/prachurja/New Volume1/3-2-E/CSE 450/Implementation/Code/CSE-450--Capstone-Project-Automatic-Content-Generation/backend/agents/verification_agent.py", line 81, in run_verification_agent
+    prompt = template.format(
+             ^^^^^^^^^^^^^^^^
+KeyError: '\n    "verified_problems"'

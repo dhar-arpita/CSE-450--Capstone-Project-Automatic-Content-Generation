@@ -1,125 +1,267 @@
+
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css'; // Import CSS for math symbols
-import { uploadPDF, generateFlashcard, askQuestion } from "./api";
+import 'katex/dist/katex.min.css';
+
+// API Functions
+import { 
+  getClasses, getSubjects, getChapters, getTopics, 
+  uploadCurriculumFile, getIngestionStatus, askQuestion, generateFlashcard 
+} from "./api";
+
+
+import WorksheetGenerator from "./WorksheetGenerator";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
-  const [file, setFile] = useState(null);
-  const [topic, setTopic] = useState("");
-  const [flashcard, setFlashcard] = useState(null);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
+  // --- Curriculum States ---
+  const [classList, setClassList] = useState([]);
+  const [subjectList, setSubjectList] = useState([]);
+  const [chapterList, setChapterList] = useState([]);
+  const [topicList, setTopicList] = useState([]);
+
+  const [selectedClass, setSelectedClass] = useState("");
+  const [selectedSubject, setSelectedSubject] = useState("");
+  const [selectedChapter, setSelectedChapter] = useState("");
+  const [selectedTopicId, setSelectedTopicId] = useState("");
+
+  // --- File & Status States ---
+  const [file, setFile] = useState(null);
+  const [ingestionStatus, setIngestionStatus] = useState("");
+  
+  // --- RAG States ---
+  const [topicSearch, setTopicSearch] = useState("");
+  const [flashcard, setFlashcard] = useState(null);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+
+  // ১. ইউজার সেশন চেক এবং ক্লাস লোড করা
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    if (!storedUser) navigate("/"); 
-    setUser(JSON.parse(storedUser));
+    if (!storedUser) {
+        navigate("/"); 
+    } else {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        loadClasses();
+    }
   }, [navigate]);
 
+  // --- ড্রপডাউন চেইন লজিক ---
+  const loadClasses = async () => {
+    try {
+      const { data } = await getClasses();
+      setClassList(data);
+    } catch (err) { console.error("Classes load failed", err); }
+  };
+
+  const handleClassChange = async (className) => {
+    setSelectedClass(className);
+    setSubjectList([]); setChapterList([]); setTopicList([]);
+    setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
+    try {
+      const { data } = await getSubjects(className);
+      setSubjectList(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleSubjectChange = async (subjectId) => {
+    setSelectedSubject(subjectId);
+    setChapterList([]); setTopicList([]);
+    setSelectedChapter(""); setSelectedTopicId("");
+    try {
+      const { data } = await getChapters(subjectId);
+      setChapterList(data);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleChapterChange = async (chapterId) => {
+    setSelectedChapter(chapterId);
+    setTopicList([]);
+    setSelectedTopicId("");
+    try {
+      const { data } = await getTopics(chapterId);
+      setTopicList(data);
+    } catch (err) { console.error(err); }
+  };
+
+  
   const handleUpload = async () => {
-    if (!file) return;
-    setLoading(true);
-    try {
-      await uploadPDF(file);
-      alert("✅ PDF Uploaded!");
-    } catch (err) {
-      console.error(err);
-      alert("❌ Upload Failed");
+    if (!file || !selectedTopicId) {
+      alert("Please select Class, Subject, Chapter, Topic and a File!");
+      return;
     }
-    setLoading(false);
+    setLoading(true);
+    setIngestionStatus("Uploading...");
+    try {
+      const { data } = await uploadCurriculumFile(file, selectedTopicId, user.user_id || 1);
+      setIngestionStatus("Job Queued. Processing...");
+      startPolling(data.job_id);
+    } catch (err) {
+      setIngestionStatus("❌ Upload Failed");
+      setLoading(false);
+    }
   };
 
-  const handleGenerate = async () => {
-    if (!topic) return;
-    setLoading(true);
-    setFlashcard(null);
-    try {
-      const { data } = await generateFlashcard(topic);
-      if (data.error) {
-        alert(data.error);
-      } else {
-        setFlashcard(data);
+  const startPolling = (jobId) => {
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await getIngestionStatus(jobId);
+        setIngestionStatus(`Processing: ${data.job_status}...`);
+        if (data.job_status === "SUCCESS") {
+          clearInterval(interval);
+          setIngestionStatus("✅ Upload Successfully!");
+          setLoading(false);
+        } else if (data.job_status === "FAILED") {
+          clearInterval(interval);
+          setIngestionStatus(`❌ Failed: ${data.error_message}`);
+          setLoading(false);
+        }
+      } catch (err) { 
+          clearInterval(interval); 
+          setLoading(false); 
       }
-    } catch (err) {
-      alert("❌ Generation Failed");
-    }
+    }, 3000);
+  };
+
+
+  const handleGenerateFlashcard = async () => {
+    if (!topicSearch) return;
+    setLoading(true); setFlashcard(null);
+    try {
+      const { data } = await generateFlashcard(topicSearch);
+      setFlashcard(data);
+    } catch (err) { alert("Flashcard Generation Failed"); }
     setLoading(false);
   };
 
-  const handleAsk = async () => {
+  const handleAskAI = async () => {
     if (!question) return;
-    setLoading(true);
-    setAnswer(""); 
+    setLoading(true); setAnswer(""); 
     try {
       const { data } = await askQuestion(question);
       setAnswer(data.answer); 
-    } catch (err) {
-      alert("❌ Failed to get answer");
-    }
+    } catch (err) { alert("AI Answer Failed"); }
     setLoading(false);
   };
 
   return (
-    <div style={{ padding: "40px", maxWidth: "800px", margin: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <h1>Welcome, {user?.name}!</h1>
-        <button onClick={() => { localStorage.clear(); navigate("/"); }}>Logout</button>
+    <div style={{ padding: "40px", maxWidth: "1000px", margin: "auto", fontFamily: "Segoe UI, sans-serif", backgroundColor: "#fdfdfd" }}>
+      
+      {/* HEADER SECTION */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #1890ff", paddingBottom: "15px", marginBottom: "30px" }}>
+        <h2 style={{ color: "#1890ff", margin: 0 }}>EduAI Capstone: Content Hub</h2>
+        <div style={{ textAlign: "right" }}>
+          <span>Welcome, <strong>{user?.name}</strong> </span><br/>
+          <button 
+            onClick={() => { localStorage.clear(); navigate("/"); }}
+            style={{ marginTop: "5px", color: "red", border: "1px solid red", background: "none", cursor: "pointer", borderRadius: "4px", fontSize: "12px" }}
+          >Logout</button>
+        </div>
       </div>
       
-      {/* 1. UPLOAD */}
-      <div style={{ border: "1px solid #ddd", padding: "20px", marginTop: "20px" }}>
-        <h3>1. Upload Study Material</h3>
-        <input type="file" onChange={(e) => setFile(e.target.files[0])} />
-        <button onClick={handleUpload} disabled={loading}>{loading ? "..." : "Upload"}</button>
+      {/* SECTION 1: UPLOAD AREA */}
+      <div style={{ border: "1px solid #1890ff", padding: "20px", marginBottom: "30px", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+        <h3 style={{ marginTop: 0 }}>📁 1. Upload Curriculum Material</h3>
+        <p style={{ fontSize: "13px", color: "#666" }}>Select the exact topic where this file belongs.</p>
+        
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "15px" }}>
+          <select value={selectedClass} onChange={(e) => handleClassChange(e.target.value)}>
+            <option value="">-- Select Class --</option>
+            {classList.map(c => <option key={c.class_name} value={c.class_name}>{c.class_name}</option>)}
+          </select>
+          <select disabled={!selectedClass} value={selectedSubject} onChange={(e) => handleSubjectChange(e.target.value)}>
+            <option value="">-- Select Subject --</option>
+            {subjectList.map(s => <option key={s.subject_id} value={s.subject_id}>{s.name}</option>)}
+          </select>
+          <select disabled={!selectedSubject} value={selectedChapter} onChange={(e) => handleChapterChange(e.target.value)}>
+            <option value="">-- Select Chapter --</option>
+            {chapterList.map(ch => <option key={ch.chapter_id} value={ch.chapter_id}>Ch {ch.chapter_no}: {ch.name}</option>)}
+          </select>
+          <select disabled={!selectedChapter} value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)}>
+            <option value="">-- Select Topic --</option>
+            {topicList.map(t => <option key={t.topic_id} value={t.topic_id}>{t.name}</option>)}
+          </select>
+        </div>
+
+        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+          <input type="file" onChange={(e) => setFile(e.target.files[0])} style={{ flex: 1, padding: "5px", border: "1px dashed #ccc" }} />
+          <button 
+            onClick={handleUpload} 
+            disabled={loading || !selectedTopicId} 
+            style={{ backgroundColor: "#1890ff", color: "white", padding: "8px 25px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
+          >
+            {loading && ingestionStatus.includes("Processing") ? "Processing..." : "Upload & Ingest"}
+          </button>
+        </div>
+        {ingestionStatus && <div style={{ marginTop: "12px", fontWeight: "bold", color: ingestionStatus.includes("✅") ? "green" : "#444" }}>{ingestionStatus}</div>}
       </div>
 
-      {/* 2. FLASHCARD */}
-      <div style={{ border: "1px solid #ddd", padding: "20px", marginTop: "20px" }}>
-        <h3>2. Generate Flashcard</h3>
-        <input placeholder="Topic" value={topic} onChange={(e) => setTopic(e.target.value)} />
-        <button onClick={handleGenerate} disabled={loading}>Generate</button>
+      {/* SECTION 2: WORKSHEET GENERATOR */}
+      {/* এখানে আমরা সব লজিক এবং লিস্টগুলো পাস করছি যাতে জেনারেটর সেকশনে ড্রপডাউনগুলো দেখা যায় */}
+      <WorksheetGenerator 
+        classList={classList}
+        subjectList={subjectList}
+        chapterList={chapterList}
+        topicList={topicList}
+        selectedClass={selectedClass}
+        selectedSubject={selectedSubject}
+        selectedChapter={selectedChapter}
+        selectedTopicId={selectedTopicId}
+        handleClassChange={handleClassChange}
+        handleSubjectChange={handleSubjectChange}
+        handleChapterChange={handleChapterChange}
+        setSelectedTopicId={setSelectedTopicId}
+      />
 
-        {flashcard && flashcard.flashcard && (
-          <div style={{ marginTop: "15px", padding: "15px", backgroundColor: "#e6f7ff", borderLeft: "5px solid #1890ff" }}>
-            <p><strong>Q:</strong> {flashcard.flashcard.question}</p>
-            <hr />
-            <p><strong>A:</strong> {flashcard.flashcard.answer}</p>
-          </div>
-        )}
-      </div>
-
-      {/* 3. CHAT WITH PDF */}
-      <div style={{ border: "1px solid #ddd", padding: "20px", marginTop: "20px" }}>
-        <h3>3. Chat with PDF</h3>
-        <input 
-          placeholder="Ask something specific..." 
-          value={question} 
-          onChange={(e) => setQuestion(e.target.value)} 
-          style={{ width: "70%", marginRight: "10px", padding: "8px" }}
-        />
-        <button onClick={handleAsk} disabled={loading} style={{ padding: "8px 15px" }}>Ask AI</button>
-
-        {answer && (
-          <div style={{ marginTop: "15px", padding: "15px", backgroundColor: "#f6ffed", borderLeft: "5px solid #52c41a" }}>
-            <strong>🤖 AI Answer:</strong>
-            {/* THIS IS THE NEW PART THAT FIXES THE TEXT */}
-            <div style={{ lineHeight: "1.6", marginTop: "10px" }}>
-              <ReactMarkdown 
-                remarkPlugins={[remarkMath]} 
-                rehypePlugins={[rehypeKatex]}
-              >
-                {answer}
-              </ReactMarkdown>
+      {/* SECTION 3: FLASHCARDS & CHAT (RAG) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "25px", marginTop: "30px" }}>
+        
+        {/* Flashcard Side */}
+        <div style={{ border: "1px solid #ddd", padding: "15px", borderRadius: "10px" }}>
+          <h4>🗂️ Generate Flashcard</h4>
+          <input 
+            placeholder="Topic (e.g. Comparison of numbers)" 
+            value={topicSearch} 
+            onChange={(e) => setTopicSearch(e.target.value)} 
+            style={{ width: "93%", padding: "8px", marginBottom: "10px" }} 
+          />
+          <button onClick={handleGenerateFlashcard} disabled={loading} style={{ width: "100%", cursor: "pointer" }}>Generate</button>
+          
+          {flashcard?.flashcard && (
+            <div style={{ marginTop: "15px", padding: "10px", backgroundColor: "#fffbe6", border: "1px solid #ffe58f", borderRadius: "5px" }}>
+              <strong>Q:</strong> {flashcard.flashcard.question}<br/><hr/>
+              <strong>A:</strong> {flashcard.flashcard.answer}
             </div>
-          </div>
-        )}
+          )}
+        </div>
+
+        {/* Chat Side */}
+        <div style={{ border: "1px solid #ddd", padding: "15px", borderRadius: "10px" }}>
+          <h4>🤖 Ask AI (RAG)</h4>
+          <input 
+            placeholder="Ask about salary grades or comparison..." 
+            value={question} 
+            onChange={(e) => setQuestion(e.target.value)} 
+            style={{ width: "93%", padding: "8px", marginBottom: "10px" }} 
+          />
+          <button onClick={handleAskAI} disabled={loading} style={{ width: "100%", backgroundColor: "#52c41a", color: "white", border: "none", padding: "8px", cursor: "pointer", borderRadius: "4px" }}>Ask AI</button>
+          
+          {answer && (
+            <div style={{ marginTop: "15px", maxHeight: "200px", overflowY: "auto", fontSize: "14px", padding: "10px", backgroundColor: "#f6ffed", border: "1px solid #b7eb8f" }}>
+              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{answer}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+
       </div>
+
     </div>
   );
 }

@@ -27,7 +27,7 @@ from embedding_service import generate_embeddings_for_chunks
 from settings import qdrant_client, COLLECTION_NAME, SessionLocal
 
 # Import the database ORM models we need to read/write
-from models import IngestionJob, UploadMetadata, ContentEmbedding
+from models import IngestionJob, UploadMetadata, ContentEmbedding, UploadRequest
 
 
 def run_ingestion_pipeline(
@@ -231,6 +231,13 @@ def run_ingestion_pipeline(
 
         # Mark the job as fully completed
         job.job_status = "SUCCESS"
+        
+        # Update the upload request status too
+        upload_request = db.query(UploadRequest).filter(
+             UploadRequest.request_id == job.request_id
+             ).first()
+        if upload_request:
+             upload_request.status = "completed"
 
         # Save the final status to the database
         db.commit()
@@ -252,6 +259,14 @@ def run_ingestion_pipeline(
                 # Store the error message so the teacher can see what went wrong
                 job.error_message = str(e)
                 db.commit()
+                
+                
+            upload_request = db.query(UploadRequest).filter(
+               UploadRequest.request_id == job.request_id
+               ).first()
+            if upload_request:
+               upload_request.status = "failed"  
+               db.commit()  
 
         except Exception as inner_e:
             # If even the error update fails, just log it — don't crash the process
