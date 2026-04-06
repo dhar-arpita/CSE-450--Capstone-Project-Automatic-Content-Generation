@@ -7,7 +7,7 @@ from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
 from agents.compiler_agent import run_compiler_agent
 # verification_agent handles all other problem types using blind LLM verification
-from agents.verification_agent import run_verification_agent
+# from agents.verification_agent import run_verification_agent
 # Add these two new imports at the top of generation_service.py
 # math_verifier handles pure arithmetic using exact Python computation
 from agents.math_verifier import verify_and_fix_problems
