@@ -13,6 +13,7 @@ from generation_service import (
     handle_difficulty,
     handle_simplify,
     handle_visuals,
+    remap_refinement_ids,
 )
 from agents.math_verifier import verify_and_fix_problems
 from agents.localization_agent import run_localization_agent
@@ -203,19 +204,23 @@ async def refine_worksheet(
     # Search curriculum context (needed if adding problems)
     curriculum_context = search_curriculum_context(content.topic_id, topic.name)
 
-    # Separate refinements by type
+    # First: extract only remove_refs so we can remap remaining refinements
+    # against the renumbered problem IDs before splitting into other groups.
     remove_refs = [r for r in refinements_list if r["type"] == "remove_problem"]
-    add_refs = [r for r in refinements_list if r["type"] == "add_problems"]
-    diff_refs = [r for r in refinements_list if r["type"] == "change_difficulty"]
-    simplify_refs = [r for r in refinements_list if r["type"] == "simplify_language"]
-    visual_refs = [r for r in refinements_list if r["type"] == "add_visuals"]
 
-    # Apply handlers in order
     problems = current_problems_list
     id_remap = None
 
     if remove_refs:
         problems, id_remap = handle_remove(problems, remove_refs)
+        if id_remap:
+            refinements_list = remap_refinement_ids(refinements_list, id_remap)
+
+    # Now split the (possibly remapped) refinements into the remaining groups
+    add_refs = [r for r in refinements_list if r["type"] == "add_problems"]
+    diff_refs = [r for r in refinements_list if r["type"] == "change_difficulty"]
+    simplify_refs = [r for r in refinements_list if r["type"] == "simplify_language"]
+    visual_refs = [r for r in refinements_list if r["type"] == "add_visuals"]
 
     if add_refs:
         problems = handle_add(problems, add_refs, topic, subject, chapter, content, curriculum_context)

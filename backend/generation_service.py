@@ -60,6 +60,51 @@ def build_refinement_instructions(refinements: list) -> str:
     return "\n".join(instructions)
 
 
+def remap_refinement_ids(refinements_list: list, id_remap: dict) -> list:
+    """
+    After handle_remove renumbers problems, remap IDs in remaining refinements
+    so they target the correct (renumbered) problems. Refinements that reference
+    a removed problem are dropped.
+
+    - "remove_problem", "add_problems", "simplify_language": untouched (no IDs to remap)
+    - "add_visuals": remap each id in problem_ids; drop ids not in id_remap
+    - "change_difficulty": remap each change's problem_id; drop changes not in id_remap
+    """
+    remapped = []
+    for r in refinements_list:
+        rtype = r.get("type")
+
+        if rtype in ("remove_problem", "add_problems", "simplify_language"):
+            remapped.append(r)
+            continue
+
+        if rtype == "add_visuals":
+            new_ids = [id_remap[pid] for pid in r.get("problem_ids", []) if pid in id_remap]
+            if new_ids:
+                new_r = dict(r)
+                new_r["problem_ids"] = new_ids
+                remapped.append(new_r)
+            continue
+
+        if rtype == "change_difficulty":
+            new_changes = []
+            for c in r.get("changes", []):
+                pid = c.get("problem_id")
+                if pid in id_remap:
+                    new_c = dict(c)
+                    new_c["problem_id"] = id_remap[pid]
+                    new_changes.append(new_c)
+            if new_changes:
+                new_r = dict(r)
+                new_r["changes"] = new_changes
+                remapped.append(new_r)
+            continue
+
+        remapped.append(r)
+
+    return remapped
+
+
 def handle_remove(problems: list, remove_refs: list) -> tuple:
     """
     Pure Python. Removes specified problems and renumbers sequentially.
