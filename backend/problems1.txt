@@ -16,7 +16,6 @@ async def refine_worksheet(
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid refinements JSON: {e}")
 
-    # ── STEP 1: DB lookups BEFORE the pipeline (fast, no timeout risk) ────────
     # Look up existing content
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == content_id
@@ -24,7 +23,7 @@ async def refine_worksheet(
     if not content:
         raise HTTPException(status_code=404, detail="Content not found")
 
-    # Look up topic, chapter, subject 
+    # Look up topic, chapter, subject (same pattern as create_worksheet)
     topic = db.query(Topic).filter(Topic.topic_id == content.topic_id).first()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -40,27 +39,8 @@ async def refine_worksheet(
     # Search curriculum context (needed if adding problems)
     curriculum_context = search_curriculum_context(content.topic_id, topic.name)
 
-    # ── [CHANGED] EXTRACT STRINGS EARLY ───────────────────────────────────────
-    # Explanation: We must copy these values into standard Python strings NOW. 
-    # If we wait and try to access `subject.name` or `content.explanation` later 
-    # during the pipeline, SQLAlchemy might try to trigger a "lazy load" query 
-    # on a database connection that has already been killed by the Supabase timeout.
-    topic_name = topic.name
-    chapter_name = chapter.name
-    subject_name = subject.name
-    class_name = subject.class_name
-    difficulty_level = content.difficulty_level
-    old_explanation_string = content.explanation
-
-    # ── STEP 2: Close/Release the DB connection ───────────────────────────────
-    # ── [CHANGED] EXPIRE ORM OBJECTS ──────────────────────────────────────────
-    # Explanation: This detaches the objects from the current session. It ensures 
-    # that the session isn't held open or relied upon while the 5-minute AI 
-    # pipeline runs, which prevents the "server closed connection unexpectedly" crash.
-    db.expire_all()
-
-    # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ───────────────────────
     # First: extract only remove_refs so we can remap remaining refinements
+    # against the renumbered problem IDs before splitting into other groups.
     remove_refs = [r for r in refinements_list if r["type"] == "remove_problem"]
 
     problems = current_problems_list
@@ -77,9 +57,6 @@ async def refine_worksheet(
     simplify_refs = [r for r in refinements_list if r["type"] == "simplify_language"]
     visual_refs = [r for r in refinements_list if r["type"] == "add_visuals"]
 
-    # Note: If these `handle_` functions try to read relationships on the detached 
-    # `topic`/`subject`/`chapter` objects that weren't loaded, they will crash. 
-    # Since they likely only read basic attributes, they should be fine.
     if add_refs:
         problems = handle_add(problems, add_refs, topic, subject, chapter, content, curriculum_context)
 
@@ -98,6 +75,10 @@ async def refine_worksheet(
     # ─── Split: which problems need processing vs already done ───
     needs_processing = [p for p in problems if "question" in p and "localized_question" not in p]
     already_done = [p for p in problems if "localized_question" in p]
+
+    # ─── Only verify new/changed problems ───
+    # if needs_processing:
+    #     needs_processing = verify_and_fix_problems(needs_processing)
 
     # ─── Only localize new/changed problems ───
     new_localized = []
@@ -127,12 +108,8 @@ async def refine_worksheet(
     # ─── Load old visuals from DB ───
     old_visuals = {}
     try:
-        # ── [CHANGED] USE EXTRACTED STRING ────────────────────────────────────
-        # Explanation: We use the `old_explanation_string` we saved in Step 1. 
-        # Accessing `content.explanation` here would crash because `content` 
-        # was expired in Step 2 and the connection is dead.
-        if old_explanation_string:
-            parsed_v = ast.literal_eval(old_explanation_string)
+        if content.explanation:
+            parsed_v = ast.literal_eval(content.explanation)
             if isinstance(parsed_v, dict):
                 old_visuals = parsed_v
     except (ValueError, SyntaxError):
@@ -148,6 +125,7 @@ async def refine_worksheet(
                 remapped = dict(v)
                 remapped["problem_id"] = new_pid
                 old_visual_map[new_pid] = remapped
+            # else: this visual was for a removed problem — drop it
         else:
             old_visual_map[old_pid] = v
 
@@ -189,46 +167,25 @@ async def refine_worksheet(
     }
 
     # ─── Compile HTML ───
-    # ── [CHANGED] USE EXTRACTED STRINGS ───────────────────────────────────────
-    # Explanation: We pass the plain Python strings we captured in Step 1.
-    # Again, accessing `subject.class_name` directly here would cause a lazy-load crash.
     worksheet_html = run_compiler_agent(
         localization_output=localization_output,
         visual_output=visual_output,
-        class_name=class_name,
-        subject_name=subject_name,
-        chapter_name=chapter_name,
-        topic_name=topic_name,
-        difficulty=difficulty_level,
+        class_name=subject.class_name,
+        subject_name=subject.name,
+        chapter_name=chapter.name,
+        topic_name=topic.name,
+        difficulty=content.difficulty_level,
         style_description=""
     )
 
-    # ── STEP 4: Re-establish DB connection AFTER pipeline finishes ────────────
-    # ── [CHANGED] RE-QUERY AND TRY/EXCEPT BLOCK ───────────────────────────────
-    # Explanation: Because we expired `content` in Step 2, we cannot just do 
-    # `content.display_body = ...`. We must do a fresh `db.query()` to get a new 
-    # instance of the row attached to our fresh connection pool.
-    # The try/except ensures that if the DB fails, the teacher still gets their HTML.
-    try:
-        content_to_update = db.query(GeneratedContent).filter(
-            GeneratedContent.content_id == content_id
-        ).first()
-
-        if content_to_update:
-            content_to_update.display_body = worksheet_html
-            content_to_update.answer_key = str(localization_output)
-            content_to_update.explanation = str(visual_output)
-            db.commit()
-        else:
-            print(f"[DB Warning] Content {content_id} disappeared during refinement.")
-            
-    except Exception as db_error:
-        print(f"[DB Error] Failed to save refined worksheet to DB: {db_error}")
-        # We don't raise an HTTPException here. The pipeline succeeded, so we 
-        # still want to return the generated HTML back to the frontend.
+    # Update existing content row
+    content.display_body = worksheet_html
+    content.answer_key = str(localization_output)
+    content.explanation = str(visual_output)
+    db.commit()
 
     return {
-        "content_id": content_id,
+        "content_id": content.content_id,
         "html": worksheet_html,
         "problems": localization_output,
         "problems_count": len(localization_output.get("localized_problems", []))

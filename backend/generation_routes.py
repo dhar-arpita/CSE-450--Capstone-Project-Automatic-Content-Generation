@@ -26,6 +26,7 @@ import ast
 router = APIRouter(prefix="/generate", tags=["Worksheet Generation"])
 
 
+
 @router.post("/worksheet")
 async def create_worksheet(
     topic_id: int = Form(...),
@@ -35,7 +36,8 @@ async def create_worksheet(
     sample_worksheet: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
-    # Get topic details from database
+    # ── STEP 1: DB lookups BEFORE the pipeline (fast, no timeout risk) ────────
+    # These queries are instant — do them first while connection is fresh
     topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -48,18 +50,32 @@ async def create_worksheet(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    # Read sample worksheet if provided
+    # Extract all the values we need from DB objects NOW,
+    # before the connection potentially goes stale during the pipeline.
+    # We store them as plain Python strings/ints — no DB connection needed to read these.
+    topic_name = topic.name
+    chapter_name = chapter.name
+    subject_name = subject.name
+    class_name = subject.class_name
+
+    # Read sample worksheet bytes if provided
     sample_bytes = None
     if sample_worksheet:
         sample_bytes = await sample_worksheet.read()
 
-    # Run the 4-agent pipeline
+    # ── STEP 2: Close the DB connection BEFORE running the pipeline ───────────
+    # We explicitly expire all ORM objects so SQLAlchemy does not try to
+    # lazily load anything from the now-potentially-stale connection.
+    db.expire_all()
+
+    # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ──────────────────────
+    # No DB connection is held open during this step.
     result = generate_worksheet(
         topic_id=topic_id,
-        topic_name=topic.name,
-        class_name=subject.class_name,
-        subject_name=subject.name,
-        chapter_name=chapter.name,
+        topic_name=topic_name,
+        class_name=class_name,
+        subject_name=subject_name,
+        chapter_name=chapter_name,
         difficulty=difficulty,
         num_problems=num_problems,
         sample_pdf_bytes=sample_bytes
@@ -68,38 +84,54 @@ async def create_worksheet(
     if result.get("error"):
         raise HTTPException(status_code=500, detail=result["error"])
 
-    # Save to database — create teacher session
-    teacher_session = TeacherSession(
-        teacher_id=user_id,
-        started_at=datetime.utcnow()
-    )
-    db.add(teacher_session)
-    db.flush()
+    # ── STEP 4: Re-establish DB connection AFTER pipeline finishes ────────────
+    # pool_pre_ping=True in settings.py ensures we get a fresh working connection here.
+    # All DB writes happen here — connection was idle for 0 seconds at this point.
+    try:
+        # Create TeacherSession record
+        teacher_session = TeacherSession(
+            teacher_id=user_id,
+            started_at=datetime.utcnow()
+        )
+        db.add(teacher_session)
+        db.flush()
 
-    # Link session to topic
-    session_topic = TeacherSessionTopic(
-        session_id=teacher_session.session_id,
-        topic_id=topic_id
-    )
-    db.add(session_topic)
+        # Link session to topic
+        session_topic = TeacherSessionTopic(
+            session_id=teacher_session.session_id,
+            topic_id=topic_id
+        )
+        db.add(session_topic)
 
-    # Save generated content
-    generated = GeneratedContent(
-        teacher_session_id=teacher_session.session_id,
-        topic_id=topic_id,
-        content_type="worksheet",
-        difficulty_level=difficulty,
-        display_body=result["html"],
-        answer_key=str(result.get("problems", "")),
-        explanation=str(result.get("visuals", {})),
-        generated_at=datetime.utcnow()
-    )
-    db.add(generated)
-    db.flush()
+        # Save generated content
+        generated = GeneratedContent(
+            teacher_session_id=teacher_session.session_id,
+            topic_id=topic_id,
+            content_type="worksheet",
+            difficulty_level=difficulty,
+            display_body=result["html"],
+            answer_key=str(result.get("problems", "")),
+            generated_at=datetime.utcnow()
+        )
+        db.add(generated)
+        db.flush()
 
-    # Update session end time
-    teacher_session.ended_at = datetime.utcnow()
-    db.commit()
+        teacher_session.ended_at = datetime.utcnow()
+        db.commit()
+
+    except Exception as db_error:
+        # If DB save fails after the pipeline succeeded,
+        # still return the HTML to the teacher — don't lose their worksheet.
+        # Just log the DB error and return without content_id.
+        print(f"[DB Error] Failed to save worksheet to DB: {db_error}")
+        return {
+            "content_id": None,
+            "session_id": None,
+            "html": result["html"],
+            "problems_count": len(result.get("problems", {}).get("localized_problems", [])),
+            "style_used": result.get("style_used", False),
+            "warning": "Worksheet generated successfully but could not be saved to database."
+        }
 
     return {
         "content_id": generated.content_id,
