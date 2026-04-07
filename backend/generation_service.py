@@ -14,6 +14,51 @@ from agents.math_verifier import verify_and_fix_problems
 
 
 
+def build_refinement_instructions(refinements: list) -> str:
+    """
+    Converts a list of refinement dicts into a numbered instruction string for an LLM prompt.
+    """
+    instructions = []
+    step = 1
+
+    for r in refinements:
+        rtype = r.get("type")
+
+        if rtype == "add_problems":
+            count = r.get("count", 1)
+            instructions.append(f"{step}. ADD {count} new problems at the same difficulty level and same topic")
+            step += 1
+
+        elif rtype == "remove_problem":
+            ids = r.get("problem_ids", [])
+            id_str = " and ".join(f"#{pid}" for pid in ids)
+            instructions.append(f"{step}. REMOVE problems {id_str}. Renumber remaining problems sequentially.")
+            step += 1
+
+        elif rtype == "change_difficulty":
+            for change in r.get("changes", []):
+                pid = change.get("problem_id")
+                new_diff = change.get("new_difficulty", "").capitalize()
+                instructions.append(
+                    f"{step}. CHANGE problem #{pid} to {new_diff} difficulty — adjust complexity accordingly"
+                )
+                step += 1
+
+        elif rtype == "add_visuals":
+            ids = r.get("problem_ids", [])
+            id_str = " and ".join(f"#{pid}" for pid in ids)
+            instructions.append(f"{step}. ADD visual diagrams to problems {id_str}")
+            step += 1
+
+        elif rtype == "simplify_language":
+            instructions.append(
+                f"{step}. SIMPLIFY the language of ALL problems — use shorter sentences and simpler words"
+            )
+            step += 1
+
+    return "\n".join(instructions)
+
+
 def search_curriculum_context(topic_id: int, topic_name: str, limit: int = 5) -> str:
     """
     Searches Qdrant for relevant curriculum content about the topic.
