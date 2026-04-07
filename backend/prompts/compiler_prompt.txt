@@ -70,6 +70,12 @@ PAGE LAYOUT RULES:
   - If an SVG looks too large, constrain the container div with max-width: 400px, not the SVG itself
 - Use "overflow: hidden" on all container divs
 - Test: if you print this page on A4 paper, nothing should be cut off
+- CENTERING RULES (CRITICAL — content must NOT shift right):
+  1. The worksheet must be perfectly centered on the A4 page. Use "margin: 0 auto" on the main content container. NEVER add margin-left, padding-left, or any left offset that would shift content rightward.
+  2. Do NOT create decorative side panels, left borders, left sidebars, or vertical accent strips. These push the content off-center.
+  3. The main content wrapper must use exactly: max-width: 170mm; margin: 0 auto; padding: 20px;
+  4. Every child element (problem boxes, answer key, header, footer) must have equal left and right margins/padding. If left padding is 20px, right padding must also be 20px.
+  5. Do NOT use float or position:absolute on decorative elements that could shift the layout.
 
 STRUCTURE:
 - Header (title + mascot/any little cute baby + name/date fields)
