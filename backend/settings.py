@@ -44,7 +44,23 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 if not DATABASE_URL:
     raise ValueError("DATABASE_URL is missing from .env file")
 
-engine = create_engine(DATABASE_URL, connect_args={"sslmode": "require"})
+# engine = create_engine(DATABASE_URL, connect_args={"sslmode": "require"})
+# settings.py — replace the engine creation line with this
+
+# pool_pre_ping=True tells SQLAlchemy to test the connection before using it.
+# If the connection is dead, it automatically gets a fresh one instead of crashing.
+# pool_recycle=300 forces connections to be recycled every 5 minutes,
+# preventing Supabase from closing them due to idle timeout.
+# pool_size=5 keeps up to 5 connections ready in the pool.
+# max_overflow=10 allows up to 10 extra connections if all 5 are busy.
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"sslmode": "require"},
+    pool_pre_ping=True,
+    pool_recycle=300,
+    pool_size=5,
+    max_overflow=10
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

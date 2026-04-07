@@ -108,14 +108,15 @@
 
 import React, { useState } from "react";
 import { generateWorksheet } from "./api";
+import RefineWorksheet from "./RefineWorksheet"; 
 
-// sampleFile প্রপসটি এখানে রিসিভ করা হচ্ছে
 export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }) {
   const [loading, setLoading] = useState(false);
   const [worksheetHTML, setWorksheetHTML] = useState("");
   const [contentId, setContentId] = useState(null); 
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
+  const [showRefine, setShowRefine] = useState(false);
 
   const onGenerate = async () => {
     if (!selectedTopicId) {
@@ -128,32 +129,35 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
     setLoading(true);
     setWorksheetHTML(""); 
     try {
-      // API call - এখানে sampleFile প্যারামিটারটি যোগ করা হয়েছে
       const { data } = await generateWorksheet(
         selectedTopicId, 
         userId, 
         difficulty.toLowerCase(), 
         numQuestions,
-        sampleFile // এই ফাইলটি এখন api.js এ চলে যাবে
+        sampleFile
       );
-
       if (data && data.html) {
         setWorksheetHTML(data.html);
         setContentId(data.content_id); 
+        setShowRefine(false);
       } else {
         alert("Worksheet generated but content is empty.");
       }
     } catch (err) {
-      console.error("Error response:", err.response?.data);
-      alert("Failed to generate worksheet. Please check if curriculum file is uploaded.");
+      console.error("Error:", err);
+      alert("Failed to generate worksheet.");
     }
     setLoading(false);
   };
 
   const handleDownloadPDF = () => {
     if (!contentId) return;
-    // আপনার লোকালহোস্ট ইউআরএল অনুযায়ী
     window.open(`http://127.0.0.1:8000/generate/download/${contentId}`, "_blank");
+  };
+
+  const handleUpdateFromRefine = (newData) => {
+    setWorksheetHTML(newData.html);
+    setContentId(newData.content_id);
   };
 
   return (
@@ -215,7 +219,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
         </button>
       </div>
 
-      {/* Preview Section */}
+      {/* Preview & Action Buttons Section */}
       {worksheetHTML && (
         <div style={{ 
           marginTop: "20px", 
@@ -227,27 +231,49 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
           maxWidth: "100%",
           overflowX: "auto"
         }}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "20px" }}>
-            <button 
-              onClick={handleDownloadPDF} 
-              style={{ 
-                backgroundColor: "#1890ff", 
-                color: "white", 
-                padding: "10px 20px", 
-                border: "none", 
-                borderRadius: "6px", 
-                cursor: "pointer", 
-                fontWeight: "bold",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px"
-              }}
-            >
-              📥 Download as PDF
-            </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+              ✨ Worksheet ready. You can refine specific parts before downloading.
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => setShowRefine(true)}
+                style={{
+                  backgroundColor: "#eef2ff",
+                  color: "#4338ca",
+                  padding: "10px 16px",
+                  border: "1px solid #c7d2fe",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                🛠 Refine Worksheet
+              </button>
+
+              <button 
+                onClick={handleDownloadPDF} 
+                style={{ 
+                  backgroundColor: "#1890ff", 
+                  color: "white", 
+                  padding: "10px 20px", 
+                  border: "none", 
+                  borderRadius: "8px", 
+                  cursor: "pointer", 
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                📥 Download as PDF
+              </button>
+            </div>
           </div>
           
-          {/* এই অংশটি এআই থেকে আসা HTML রেন্ডার করবে */}
           <div 
             className="worksheet-render-area"
             style={{ 
@@ -258,6 +284,15 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
             dangerouslySetInnerHTML={{ __html: worksheetHTML }} 
           />
         </div>
+      )}
+
+      {/* Refinement Interface */}
+      {showRefine && (
+        <RefineWorksheet 
+          contentId={contentId} 
+          onClose={() => setShowRefine(false)} 
+          onUpdate={handleUpdateFromRefine} 
+        />
       )}
     </div>
   );

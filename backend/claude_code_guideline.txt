@@ -1,0 +1,149 @@
+## Implementation Guide: Backend Changes for Better RAG Retrieval
+
+### Overview
+Two files need changes. Goal: ensure ALL uploaded content for a topic reaches the Content Agent, not just top-5 by similarity.
+
+---
+
+### Change 1: `backend/chunker.py`
+
+**What:** Update default parameters in TWO functions.
+
+**File:** `backend/chunker.py`
+
+**Function `chunk_text` (around line 7):**
+- Change `chunk_size=800` → `chunk_size=1200`
+- Change `overlap=100` → `overlap=150`
+
+**Function `chunk_pages` (around line 30):**
+- Change `chunk_size=800` → `chunk_size=1200`
+- Change `overlap=100` → `overlap=150`
+
+**Why:** Larger chunks keep difficulty sections intact instead of splitting mid-question.
+
+---
+
+### Change 2: `backend/generation_service.py`
+
+**What:** Rewrite `search_curriculum_context()` to fetch ALL chunks for a topic instead of top-5 by similarity.
+
+**File:** `backend/generation_service.py`
+
+**Current function** (starts around line 264):
+- Embeds the topic name as a query vector
+- Runs vector similarity search with topic_id filter, limit=5
+- Falls back to unfiltered vector search if no results
+
+**New behavior:**
+1. Use Qdrant's `scroll()` method with a `topic_id` filter to fetch ALL points for that topic. No embedding call needed for this path.
+2. If scroll returns results, combine their text and return.
+3. If scroll returns nothing (no content uploaded for this topic), THEN fall back to the existing vector search approach (embed topic name → unfiltered search → top 5). This fallback keeps the system working even when no topic-specific content exists.
+4. Add a safety cap: if total retrieved text exceeds 15000 characters, truncate and log a warning. This prevents overloading the Gemini prompt for topics with massive uploads.
+
+**New implementation for `search_curriculum_context`:**
+
+```python
+def search_curriculum_context(topic_id: int, topic_name: str) -> str:
+    """
+    Fetches ALL curriculum content for a topic from Qdrant.
+    Falls back to vector similarity search if no topic-specific content exists.
+    """
+
+    MAX_CONTEXT_CHARS = 15000
+
+    # Primary path: scroll ALL chunks that belong to this topic_id
+    topic_filter = Filter(
+        must=[
+            FieldCondition(
+                key="topic_id",
+                match=MatchValue(value=topic_id),
+            )
+        ]
+    )
+
+    all_points = []
+    next_offset = None
+
+    # Scroll through all matching points (Qdrant returns them in batches)
+    while True:
+        result = qdrant_client.scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=topic_filter,
+            limit=100,
+            offset=next_offset,
+            with_payload=True,
+            with_vectors=False
+        )
+        points, next_offset = result
+        all_points.extend(points)
+        if next_offset is None:
+            break
+
+    # If we found topic-specific content, use it
+    if all_points:
+        print(f"[Context] Found {len(all_points)} chunks for topic_id={topic_id}")
+
+        context_parts = []
+        total_chars = 0
+        for point in all_points:
+            text = point.payload.get("text", "")
+            filename = point.payload.get("filename", "unknown")
+            page = point.payload.get("page", "?")
+            entry = f"[Source: {filename}, Page {page}]\n{text}"
+
+            if total_chars + len(entry) > MAX_CONTEXT_CHARS:
+                print(f"[Context] Truncating at {total_chars} chars (cap: {MAX_CONTEXT_CHARS})")
+                break
+
+            context_parts.append(entry)
+            total_chars += len(entry)
+
+        return "\n\n---\n\n".join(context_parts)
+
+    # Fallback: no topic-specific content found, try general vector search
+    print(f"[Context] No chunks for topic_id={topic_id}, falling back to vector search")
+    query_vector = get_embedding(topic_name, is_query=True)
+
+    if not query_vector:
+        return "No curriculum content found for this topic."
+
+    results = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_vector,
+        limit=5
+    ).points
+
+    if not results:
+        return "No curriculum content found for this topic."
+
+    context_parts = []
+    for point in results:
+        text = point.payload.get("text", "")
+        filename = point.payload.get("filename", "unknown")
+        page = point.payload.get("page", "?")
+        context_parts.append(f"[Source: {filename}, Page {page}]\n{text}")
+
+    return "\n\n---\n\n".join(context_parts)
+```
+
+**Important:** The `limit` parameter is removed from the function signature since we no longer use it. Check if `search_curriculum_context` is called anywhere else with a `limit` argument — if so, remove that argument from the call site too.
+
+**Imports needed:** `Filter`, `FieldCondition`, `MatchValue` are already imported in this file from `qdrant_client.models`.
+
+---
+
+### What NOT to change
+- No changes to any agent files (content_agent, localization_agent, visual_agent, compiler_agent, math_verifier, refinement_agent)
+- No changes to prompts
+- No changes to models.py, settings.py, main.py, or any route files
+- No changes to the ingestion pipeline (parser, ingestion_controller, ingestion_routes, embedding_service)
+- The `search_curriculum_context` call in `generation_routes.py` refine endpoint (around line 230) also uses this function — it will automatically benefit from the change, just remove the `limit` argument if it passes one
+
+---
+
+### Testing
+After making changes:
+1. Upload the 3 gold-standard .txt files via `/ingest/upload` to topic_ids 5, 6, 7
+2. Generate a worksheet for topic_id=5, difficulty=medium, num_problems=5
+3. Check that the generated problems show variety (not just standard computation) — you should see formats like fill-in-the-blank, spot-the-error, matching, puzzles etc.
+4. Check server logs for `[Context] Found X chunks for topic_id=5` to confirm all chunks are being retrieved

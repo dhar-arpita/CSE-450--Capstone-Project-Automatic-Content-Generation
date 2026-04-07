@@ -1,0 +1,235 @@
+@router.post("/refine")
+async def refine_worksheet(
+    content_id: int = Form(...),
+    current_problems: str = Form(...),
+    refinements: str = Form(...),
+    db: Session = Depends(get_db)
+):
+    # Parse JSON strings
+    try:
+        current_problems_list = json.loads(current_problems)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid current_problems JSON: {e}")
+
+    try:
+        refinements_list = json.loads(refinements)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid refinements JSON: {e}")
+
+    # ── STEP 1: DB lookups BEFORE the pipeline (fast, no timeout risk) ────────
+    # Look up existing content
+    content = db.query(GeneratedContent).filter(
+        GeneratedContent.content_id == content_id
+    ).first()
+    if not content:
+        raise HTTPException(status_code=404, detail="Content not found")
+
+    # Look up topic, chapter, subject 
+    topic = db.query(Topic).filter(Topic.topic_id == content.topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    # Search curriculum context (needed if adding problems)
+    curriculum_context = search_curriculum_context(content.topic_id, topic.name)
+
+    # ── [CHANGED] EXTRACT STRINGS EARLY ───────────────────────────────────────
+    # Explanation: We must copy these values into standard Python strings NOW. 
+    # If we wait and try to access `subject.name` or `content.explanation` later 
+    # during the pipeline, SQLAlchemy might try to trigger a "lazy load" query 
+    # on a database connection that has already been killed by the Supabase timeout.
+    topic_name = topic.name
+    chapter_name = chapter.name
+    subject_name = subject.name
+    class_name = subject.class_name
+    difficulty_level = content.difficulty_level
+    old_explanation_string = content.explanation
+
+    # ── STEP 2: Close/Release the DB connection ───────────────────────────────
+    # ── [CHANGED] EXPIRE ORM OBJECTS ──────────────────────────────────────────
+    # Explanation: This detaches the objects from the current session. It ensures 
+    # that the session isn't held open or relied upon while the 5-minute AI 
+    # pipeline runs, which prevents the "server closed connection unexpectedly" crash.
+    db.expire_all()
+
+    # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ───────────────────────
+    # First: extract only remove_refs so we can remap remaining refinements
+    remove_refs = [r for r in refinements_list if r["type"] == "remove_problem"]
+
+    problems = current_problems_list
+    id_remap = None
+
+    if remove_refs:
+        problems, id_remap = handle_remove(problems, remove_refs)
+        if id_remap:
+            refinements_list = remap_refinement_ids(refinements_list, id_remap)
+
+    # Now split the (possibly remapped) refinements into the remaining groups
+    add_refs = [r for r in refinements_list if r["type"] == "add_problems"]
+    diff_refs = [r for r in refinements_list if r["type"] == "change_difficulty"]
+    simplify_refs = [r for r in refinements_list if r["type"] == "simplify_language"]
+    visual_refs = [r for r in refinements_list if r["type"] == "add_visuals"]
+
+    # Note: If these `handle_` functions try to read relationships on the detached 
+    # `topic`/`subject`/`chapter` objects that weren't loaded, they will crash. 
+    # Since they likely only read basic attributes, they should be fine.
+    if add_refs:
+        problems = handle_add(problems, add_refs, topic, subject, chapter, content, curriculum_context)
+
+    if diff_refs:
+        problems = handle_difficulty(problems, diff_refs, topic, subject, chapter, content)
+
+    if simplify_refs:
+        problems = handle_simplify(problems, topic, subject, chapter, content)
+
+    if visual_refs:
+        problems = handle_visuals(problems, visual_refs)
+
+    if not problems:
+        raise HTTPException(status_code=500, detail="Refinement produced no problems")
+
+    # ─── Split: which problems need processing vs already done ───
+    needs_processing = [p for p in problems if "question" in p and "localized_question" not in p]
+    already_done = [p for p in problems if "localized_question" in p]
+
+    # ─── Only localize new/changed problems ───
+    new_localized = []
+    if needs_processing:
+        loc_result = run_localization_agent({"problems": needs_processing})
+        new_localized = loc_result.get("localized_problems", [])
+
+        if not new_localized:
+            new_localized = [
+                {
+                    "id": p["id"],
+                    "localized_question": p["question"],
+                    "answer": p["answer"],
+                    "solution_steps": p["solution_steps"],
+                    "needs_diagram": p.get("needs_diagram", False),
+                    "diagram_type": p.get("diagram_type", "none"),
+                    "diagram_description": p.get("diagram_description", "")
+                }
+                for p in needs_processing
+            ]
+
+    # ─── Merge: already localized + newly localized ───
+    all_localized = already_done + new_localized
+    all_localized.sort(key=lambda p: p["id"])
+    localization_output = {"localized_problems": all_localized}
+
+    # ─── Load old visuals from DB ───
+    old_visuals = {}
+    try:
+        # ── [CHANGED] USE EXTRACTED STRING ────────────────────────────────────
+        # Explanation: We use the `old_explanation_string` we saved in Step 1. 
+        # Accessing `content.explanation` here would crash because `content` 
+        # was expired in Step 2 and the connection is dead.
+        if old_explanation_string:
+            parsed_v = ast.literal_eval(old_explanation_string)
+            if isinstance(parsed_v, dict):
+                old_visuals = parsed_v
+    except (ValueError, SyntaxError):
+        old_visuals = {}
+
+    # Build old_visual_map (remapping IDs if remove happened)
+    old_visual_map = {}
+    for v in old_visuals.get("problem_visuals", []):
+        old_pid = v.get("problem_id")
+        if id_remap is not None:
+            if old_pid in id_remap:
+                new_pid = id_remap[old_pid]
+                remapped = dict(v)
+                remapped["problem_id"] = new_pid
+                old_visual_map[new_pid] = remapped
+        else:
+            old_visual_map[old_pid] = v
+
+    # ─── Determine which problems need NEW visuals ───
+    changed_ids = {p["id"] for p in needs_processing}
+    visual_flagged_ids = set()
+    for r in visual_refs:
+        visual_flagged_ids.update(r.get("problem_ids", []))
+
+    needs_new_visual_ids = changed_ids | visual_flagged_ids
+
+    problems_needing_new_visuals = {
+        "localized_problems": [
+            p for p in all_localized
+            if p.get("needs_diagram") and p["id"] in needs_new_visual_ids
+        ]
+    }
+
+    new_visual_output = {"robot_mascot": "", "problem_visuals": []}
+    if problems_needing_new_visuals["localized_problems"]:
+        new_visual_output = run_visual_agent(problems_needing_new_visuals, "")
+
+    new_visual_map = {}
+    for v in new_visual_output.get("problem_visuals", []):
+        new_visual_map[v["problem_id"]] = v
+
+    # ─── Merge old + new visuals ───
+    final_visuals = []
+    for p in all_localized:
+        pid = p["id"]
+        if pid in new_visual_map:
+            final_visuals.append(new_visual_map[pid])
+        elif pid in old_visual_map:
+            final_visuals.append(old_visual_map[pid])
+
+    visual_output = {
+        "robot_mascot": old_visuals.get("robot_mascot", new_visual_output.get("robot_mascot", "")),
+        "problem_visuals": final_visuals
+    }
+
+    # ─── Compile HTML ───
+    # ── [CHANGED] USE EXTRACTED STRINGS ───────────────────────────────────────
+    # Explanation: We pass the plain Python strings we captured in Step 1.
+    # Again, accessing `subject.class_name` directly here would cause a lazy-load crash.
+    worksheet_html = run_compiler_agent(
+        localization_output=localization_output,
+        visual_output=visual_output,
+        class_name=class_name,
+        subject_name=subject_name,
+        chapter_name=chapter_name,
+        topic_name=topic_name,
+        difficulty=difficulty_level,
+        style_description=""
+    )
+
+    # ── STEP 4: Re-establish DB connection AFTER pipeline finishes ────────────
+    # ── [CHANGED] RE-QUERY AND TRY/EXCEPT BLOCK ───────────────────────────────
+    # Explanation: Because we expired `content` in Step 2, we cannot just do 
+    # `content.display_body = ...`. We must do a fresh `db.query()` to get a new 
+    # instance of the row attached to our fresh connection pool.
+    # The try/except ensures that if the DB fails, the teacher still gets their HTML.
+    try:
+        content_to_update = db.query(GeneratedContent).filter(
+            GeneratedContent.content_id == content_id
+        ).first()
+
+        if content_to_update:
+            content_to_update.display_body = worksheet_html
+            content_to_update.answer_key = str(localization_output)
+            content_to_update.explanation = str(visual_output)
+            db.commit()
+        else:
+            print(f"[DB Warning] Content {content_id} disappeared during refinement.")
+            
+    except Exception as db_error:
+        print(f"[DB Error] Failed to save refined worksheet to DB: {db_error}")
+        # We don't raise an HTTPException here. The pipeline succeeded, so we 
+        # still want to return the generated HTML back to the frontend.
+
+    return {
+        "content_id": content_id,
+        "html": worksheet_html,
+        "problems": localization_output,
+        "problems_count": len(localization_output.get("localized_problems", []))
+    }

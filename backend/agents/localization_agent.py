@@ -1,8 +1,10 @@
+# localization_agent.py
 import json
 from agents.content_agent import load_prompt_template
 from settings import gemini_client
-from settings import gemini_client, FAST_MODEL
+from settings import gemini_client, SMART_MODEL
 from google.genai import types
+from agents.json_utils import repair_json
 
 
 
@@ -20,20 +22,34 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
         style_description=style_description or "No reference style provided. Default to word problems."
     )
 
+    config = types.GenerateContentConfig(
+        temperature=0.0,
+        response_mime_type="application/json"
+    )
+
     response = gemini_client.models.generate_content(
-        model=FAST_MODEL,
+        model=SMART_MODEL,
         contents=prompt,
-        config=types.GenerateContentConfig(
-        temperature=0.6
-    )
+        config=config
     )
 
-    raw = response.text.replace("```json", "").replace("```", "").strip()
-
+    raw = repair_json(response.text)
     try:
         result = json.loads(raw)
         print(f"[Localization Agent] Localized {len(result['localized_problems'])} problems")
         return result
     except json.JSONDecodeError as e:
-        print(f"[Localization Agent] JSON parse error: {e}")
-        return {"localized_problems": [], "error": str(e)}
+        print(f"[Localization Agent] JSON parse error: {e} — retrying once")
+        try:
+            response = gemini_client.models.generate_content(
+                model=SMART_MODEL,
+                contents=prompt,
+                config=config
+            )
+            raw = repair_json(response.text)
+            result = json.loads(raw)
+            print(f"[Localization Agent] Localized {len(result['localized_problems'])} problems (retry)")
+            return result
+        except json.JSONDecodeError as e2:
+            print(f"[Localization Agent] JSON parse error after retry: {e2}")
+            return {"localized_problems": [], "error": str(e2)}

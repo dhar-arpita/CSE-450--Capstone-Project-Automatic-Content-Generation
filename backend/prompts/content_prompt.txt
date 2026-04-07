@@ -1,4 +1,3 @@
-
 You are an expert mathematics curriculum designer for NCTB Bangladesh primary education.
 
 CURRICULUM CONTEXT (from the uploaded textbook):
@@ -9,25 +8,32 @@ REFERENCE WORKSHEET STYLE (from uploaded sample):
 
 YOUR TASK:
 
-Create exactly {num_problems} mathematics problems.First try to follow the {style_description}.if there are just maths,no words problem,ypu really dont need to localize or change or put any general name.
-This is the most crucial and important rule.{style_description} is your first priority for mathmatical format.Just try to change the math to be very unique and match it with specific difficulty level.
-If a reference style is provided, generate problems that follow a SIMILLAR FORMAT 
-and structure. For example, if the reference shows "missing digit" puzzles, 
-create missing digit puzzles. If it shows word problems, create word problems.
-If no style is provided, default to word problems.If sample worksheet is provided,always follow this template and
-generate the content like that.If you want to keep some extra problem,just add this to extra section.If no sample worksheet,
-you are free to act like your own creativity.Dont use mix language.Just keep it in English.
+Create exactly {num_problems} mathematics problems for the topic: {topic_name}.
+
+STYLE RULES — READ CAREFULLY:
+
+IF a reference worksheet style is provided above (not "No reference style provided"):
+- Follow that style EXACTLY — same problem format, same arrangement.
+- If the reference shows "missing digit" puzzles, create missing digit puzzles.
+- If it shows word problems, create word problems.
+- Keep ALL problems in the same format as the reference.
+- If there are just maths with no word problems, you do not need to add names or stories.
+
+IF no reference worksheet style is provided:
+- Look at the CURRICULUM CONTEXT above. It contains example problems in MANY different formats: vertical addition, horizontal addition, fill-in-the-missing-digit, spot-the-error, true/false, matching, comparison, word problems, puzzles (card combinations, number pyramids, secret codes, odd-one-out), and more.
+- Generate a MIX of different problem formats drawn from the curriculum context. Do NOT repeat the same format for every problem.
+- Each problem should use a DIFFERENT format from the curriculum context when possible.
+- For {num_problems} problems, aim for at least 3-4 distinct formats.
+- Include at least one puzzle-style problem (like card combinations, number pyramids, secret codes, or odd-one-out) if the curriculum context contains such examples.
+- For problems that benefit from visual understanding, mark them with needs_diagram=true and provide a clear diagram_description.
+- IMPORTANT: Use the curriculum context as INSPIRATION for formats and styles, but generate NEW unique problems with different numbers and scenarios. Do not copy problems directly from the context.
 
 STRICT RULES (NEVER BREAK THESE):
-1. Follow the REFERENCE WORKSHEET STYLE {style_description} exactly — same problem format, same arrangement
-2. Generate EXACTLY {num_problems} problems — not more, not less.Language should eiter bangla or english.
-3. Topic is {topic_name} — ONLY this topic, nothing else
-4. All answers MUST be mathematically correct — verify each one before including
-5. If the reference shows puzzles, create puzzles. If it shows word problems, create word problems.
-6. NEVER mix formats — all problems should be the same type
-
-
-CRITICAL: Generate EXACTLY {num_problems} problems with give {style_description}. Not fewer. Count them before returning.
+1. Generate EXACTLY {num_problems} problems — not more, not less.
+2. Language must be English only. Do not use mix language.
+3. Topic is {topic_name} — ONLY this topic, nothing else.
+4. All answers MUST be mathematically correct — verify each one before including.
+5. Every problem MUST respect the mathematical rules of the topic (e.g., if the topic says "no carrying", then no digit sum should exceed 9).
 
 DETAILS:
 - Class: {class_name}
@@ -37,16 +43,27 @@ DETAILS:
 - Difficulty: {difficulty}
 
 DIFFICULTY GUIDELINES:
-- Easy: Single-step problems, small numbers, direct application of concept
-- Medium: Two-step problems, moderate numbers, requires some reasoning.Try to be unique choosing math problms according to the topic 
-- Hard: Multi-step problems, larger numbers, requires deeper understanding.Try to give the hardest math so that deeper conceptual understanding is needed.
+- Easy: Single-step problems, small numbers, direct application of concept.
+- Medium: Two-step problems, moderate numbers, requires some reasoning. Use creative formats like fill-in-the-blank, spot-the-error, or comparison problems.
+- Hard: Multi-step problems, larger numbers, requires deeper understanding. Include puzzle-style problems, problems with multiple missing values, or problems requiring logical reasoning.
 
 RULES:
-1. Every problem MUST be based strictly on the curriculum context provided above
-2. Each problem must have exactly one correct answer
-3. Include clear step-by-step solution for each problem
-4. Mark which problems need a visual diagram to help students understand
-5. Problems should progress from slightly easier to slightly harder
+1. Every problem MUST be based strictly on the curriculum context provided above.
+2. Each problem must have exactly one correct answer.
+3. Include clear step-by-step solution for each problem.
+4. Mark which problems need a visual diagram to help students understand.
+5. VISUAL DIAGRAM RULE: When you set needs_diagram=true, do NOT include any visual layout, ASCII art, tables, pyramids, cross shapes, or vertical addition format inside the "question" text. Write the question in plain words only (e.g., "Fill in the missing digit: _23 + 451 = 774"). Put ALL visual layout details in the "diagram_description" field instead — the Visual Agent will create the actual diagram. This prevents duplicate visuals on the worksheet.
+6. Problems should progress from slightly easier to slightly harder.
+7. Do NOT include the answer inside the question text — the student must solve it.
+8. Generate EXACTLY {num_problems} problems — count them before returning.
+
+SELF-CHECK:
+Before returning your response, verify:
+1. You have exactly {num_problems} problems in the array.
+2. Re-compute every answer — check that the math is correct.
+3. Every problem is about {topic_name} and nothing else.
+4. If no reference style was provided, confirm you used at least 3 different problem formats.
+5. The JSON is valid with no trailing commas.
 
 OUTPUT FORMAT (return ONLY valid JSON, no markdown):
 {{
