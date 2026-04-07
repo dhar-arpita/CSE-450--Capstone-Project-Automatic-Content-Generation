@@ -38,20 +38,6 @@ export const uploadCurriculumFile = (file, topicId, userId) => {
 };
 
 
-<<<<<<< Updated upstream
-=======
-
-
-// export const generateWorksheet = (topicId, userId, difficulty, numProblems) => {
-//   const formData = new FormData();
-//   formData.append("topic_id", topicId);
-//   formData.append("user_id", userId);
-//   formData.append("difficulty", difficulty);
-//   formData.append("num_problems", numProblems); // নিশ্চিত করো এটি 'num_problems'
-
-//   return api.post("/generate/worksheet", formData);
-// };
-
 export const generateWorksheet = (topicId, userId, difficulty, numProblems, sampleFile = null) => {
   const formData = new FormData();
   formData.append("topic_id", topicId);
@@ -82,7 +68,6 @@ export const refineWorksheet = (contentId, currentProblems, refinements) => {
 
 export const getWorksheetDetails = (contentId) => api.get(`/generate/worksheet/${contentId}`);
 
->>>>>>> Stashed changes
 export const getIngestionStatus = (jobId) => api.get(`/ingest/status/${jobId}`);
 
 
