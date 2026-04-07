@@ -1,5 +1,3 @@
-
-#arpita 
 # ingestion_controller.py - The brain of the ingestion pipeline.
 # This file contains the background function that orchestrates all steps:
 # parse → chunk → embed → store in Qdrant → save to PostgreSQL → update job status.

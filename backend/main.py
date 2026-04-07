@@ -28,6 +28,8 @@ from ingestion_routes import router as ingestion_router
 from curriculum_routes import router as curriculum_router
 # ── LIFESPAN MANAGER ──────────────────────────────────────────────────────────
 
+from generation_routes import router as generation_router
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -71,7 +73,7 @@ app.add_middleware(
 app.include_router(ingestion_router)
 # Register the curriculum hierarchy router (NEW)
 app.include_router(curriculum_router)
-
+app.include_router(generation_router)
 # ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 
 @app.get("/")

@@ -1,6 +1,3 @@
-
-#arpita
-
 # parser.py - Responsible for extracting raw text from uploaded curriculum files.
 # It supports both PDF and plain text (.txt) formats.
 

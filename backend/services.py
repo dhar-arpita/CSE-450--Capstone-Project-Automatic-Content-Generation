@@ -16,60 +16,47 @@ import time
 import uuid
 import io
 import json
+from google.genai import types
 from pypdf import PdfReader
 # from qdrant_client.http.models import Distance, VectorParams, PointStruct
 from qdrant_client.http.models import Distance, VectorParams, PointStruct, PayloadSchemaType
 from sqlalchemy.orm import Session
 
 # Import the new gemini_client instead of the old genai object
-from settings import qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
+from settings import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
 from models import User, UserCreate, Teacher
 # for delete specific pdf from qdrant................................................
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
 # from sqlalchemy.orm import Session
 from models import ContentEmbedding, UploadMetadata, IngestionJob, UploadRequest
 # --- INITIALIZATION ---
-# def init_vector_db():
-#     """Ensures the Qdrant collection exists on startup."""
-#     if not qdrant_client.collection_exists(COLLECTION_NAME):
-#         qdrant_client.create_collection(
-#             collection_name=COLLECTION_NAME,
-#             vectors_config=VectorParams(size=3072, distance=Distance.COSINE), #3072
-#         )
-# # --- NEW: Create a payload index for 'filename' ---
-#     try:
-#         qdrant_client.create_payload_index(
-#             collection_name=COLLECTION_NAME,
-#             field_name="filename",
-#             field_schema=PayloadSchemaType.KEYWORD,
-#         )
-#         print("Ensured payload index exists for 'filename'.")
-#     except Exception as e:
-#         # If the index already exists, Qdrant might throw a minor error, which we can safely ignore.
-#         pass
-
-
-#change  
 def init_vector_db():
-    """Ensures the Qdrant collection exists with the CORRECT size (3072)."""
-    # যদি কালেকশন আগে থেকে থাকে, তবে সেটি ডিলিট করে নতুন করে তৈরি করা ভালো 
-    # যদি আপনি ডাইমেনশন পরিবর্তন করে থাকেন।
-    
-    if qdrant_client.collection_exists(COLLECTION_NAME):
-        # কালেকশন ইনফো চেক করে দেখা ভালো সাইজ কত
-        info = qdrant_client.get_collection(COLLECTION_NAME)
-        current_size = info.config.params.vectors.size
-        
-        if current_size != 3072:
-            print(f"⚠️ Vector size mismatch (Found {current_size}, Need 3072). Recreating...")
-            qdrant_client.delete_collection(COLLECTION_NAME)
-            
+    """Ensures the Qdrant collection exists on startup."""
     if not qdrant_client.collection_exists(COLLECTION_NAME):
         qdrant_client.create_collection(
             collection_name=COLLECTION_NAME,
             vectors_config=VectorParams(size=3072, distance=Distance.COSINE),
         )
-        print(f"✅ Created Qdrant collection '{COLLECTION_NAME}' with size 3072.")
+# --- NEW: Create a payload index for 'filename' ---
+    try:
+        qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="filename",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        print("Ensured payload index exists for 'filename'.")
+    except Exception as e:
+        pass
+
+    try:
+        qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="topic_id",
+            field_schema=PayloadSchemaType.INTEGER,
+        )
+        print("Ensured payload index exists for 'topic_id'.")
+    except Exception as e:
+        pass
 
 # # --- AI & RAG LOGIC ---
 # def get_embedding(text: str, is_query: bool = False):
@@ -314,6 +301,12 @@ def find_best_match(topic: str):
         return MockPoint()
     return None
 
+
+
+def load_prompt_template(filename: str) -> str:
+    with open(f"prompts/{filename}", "r") as f:
+        return f.read()
+
 # --- USER LOGIC ---
 def create_user(db: Session, user: UserCreate):
     db_user = db.query(User).filter(User.email == user.email).first()
@@ -431,3 +424,48 @@ def delete_file_from_system(filename: str, db: Session):
 #     except Exception as e:
 #         print(f"Error resetting DB: {e}")
 #         return False
+
+
+
+
+
+
+
+
+def analyze_worksheet_style(file_bytes: bytes) -> str:
+    from pdf2image import convert_from_bytes
+    import base64
+
+    images = convert_from_bytes(file_bytes, first_page=1, last_page=1)
+    if not images:
+        return ""
+
+    buffer = io.BytesIO()
+    images[0].save(buffer, format="PNG")
+    buffer.seek(0)
+    
+    template = load_prompt_template("style_format_prompt.txt")
+
+    try:
+        response = gemini_client.models.generate_content(
+            model=SMART_MODEL,
+            contents=[
+                {
+                    "role": "user",
+                    "parts": [
+                        {"inline_data": {
+                            "mime_type": "image/png",
+                            "data": base64.b64encode(buffer.read()).decode()
+                        }},
+                        {"text": template}
+                    ]
+                }
+            ],
+            config=types.GenerateContentConfig(
+            temperature=0.3
+    )
+        )
+        return response.text.strip()
+    except Exception as e:
+        print(f"Style analysis error: {e}")
+        return ""
