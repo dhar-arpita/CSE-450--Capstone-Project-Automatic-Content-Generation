@@ -261,17 +261,15 @@ def handle_visuals(problems: list, visual_refs: list) -> list:
     return problems
 
 
-def search_curriculum_context(topic_id: int, topic_name: str, limit: int = 5) -> str:
+def search_curriculum_context(topic_id: int, topic_name: str) -> str:
     """
-    Searches Qdrant for relevant curriculum content about the topic.
-    Returns combined text from top matches.
+    Fetches ALL curriculum content for a topic from Qdrant.
+    Falls back to vector similarity search if no topic-specific content exists.
     """
-    query_vector = get_embedding(topic_name, is_query=True)
 
-    if not query_vector:
-        return ""
+    MAX_CONTEXT_CHARS = 15000
 
-    # First try with topic_id filter for precise results
+    # Primary path: scroll ALL chunks that belong to this topic_id
     topic_filter = Filter(
         must=[
             FieldCondition(
@@ -281,21 +279,57 @@ def search_curriculum_context(topic_id: int, topic_name: str, limit: int = 5) ->
         ]
     )
 
+    all_points = []
+    next_offset = None
+
+    # Scroll through all matching points (Qdrant returns them in batches)
+    while True:
+        result = qdrant_client.scroll(
+            collection_name=COLLECTION_NAME,
+            scroll_filter=topic_filter,
+            limit=100,
+            offset=next_offset,
+            with_payload=True,
+            with_vectors=False
+        )
+        points, next_offset = result
+        all_points.extend(points)
+        if next_offset is None:
+            break
+
+    # If we found topic-specific content, use it
+    if all_points:
+        print(f"[Context] Found {len(all_points)} chunks for topic_id={topic_id}")
+
+        context_parts = []
+        total_chars = 0
+        for point in all_points:
+            text = point.payload.get("text", "")
+            filename = point.payload.get("filename", "unknown")
+            page = point.payload.get("page", "?")
+            entry = f"[Source: {filename}, Page {page}]\n{text}"
+
+            if total_chars + len(entry) > MAX_CONTEXT_CHARS:
+                print(f"[Context] Truncating at {total_chars} chars (cap: {MAX_CONTEXT_CHARS})")
+                break
+
+            context_parts.append(entry)
+            total_chars += len(entry)
+
+        return "\n\n---\n\n".join(context_parts)
+
+    # Fallback: no topic-specific content found, try general vector search
+    print(f"[Context] No chunks for topic_id={topic_id}, falling back to vector search")
+    query_vector = get_embedding(topic_name, is_query=True)
+
+    if not query_vector:
+        return "No curriculum content found for this topic."
+
     results = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
-        query_filter=topic_filter,
-        limit=limit
+        limit=5
     ).points
-
-    # Fallback: if no results with filter, retry without it
-    if not results:
-        print("we are in the fallback seciton ")
-        results = qdrant_client.query_points(
-            collection_name=COLLECTION_NAME,
-            query=query_vector,
-            limit=limit
-        ).points
 
     if not results:
         return "No curriculum content found for this topic."
@@ -358,12 +392,12 @@ def generate_worksheet(
     if not content_output.get("problems"):
         return {"error": "Content Agent failed to generate problems", "html": ""}
     
-    print("\n[Pipeline] Running code-based math verifier...")
-
-    # verify_and_fix_problems modifies the problems list in place and returns it
-    content_output["problems"] = verify_and_fix_problems(
-        content_output["problems"]
-    )
+    # print("\n[Pipeline] Running code-based math verifier...")
+    #
+    # # verify_and_fix_problems modifies the problems list in place and returns it
+    # content_output["problems"] = verify_and_fix_problems(
+    #     content_output["problems"]
+    # )
     
     # print("\n[Pipeline] Running LLM blind verification agent...")
 

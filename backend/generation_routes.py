@@ -242,8 +242,8 @@ async def refine_worksheet(
     already_done = [p for p in problems if "localized_question" in p]
 
     # ─── Only verify new/changed problems ───
-    if needs_processing:
-        needs_processing = verify_and_fix_problems(needs_processing)
+    # if needs_processing:
+    #     needs_processing = verify_and_fix_problems(needs_processing)
 
     # ─── Only localize new/changed problems ───
     new_localized = []
