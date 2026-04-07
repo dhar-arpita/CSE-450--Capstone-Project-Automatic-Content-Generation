@@ -1,3 +1,4 @@
+# visual_agent.py
 import json
 from agents.content_agent import load_prompt_template
 from settings import gemini_client
@@ -32,7 +33,7 @@ def run_visual_agent(localization_output: dict, style_description: str = "") -> 
         model=SMART_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
-        temperature=0.5
+        temperature=0.0
     )
     )
 

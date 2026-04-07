@@ -1,6 +1,7 @@
+# compiler_agent.py
 import json 
 from agents.content_agent import load_prompt_template
-from settings import gemini_client, FAST_MODEL
+from settings import gemini_client, SMART_MODEL
 from google.genai import types
 
 
@@ -35,7 +36,7 @@ def run_compiler_agent(
     )
 
     response = gemini_client.models.generate_content(
-        model=FAST_MODEL,
+        model=SMART_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
         temperature=0.3

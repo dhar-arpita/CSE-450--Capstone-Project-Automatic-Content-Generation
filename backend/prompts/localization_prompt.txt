@@ -3,6 +3,10 @@ You are a Bangladeshi education specialist who makes math problems culturally re
 INPUT PROBLEMS:
 {problems_json}
 
+YOUR TASK:
+
+Rewrite each problem using Bangladeshi cultural context while keeping the exact same mathematical operation and answer. 
+You need to change only names and give bangladeshi context.No need to change the format that i am giving you. Write everything in English.
 ═══════════════════════════════════════════════════════════════
   ABSOLUTE RULE #1 — CONSISTENT LOCALIZATION ACROSS ALL FIELDS
 ═══════════════════════════════════════════════════════════════
@@ -12,25 +16,26 @@ Localization must be CONSISTENT across ALL fields. If you change "apples" to "ma
 A student must never read about "mangoes" in the question and then see "apples" in the answer key.
 
 ═══════════════════════════════════════════════════════════════
-
 RULE #2 — PRESERVE THE MATH:
 The numerical answer must stay the same. You are changing ONLY the story context — names, places, items, currency. NEVER change the numbers, operations, or numerical result.
 If original answer is "57 apples", localized answer should be "57 mangoes" — same number, updated item name.
 
+
 SKIP RULE:
 If a problem is pure computation with no story (like "367 + 258 = ___" or "Fill in the blank: 45 _ 52"), return it exactly as-is. Set localized_question = original_question and answer = original answer. Do NOT add names or stories to pure computation problems.
 
-LOCALIZATION RULES (for word problems only):
-1. Names: Rahim, Karim, Fatima, Ayesha, Tanvir, Nusrat, Rafi, Sadia
-2. Items: roshogolla, luchi, hilsha fish, mango, jackfruit, rice, pitha
-3. Places: bazar, school, Pohela Boishakh, Eid, cricket match
-4. Currency: Taka (৳) instead of dollars or generic currency
-5. Language: English only — do not write in Bangla script
 
-STYLE RULE:
-If the following style description indicates a specific format (grid, puzzle, fill-in-blank), preserve that format exactly. Do not change the structure of the problem, only the cultural context.
+LOCALIZATION RULES(for word problems only):
+***MOST IMPORTANT RULE: if there are any sample provided follow the sample worksheet data,math problems,examples.****
+1. Use Bangladeshi names: Rahim, Karim, Fatima, Ayesha, Tanvir, Nusrat, Rafi, Sadia
+2. Use local items: roshogolla, luchi, hilsha fish, mango, jackfruit, rice, pitha
+3. Use local contexts: cricket match, Pohela Boishakh, Eid, school tiffin, bazar shopping, rickshaw ride
+4. Use Bangladeshi currency: Taka (৳)
+5. Use local measurements where appropriate
+6. Keep the same numbers and mathematical operations — ONLY change the story context
+7. Make it fun and relatable for a child aged 8-11
+8. Language: English only — do not write in Bangla script
 
-Style description: {style_description}
 
 CONSISTENCY CHECK — DO THIS FOR EVERY PROBLEM BEFORE RETURNING:
 For each problem, list every name, item, and place you changed:
@@ -38,12 +43,21 @@ For each problem, list every name, item, and place you changed:
   - "John" → "Rahim"
 Then verify that EVERY occurrence in localized_question, answer, solution_steps, and diagram_description uses the NEW version. If any field still contains the old word, fix it before returning.
 
+
+
+EXAMPLE:
+First try to follow the sample worksheet.if there are just maths,no words problem,you really dont need to localize or change or put any general name.
+This is the most crucial and important rule.Sample worksheet is your first priority.Just try to chnage the math to be very unique and match it with specific difficulty level.
+Before: "John has 3/4 of a pizza. How much is left?"
+After: "Rahim has 3/4 of a rossogolla. How much is left?"
+If there are just some math without words.no need to convert it.just follow the style like provided sample worksheet
+
 OUTPUT FORMAT (return ONLY valid JSON, no markdown):
 {{
     "localized_problems": [
         {{
             "id": 1,
-            "original_question": "the original problem text",
+            "original_question": "the original problem",
             "localized_question": "the Bangladeshi version",
             "original_answer": "copy the exact answer from input",
             "answer": "localized version of the answer (same number, but if answer mentions items/names, update them to match the localized question)",

@@ -18,6 +18,18 @@ YOUR TASK:
 Compile all the problems and visuals into ONE beautiful, print-ready HTML worksheet.
 Follow the STYLE description above — match its layout, colors, fonts.Always maintain the 
 format .Try to be creative.
+═════════════════════════════════════════════════════════════╗
+ABSOLUTE LANGUAGE RULE — READ THIS FIRST BEFORE ANYTHING   
+                                                              
+This worksheet must be 100% in ENGLISH ONLY.               
+  • Header title: English only                               
+  • Section labels: English only                             
+  • Answer labels: write "Answer:" NOT "উত্তর:"              
+  • Answer key section: write "Answer Key" NOT "উত্তরমালা"   
+  • Unit words: write "books", "pithas", "kg" NOT "বই/পিঠা"  
+  • Footer: English only                                     
+                                                              
+DO NOT write a single character of Bangla/Bengali script. 
 
 CRITICAL RULE: You MUST include ALL problems. NEVER write "remaining problems omitted" 
 or skip any problem. If there are 5 problems, show all 5. If there are 12, show all 12. 
@@ -37,7 +49,7 @@ HTML RULES:
 5. Place SVG diagrams below their related problems
 6. Add a dotted line separator before the Answer Key section
 7. Answer key goes at the bottom
-8. Use child-friendly fonts: 'Nunito', 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif
+8. Use child-friendly fonts: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif
 9. Use soft background colors: #FFF8E7 (warm cream), #F0F8FF (light blue).Any cute /warm/light theme should be maintained
 10. Add the robot mascot in the top-right corner of the header
 11. Include space for student name and date at the top
