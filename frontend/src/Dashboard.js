@@ -152,9 +152,16 @@ export default function Dashboard() {
         </div>
       </div>
       
+<<<<<<< Updated upstream
       {/* 1. UPLOAD SECTION WITH DROPDOWNS */}
       <div style={{ border: "2px solid #1890ff", padding: "20px", marginTop: "20px", borderRadius: "8px" }}>
         <h3> 1. Upload Curriculum Material</h3>
+=======
+      {/* SECTION 1: UPLOAD AREA */}
+      {/* <div style={{ border: "1px solid #1890ff", padding: "20px", marginBottom: "30px", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
+        <h3 style={{ marginTop: 0 }}>📁 1. Upload Curriculum Material</h3>
+        <p style={{ fontSize: "13px", color: "#666" }}>Select the exact topic where this file belongs.</p>
+>>>>>>> Stashed changes
         
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "15px" }}>
           <select value={selectedClass} onChange={(e) => handleClassChange(e.target.value)}>
@@ -184,6 +191,7 @@ export default function Dashboard() {
             {loading && ingestionStatus.includes("Status") ? "Processing..." : "Upload & Process"}
           </button>
         </div>
+<<<<<<< Updated upstream
         
         {ingestionStatus && (
           <p style={{ marginTop: "10px", color: ingestionStatus.includes("✅") ? "green" : "#666" }}>
@@ -198,6 +206,67 @@ export default function Dashboard() {
         <div style={{ display: "flex", gap: "10px" }}>
           <input placeholder="Enter topic (e.g. Newton's Law)" value={topicSearch} onChange={(e) => setTopicSearch(e.target.value)} style={{ flex: 1, padding: "8px" }} />
           <button onClick={handleGenerate} disabled={loading}>Generate</button>
+=======
+        {ingestionStatus && <div style={{ marginTop: "12px", fontWeight: "bold", color: ingestionStatus.includes("✅") ? "green" : "#444" }}>{ingestionStatus}</div>}
+      </div> */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginTop: "40px" }}>
+      <div 
+        onClick={() => navigate("/upload")}
+        style={{ padding: "30px", border: "2px solid #1890ff", borderRadius: "15px", cursor: "pointer", textAlign: "center", transition: "0.3s" }}
+      >
+        <h1 style={{ fontSize: "40px" }}>📁</h1>
+        <h3>Upload Material</h3>
+        {/* <p>নতুন কারিকুলাম ফাইল আপলোড এবং ইনজেস্ট করুন</p> */}
+      </div>
+
+      {/* SECTION 2: WORKSHEET GENERATOR */}
+      {/* এখানে আমরা সব লজিক এবং লিস্টগুলো পাস করছি যাতে জেনারেটর সেকশনে ড্রপডাউনগুলো দেখা যায় */}
+      {/* <WorksheetGenerator 
+        classList={classList}
+        subjectList={subjectList}
+        chapterList={chapterList}
+        topicList={topicList}
+        selectedClass={selectedClass}
+        selectedSubject={selectedSubject}
+        selectedChapter={selectedChapter}
+        selectedTopicId={selectedTopicId}
+        handleClassChange={handleClassChange}
+        handleSubjectChange={handleSubjectChange}
+        handleChapterChange={handleChapterChange}
+        setSelectedTopicId={setSelectedTopicId}
+      /> */}
+      <div 
+        onClick={() => navigate("/generate")}
+        style={{ padding: "30px", border: "2px solid #52c41a", borderRadius: "15px", cursor: "pointer", textAlign: "center" }}
+      >
+        <h1 style={{ fontSize: "40px" }}>📝</h1>
+        <h3>Generate Worksheet</h3>
+        {/* <p>AI ব্যবহার করে অটোমেটিক ওয়ার্কশিট তৈরি করুন</p> */}
+      </div>
+
+    </div>
+
+      {/* SECTION 3: FLASHCARDS & CHAT (RAG) */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "25px", marginTop: "30px" }}>
+        
+        {/* Flashcard Side */}
+        <div style={{ border: "1px solid #ddd", padding: "15px", borderRadius: "10px" }}>
+          <h4>🗂️ Generate Flashcard</h4>
+          <input 
+            placeholder="Topic (e.g. Comparison of numbers)" 
+            value={topicSearch} 
+            onChange={(e) => setTopicSearch(e.target.value)} 
+            style={{ width: "93%", padding: "8px", marginBottom: "10px" }} 
+          />
+          <button onClick={handleGenerateFlashcard} disabled={loading} style={{ width: "100%", cursor: "pointer" }}>Generate</button>
+          
+          {flashcard?.flashcard && (
+            <div style={{ marginTop: "15px", padding: "10px", backgroundColor: "#fffbe6", border: "1px solid #ffe58f", borderRadius: "5px" }}>
+              <strong>Q:</strong> {flashcard.flashcard.question}<br/><hr/>
+              <strong>A:</strong> {flashcard.flashcard.answer}
+            </div>
+          )}
+>>>>>>> Stashed changes
         </div>
 
         {flashcard && flashcard.flashcard && (

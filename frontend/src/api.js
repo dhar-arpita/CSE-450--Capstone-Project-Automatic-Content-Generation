@@ -38,6 +38,51 @@ export const uploadCurriculumFile = (file, topicId, userId) => {
 };
 
 
+<<<<<<< Updated upstream
+=======
+
+
+// export const generateWorksheet = (topicId, userId, difficulty, numProblems) => {
+//   const formData = new FormData();
+//   formData.append("topic_id", topicId);
+//   formData.append("user_id", userId);
+//   formData.append("difficulty", difficulty);
+//   formData.append("num_problems", numProblems); // নিশ্চিত করো এটি 'num_problems'
+
+//   return api.post("/generate/worksheet", formData);
+// };
+
+export const generateWorksheet = (topicId, userId, difficulty, numProblems, sampleFile = null) => {
+  const formData = new FormData();
+  formData.append("topic_id", topicId);
+  formData.append("user_id", userId);
+  formData.append("difficulty", difficulty);
+  formData.append("num_problems", numProblems); // আপনার ব্যাকএন্ডে 'num_problems' আছে, এটা ঠিক আছে
+
+  // যদি ইউজার স্যাম্পল ফাইল দেয়, তবে ব্যাকএন্ডের প্রত্যাশিত 'sample_worksheet' কি-তে পাঠাতে হবে
+  if (sampleFile) {
+    formData.append("sample_worksheet", sampleFile); 
+  }
+
+  return api.post("/generate/worksheet", formData, {
+    headers: { "Content-Type": "multipart/form-data" }, // ফাইল পাঠানোর জন্য এটি জরুরি
+  });
+};
+
+
+// src/api.js এ এটি নিশ্চিত করুন
+export const refineWorksheet = (contentId, currentProblems, refinements) => {
+  const formData = new FormData();
+  formData.append("content_id", contentId);
+  formData.append("current_problems", JSON.stringify(currentProblems));
+  formData.append("refinements", JSON.stringify(refinements));
+
+  return api.post("/generate/refine", formData);
+};
+
+export const getWorksheetDetails = (contentId) => api.get(`/generate/worksheet/${contentId}`);
+
+>>>>>>> Stashed changes
 export const getIngestionStatus = (jobId) => api.get(`/ingest/status/${jobId}`);
 
 
