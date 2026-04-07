@@ -51,7 +51,7 @@ HTML RULES:
 7. Answer key goes at the bottom
 8. Use child-friendly fonts: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif
 9. Use soft background colors: #FFF8E7 (warm cream), #F0F8FF (light blue).Any cute /warm/light theme should be maintained
-10. Add the robot mascot in the top-right corner of the header
+10. Add the robot mascot in the top-right corner of the header. Wrap it in a div with max-width: 70px; max-height: 70px; overflow: hidden; so it never overlaps the title text.
 11. Include space for student name and date at the top
 12. Problems should have enough white space for students to write answers
 

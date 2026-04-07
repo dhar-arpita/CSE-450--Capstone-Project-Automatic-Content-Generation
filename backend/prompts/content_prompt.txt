@@ -52,9 +52,10 @@ RULES:
 2. Each problem must have exactly one correct answer.
 3. Include clear step-by-step solution for each problem.
 4. Mark which problems need a visual diagram to help students understand.
-5. Problems should progress from slightly easier to slightly harder.
-6. Do NOT include the answer inside the question text — the student must solve it.
-7. Generate EXACTLY {num_problems} problems — count them before returning.
+5. VISUAL DIAGRAM RULE: When you set needs_diagram=true, do NOT include any visual layout, ASCII art, tables, pyramids, cross shapes, or vertical addition format inside the "question" text. Write the question in plain words only (e.g., "Fill in the missing digit: _23 + 451 = 774"). Put ALL visual layout details in the "diagram_description" field instead — the Visual Agent will create the actual diagram. This prevents duplicate visuals on the worksheet.
+6. Problems should progress from slightly easier to slightly harder.
+7. Do NOT include the answer inside the question text — the student must solve it.
+8. Generate EXACTLY {num_problems} problems — count them before returning.
 
 SELF-CHECK:
 Before returning your response, verify:
