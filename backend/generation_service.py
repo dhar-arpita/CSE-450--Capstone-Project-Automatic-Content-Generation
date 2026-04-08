@@ -79,11 +79,15 @@ def remap_refinement_ids(refinements_list: list, id_remap: dict) -> list:
             continue
 
         if rtype == "add_visuals":
-            new_ids = [id_remap[pid] for pid in r.get("problem_ids", []) if pid in id_remap]
-            if new_ids:
-                new_r = dict(r)
-                new_r["problem_ids"] = new_ids
-                remapped.append(new_r)
+            pids = r.get("problem_ids", [])
+            if pids == "all":
+                remapped.append(r)
+            else:
+                new_ids = [id_remap[pid] for pid in pids if pid in id_remap]
+                if new_ids:
+                    new_r = dict(r)
+                    new_r["problem_ids"] = new_ids
+                    remapped.append(new_r)
             continue
 
         if rtype == "change_difficulty":
@@ -247,7 +251,11 @@ def handle_visuals(problems: list, visual_refs: list) -> list:
     """
     visual_ids = set()
     for r in visual_refs:
-        visual_ids.update(r.get("problem_ids", []))
+        pids = r.get("problem_ids", [])
+        if pids == "all":
+            visual_ids.update(p["id"] for p in problems)
+        else:
+            visual_ids.update(pids)
 
     for p in problems:
         if p["id"] in visual_ids:

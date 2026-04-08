@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { getWorksheetDetails, refineWorksheet } from "./api";
 
 export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
   const [loading, setLoading] = useState(false);
   const [problems, setProblems] = useState([]);
+  const [existingVisualIds, setExistingVisualIds] = useState(new Set());
+  const [difficultySelectedIds, setDifficultySelectedIds] = useState(new Set());
+  const initialDifficultyMap = useRef({});
   const [selectedRefinements, setSelectedRefinements] = useState({
     add_more: false,
     add_count: 2,
@@ -33,7 +36,17 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
       data.problems?.forEach(p => {
         initialDiff[p.id] = p.difficulty || "Medium";
       });
+      initialDifficultyMap.current = { ...initialDiff };
       setSelectedRefinements(prev => ({...prev, difficulty_map: initialDiff}));
+
+      const visualIds = new Set();
+      const pv = data.visuals?.problem_visuals;
+      if (Array.isArray(pv)) {
+        pv.forEach(v => {
+          if (v?.problem_id != null) visualIds.add(v.problem_id);
+        });
+      }
+      setExistingVisualIds(visualIds);
     } catch (err) {
       console.error("Failed to load problems");
     }
@@ -65,7 +78,12 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
 
     // Difficulty Change Logic
     if (selectedRefinements.change_difficulty) {
-      refinementPayload.push({ type: "change_difficulty", diff_map: selectedRefinements.difficulty_map });
+      const changes = Object.entries(selectedRefinements.difficulty_map)
+        .filter(([pid]) => difficultySelectedIds.has(Number(pid)))
+        .map(([pid, diff]) => ({ problem_id: Number(pid), new_difficulty: diff }));
+      if (changes.length > 0) {
+        refinementPayload.push({ type: "change_difficulty", changes });
+      }
     }
 
     // Visuals Logic
@@ -150,7 +168,7 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
                   const list = e.target.checked ? [...selectedRefinements.remove_problems, p.id] : selectedRefinements.remove_problems.filter(id => id !== p.id);
                   setSelectedRefinements({...selectedRefinements, remove_problems: list});
                 }} />
-                <span style={itemTextStyle}>#{idx+1}: {p.question?.substring(0, 40)}...</span>
+                <span style={itemTextStyle}>#{idx+1}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
               </div>
             ))}
           </div>
@@ -165,8 +183,15 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
               {problems.map((p, idx) => (
                 <div key={`diff-${p.id}`} style={{...itemRowStyle, justifyContent: "space-between"}}>
                   <div style={{display: "flex", alignItems: "center"}}>
-                    <input type="checkbox" checked={!!selectedRefinements.difficulty_map[p.id]} readOnly />
-                    <span style={itemTextStyle}>#{idx+1}</span>
+                    <input type="checkbox" checked={difficultySelectedIds.has(p.id)} onChange={() => {
+                      setDifficultySelectedIds(prev => {
+                        const next = new Set(prev);
+                        if (next.has(p.id)) next.delete(p.id);
+                        else next.add(p.id);
+                        return next;
+                      });
+                    }} />
+                    <span style={itemTextStyle}>#{idx+1}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
                   </div>
                   <select 
                     value={selectedRefinements.difficulty_map[p.id] || "Medium"}
@@ -190,19 +215,26 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
         <div style={optionBoxStyle}>
           <div style={headerGap}><input type="checkbox" checked={selectedRefinements.add_visuals} onChange={(e) => setSelectedRefinements({...selectedRefinements, add_visuals: e.target.checked})} /><label style={labelStyle}>📊 Add diagrams / visuals</label></div>
           <p style={descStyle}>Request visual aids for selected questions, or leave all unchecked to apply visuals across all.</p>
-          {selectedRefinements.add_visuals && (
-            <div style={scrollListStyle}>
-              {problems.map((p, idx) => (
-                <div key={`vis-${p.id}`} style={itemRowStyle}>
-                  <input type="checkbox" checked={selectedRefinements.visuals_map.includes(p.id)} onChange={(e) => {
-                    const list = e.target.checked ? [...selectedRefinements.visuals_map, p.id] : selectedRefinements.visuals_map.filter(id => id !== p.id);
-                    setSelectedRefinements({...selectedRefinements, visuals_map: list});
-                  }} />
-                  <span style={itemTextStyle}>#{idx+1}: {p.question?.substring(0, 40)}...</span>
-                </div>
-              ))}
-            </div>
-          )}
+          {selectedRefinements.add_visuals && (() => {
+            const visualCandidates = problems.filter(p => !existingVisualIds.has(p.id));
+            return (
+              <div style={scrollListStyle}>
+                {visualCandidates.length > 0 ? (
+                  visualCandidates.map((p, idx) => (
+                    <div key={`vis-${p.id}`} style={itemRowStyle}>
+                      <input type="checkbox" checked={selectedRefinements.visuals_map.includes(p.id)} onChange={(e) => {
+                        const list = e.target.checked ? [...selectedRefinements.visuals_map, p.id] : selectedRefinements.visuals_map.filter(id => id !== p.id);
+                        setSelectedRefinements({...selectedRefinements, visuals_map: list});
+                      }} />
+                      <span style={itemTextStyle}>#{idx+1}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
+                    </div>
+                  ))
+                ) : problems.length > 0 ? (
+                  <p style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>All problems already have visuals.</p>
+                ) : null}
+              </div>
+            );
+          })()}
         </div>
 
         {/* 5. Simplify */}

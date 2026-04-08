@@ -111,6 +111,7 @@ async def create_worksheet(
             difficulty_level=difficulty,
             display_body=result["html"],
             answer_key=str(result.get("problems", "")),
+            explanation=str(result.get("visuals", "")),
             generated_at=datetime.utcnow()
         )
         db.add(generated)
@@ -330,7 +331,11 @@ async def refine_worksheet(
     changed_ids = {p["id"] for p in needs_processing}
     visual_flagged_ids = set()
     for r in visual_refs:
-        visual_flagged_ids.update(r.get("problem_ids", []))
+        pids = r.get("problem_ids", [])
+        if pids == "all":
+            visual_flagged_ids.update(p["id"] for p in all_localized)
+        else:
+            visual_flagged_ids.update(pids)
 
     needs_new_visual_ids = changed_ids | visual_flagged_ids
 
