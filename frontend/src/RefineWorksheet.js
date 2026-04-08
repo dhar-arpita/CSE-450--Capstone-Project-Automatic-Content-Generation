@@ -216,17 +216,19 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
           <div style={headerGap}><input type="checkbox" checked={selectedRefinements.add_visuals} onChange={(e) => setSelectedRefinements({...selectedRefinements, add_visuals: e.target.checked})} /><label style={labelStyle}>📊 Add diagrams / visuals</label></div>
           <p style={descStyle}>Request visual aids for selected questions, or leave all unchecked to apply visuals across all.</p>
           {selectedRefinements.add_visuals && (() => {
-            const visualCandidates = problems.filter(p => !existingVisualIds.has(p.id));
+            const visualCandidates = problems
+              .filter(p => !existingVisualIds.has(p.id))
+              .filter(p => !selectedRefinements.remove_problems.includes(p.id));
             return (
               <div style={scrollListStyle}>
                 {visualCandidates.length > 0 ? (
-                  visualCandidates.map((p, idx) => (
+                  visualCandidates.map((p) => (
                     <div key={`vis-${p.id}`} style={itemRowStyle}>
                       <input type="checkbox" checked={selectedRefinements.visuals_map.includes(p.id)} onChange={(e) => {
                         const list = e.target.checked ? [...selectedRefinements.visuals_map, p.id] : selectedRefinements.visuals_map.filter(id => id !== p.id);
                         setSelectedRefinements({...selectedRefinements, visuals_map: list});
                       }} />
-                      <span style={itemTextStyle}>#{idx+1}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
+                      <span style={itemTextStyle}>#{p.id}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
                     </div>
                   ))
                 ) : problems.length > 0 ? (
