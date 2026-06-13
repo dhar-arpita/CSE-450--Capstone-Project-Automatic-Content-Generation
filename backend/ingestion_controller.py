@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from qdrant_client.http.models import PointStruct
 
 from parser import parse_file
-from chunker import chunk_pages_by_topic
+from chunker import chunk_pages_by_chapter
 from embedding_service import generate_embeddings_for_chunks
 from settings import qdrant_client, COLLECTION_NAME, SessionLocal
 from models import IngestionJob, UploadMetadata, ContentEmbedding, UploadRequest, Topic
@@ -38,10 +38,10 @@ You are an expert curriculum analyst for Bangladeshi NCTB textbooks.
 Your job is to extract topics from a chapter by looking at the MAIN SECTIONS which is lated decsribed into different sub sections.FOLLOW THE EXAMPLES.The topic name covers all the chapter
 
 STRICT RULES:
-1. Look at the chapter text and find the MAIN SECTION (e.g. "2.1 Rest and Motion", "2.3 Scalar and Vector Quantities")
-2. Each MAIN HEADING/SECTION = one topic
+1. Look at the chapter text and find the MAIN SECTION (e.g. "2.1 Rest and Motion", "2.3 Scalar and Vector Quantities").
+2. Each MAIN HEADING/SECTION = one topic.But keep the closely related topic under one topic.
 3. Sub-headings/section (e.g. "2.1.1", "Circular Motion", "Translational Motion") must be MERGED under their parent main heading
-4. Topic names must match the heading names in the book — do NOT rename or invent new names
+4. Topic names must match the heading names in the book — do NOT rename or invent new names.If you need to merge closly related topic make sure topic name should be matched with book.
 5. Do NOT over-segment — if a concept is a sub-section of a heading, it is NOT a separate topic
 6. Return topic names in the SAME LANGUAGE as the chapter text (Bengali text = Bengali topics, English text = English topics)
 
@@ -169,7 +169,7 @@ def run_ingestion_pipeline(
         # ── STEP 4: CHUNK TEXT PER TOPIC ──────────────────────────────────────
         # chunk_pages_by_topic assigns each chunk to the most relevant topic
         print(f"[Job {job_id}] Chunking text with topic assignment...")
-        chunks = chunk_pages_by_topic(pages, topics)
+        chunks = chunk_pages_by_chapter(pages)
 
         print(f"[Job {job_id}] Created {len(chunks)} chunk(s).")
 
@@ -202,8 +202,6 @@ def run_ingestion_pipeline(
                     "filename": filename,
                     "page": chunk["page_num"],
                     "chunk_index": chunk["chunk_index"],
-                    "topic_id": chunk["topic_id"],       # auto-assigned topic
-                    "topic_name": chunk["topic_name"],   # human-readable name
                     "chapter_id": chapter_id,
                     "job_id": job_id
                 }
@@ -227,14 +225,14 @@ def run_ingestion_pipeline(
                 "filename": filename,
                 "page_num": item["chunk"]["page_num"],
                 "chunk_index": item["chunk"]["chunk_index"],
-                "topic_name": item["chunk"]["topic_name"],
+                "chapter_id": chapter_id,
                 "qdrant_point_id": item["point_id"]
             })
 
             content_embedding = ContentEmbedding(
                 embedding_vector=vector_json,
                 embedding_metadata=meta_json,
-                topic_id=item["chunk"]["topic_id"],   # per-chunk topic
+                topic_id=None,   # per-chunk topic
                 job_id=job_id
             )
             db.add(content_embedding)

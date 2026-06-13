@@ -268,86 +268,71 @@ def handle_visuals(problems: list, visual_refs: list) -> list:
     print(f"[Visuals] Flagged {len(visual_ids)} problems for diagrams")
     return problems
 
+# REPLACE the search_curriculum_context function with this:
 
-def search_curriculum_context(topic_id: int, topic_name: str) -> str:
+def search_curriculum_context(topic_id: int, topic_name: str, chapter_id: int) -> str:
     """
-    Fetches ALL curriculum content for a topic from Qdrant.
-    Falls back to vector similarity search if no topic-specific content exists.
+    Fetches curriculum content using semantic search within a chapter.
+    
+    NEW APPROACH:
+    - Filter by chapter_id (chunks are no longer assigned to topics)
+    - Use topic_name as semantic query to find most relevant chunks
+    - Returns top-K most semantically similar chunks within the chapter
     """
 
     MAX_CONTEXT_CHARS = 15000
+    TOP_K = 10  # how many chunks to retrieve
 
-    # Primary path: scroll ALL chunks that belong to this topic_id
-    topic_filter = Filter(
+    # Get embedding for the topic name (this is our semantic query)
+    query_vector = get_embedding(topic_name, is_query=True)
+    
+    if not query_vector:
+        print(f"[Context] Could not generate embedding for topic '{topic_name}'")
+        return "No curriculum content found for this topic."
+
+    # Build filter to restrict search within this chapter only
+    chapter_filter = Filter(
         must=[
             FieldCondition(
-                key="topic_id",
-                match=MatchValue(value=topic_id),
+                key="chapter_id",
+                match=MatchValue(value=chapter_id),
             )
         ]
     )
 
-    all_points = []
-    next_offset = None
-
-    # Scroll through all matching points (Qdrant returns them in batches)
-    while True:
-        result = qdrant_client.scroll(
-            collection_name=COLLECTION_NAME,
-            scroll_filter=topic_filter,
-            limit=100,
-            offset=next_offset,
-            with_payload=True,
-            with_vectors=False
-        )
-        points, next_offset = result
-        all_points.extend(points)
-        if next_offset is None:
-            break
-
-    # If we found topic-specific content, use it
-    if all_points:
-        print(f"[Context] Found {len(all_points)} chunks for topic_id={topic_id}")
-
-        context_parts = []
-        total_chars = 0
-        for point in all_points:
-            text = point.payload.get("text", "")
-            filename = point.payload.get("filename", "unknown")
-            page = point.payload.get("page", "?")
-            entry = f"[Source: {filename}, Page {page}]\n{text}"
-
-            if total_chars + len(entry) > MAX_CONTEXT_CHARS:
-                print(f"[Context] Truncating at {total_chars} chars (cap: {MAX_CONTEXT_CHARS})")
-                break
-
-            context_parts.append(entry)
-            total_chars += len(entry)
-
-        return "\n\n---\n\n".join(context_parts)
-
-    # Fallback: no topic-specific content found, try general vector search
-    print(f"[Context] No chunks for topic_id={topic_id}, falling back to vector search")
-    query_vector = get_embedding(topic_name, is_query=True)
-
-    if not query_vector:
-        return "No curriculum content found for this topic."
-
+    # Semantic search within the chapter
     results = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
-        limit=5
+        query_filter=chapter_filter,
+        limit=TOP_K,
+        with_payload=True
     ).points
 
     if not results:
+        print(f"[Context] No chunks found for chapter_id={chapter_id}")
         return "No curriculum content found for this topic."
 
+    print(f"[Context] Found {len(results)} relevant chunks for topic '{topic_name}' in chapter_id={chapter_id}")
+
+    # Build context string, respecting size cap
     context_parts = []
+    total_chars = 0
+    
     for point in results:
         text = point.payload.get("text", "")
         filename = point.payload.get("filename", "unknown")
         page = point.payload.get("page", "?")
-        context_parts.append(f"[Source: {filename}, Page {page}]\n{text}")
+        score = point.score if hasattr(point, "score") else 0
+        
+        entry = f"[Source: {filename}, Page {page} | Relevance: {score:.3f}]\n{text}"
+        
+        if total_chars + len(entry) > MAX_CONTEXT_CHARS:
+            print(f"[Context] Truncating at {total_chars} chars (cap: {MAX_CONTEXT_CHARS})")
+            break
+        
+        context_parts.append(entry)
+        total_chars += len(entry)
 
     return "\n\n---\n\n".join(context_parts)
 
@@ -358,6 +343,7 @@ def generate_worksheet(
     class_name: str,
     subject_name: str,
     chapter_name: str,
+    chapter_id: int,        # ← এটা add করো
     difficulty: str,
     num_problems: int,
     sample_pdf_bytes: bytes = None
@@ -381,7 +367,7 @@ def generate_worksheet(
 
     # Step 1: Search Qdrant for curriculum context
     print("[Pipeline] Searching curriculum context in Qdrant...")
-    curriculum_context = search_curriculum_context(topic_id, topic_name)
+    curriculum_context = search_curriculum_context(topic_id, topic_name, chapter_id)
     print(f"[Pipeline] Found context ({len(curriculum_context)} chars)")
 
     # Step 2: Agent 1 — Content Agent

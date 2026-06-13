@@ -76,6 +76,7 @@ async def create_worksheet(
         class_name=class_name,
         subject_name=subject_name,
         chapter_name=chapter_name,
+        chapter_id= topic.chapter_id,
         difficulty=difficulty,
         num_problems=num_problems,
         sample_pdf_bytes=sample_bytes
@@ -235,7 +236,7 @@ async def refine_worksheet(
         raise HTTPException(status_code=404, detail="Subject not found")
 
     # Search curriculum context (needed if adding problems)
-    curriculum_context = search_curriculum_context(content.topic_id, topic.name)
+    curriculum_context = search_curriculum_context(content.topic_id, topic.name,chapter.chapter_id)
 
     # First: extract only remove_refs so we can remap remaining refinements
     # against the renumbered problem IDs before splitting into other groups.
@@ -392,3 +393,87 @@ async def refine_worksheet(
         "problems": localization_output,
         "problems_count": len(localization_output.get("localized_problems", []))
     }
+    
+    
+    
+    
+    
+    
+    
+    
+# debuging endpoint
+
+@router.get("/debug/retrieved-chunks/{topic_id}")
+def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
+    """
+    Debug endpoint to inspect what chunks get retrieved for a given topic.
+    Returns the topic info + all chunks that would be sent to the Content Agent
+    when generating a worksheet for this topic.
+    """
+    # Look up topic and chapter
+    topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    # Use the same search function the pipeline uses
+    from generation_service import search_curriculum_context
+    from services import get_embedding
+    from settings import qdrant_client, COLLECTION_NAME
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+    # Get query embedding
+    query_vector = get_embedding(topic.name, is_query=True)
+
+    if not query_vector:
+        return {
+            "topic_id": topic_id,
+            "topic_name": topic.name,
+            "chapter_id": chapter.chapter_id,
+            "chapter_name": chapter.name,
+            "error": "Could not generate embedding for topic name"
+        }
+
+    # Filter by chapter_id
+    chapter_filter = Filter(
+        must=[
+            FieldCondition(
+                key="chapter_id",
+                match=MatchValue(value=chapter.chapter_id),
+            )
+        ]
+    )
+
+    # Search
+    results = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_vector,
+        query_filter=chapter_filter,
+        limit=10,
+        with_payload=True
+    ).points
+
+    # Build detailed response showing what was retrieved
+    retrieved_chunks = []
+    for i, point in enumerate(results, 1):
+        retrieved_chunks.append({
+            "rank": i,
+            "relevance_score": round(point.score, 4) if hasattr(point, "score") else None,
+            "page": point.payload.get("page", "?"),
+            "chunk_index": point.payload.get("chunk_index", "?"),
+            "filename": point.payload.get("filename", "unknown"),
+            "text_preview": point.payload.get("text", "")[:300] + "...",
+            "full_text": point.payload.get("text", "")
+        })
+
+    return {
+        "topic_id": topic_id,
+        "topic_name": topic.name,
+        "chapter_id": chapter.chapter_id,
+        "chapter_name": chapter.name,
+        "total_chunks_retrieved": len(retrieved_chunks),
+        "retrieved_chunks": retrieved_chunks
+    }    
