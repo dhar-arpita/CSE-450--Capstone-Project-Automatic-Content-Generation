@@ -55,7 +55,7 @@ if not DATABASE_URL:
 # max_overflow=10 allows up to 10 extra connections if all 5 are busy.
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"sslmode": "require"},
+    connect_args={"sslmode": "disable"},
     pool_pre_ping=True,
     pool_recycle=300,
     pool_size=5,

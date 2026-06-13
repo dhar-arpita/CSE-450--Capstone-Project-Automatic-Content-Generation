@@ -1,121 +1,298 @@
+
+// import React, { useState } from "react";
+// import { generateWorksheet } from "./api";
+
+// export default function WorksheetGenerator({ selectedTopicId, user }) {
+//   const [loading, setLoading] = useState(false);
+//   const [worksheetHTML, setWorksheetHTML] = useState("");
+//   const [contentId, setContentId] = useState(null); 
+//   const [difficulty, setDifficulty] = useState("Medium");
+//   const [numQuestions, setNumQuestions] = useState(5);
+
+//   const onGenerate = async () => {
+//     if (!selectedTopicId) {
+//       alert("Please select a Topic from the dropdowns above first!");
+//       return;
+//     }
+
+//     const userId = user?.user_id || 1; 
+
+//     setLoading(true);
+//     setWorksheetHTML(""); 
+//     try {
+//       // API call
+//       const { data } = await generateWorksheet(
+//         selectedTopicId, 
+//         userId, 
+//         difficulty.toLowerCase(), 
+//         numQuestions
+//       );
+
+//       if (data && data.html) {
+//         setWorksheetHTML(data.html);
+//         setContentId(data.content_id); 
+//       } else {
+//         alert("Worksheet generated but content is empty.");
+//       }
+//     } catch (err) {
+//       console.error("Error response:", err.response?.data);
+//       alert("Failed to generate worksheet. Please check if curriculum file is uploaded.");
+//     }
+//     setLoading(false);
+//   };
+
+//   const handleDownloadPDF = () => {
+//     if (!contentId) return;
+//     window.open(`http://127.0.0.1:8000/generate/download/${contentId}`, "_blank");
+//   };
+
+//   return (
+//     <div style={{ marginTop: "20px" }}>
+//       {/* Config & Button Row */}
+//       <div style={{ display: "flex", gap: "15px", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", backgroundColor: "#fff", padding: "15px", borderRadius: "8px", border: "1px solid #ddd" }}>
+        
+//         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+//           <label style={{ fontWeight: "bold" }}>Difficulty:</label>
+//           <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} style={{ padding: "5px", borderRadius: "4px" }}>
+//             <option value="Easy">Easy</option>
+//             <option value="Medium">Medium</option>
+//             <option value="Hard">Hard</option>
+//           </select>
+//         </div>
+
+//         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+//           <label style={{ fontWeight: "bold" }}>Questions:</label>
+//           <input 
+//             type="number" 
+//             value={numQuestions} 
+//             onChange={(e) => setNumQuestions(e.target.value)} 
+//             style={{ width: "60px", padding: "5px", borderRadius: "4px", border: "1px solid #ccc" }} 
+//           />
+//         </div>
+
+//         <button 
+//           onClick={onGenerate} 
+//           disabled={loading || !selectedTopicId} 
+//           style={{ 
+//             backgroundColor: "#52c41a", color: "white", padding: "10px 20px", 
+//             cursor: "pointer", border: "none", borderRadius: "6px", fontWeight: "bold",
+//             opacity: (!selectedTopicId || loading) ? 0.6 : 1
+//           }}
+//         >
+//           {loading ? "⌛ Generating..." : "✨ Generate Worksheet"}
+//         </button>
+//       </div>
+
+//       {/* Preview Section */}
+//       {worksheetHTML && (
+//         <div style={{ marginTop: "20px", backgroundColor: "white", padding: "30px", border: "1px solid #d9d9d9", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
+//           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "15px" }}>
+//             <button 
+//               onClick={handleDownloadPDF} 
+//               style={{ backgroundColor: "#1890ff", color: "white", padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
+//             >
+//               📥 Download as PDF
+//             </button>
+//           </div>
+          
+//           <div 
+//             className="worksheet-render-area"
+//             style={{ fontFamily: "serif", lineHeight: "1.6" }}
+//             dangerouslySetInnerHTML={{ __html: worksheetHTML }} 
+//           />
+//         </div>
+//       )}
+//     </div>
+//   );
+// }
+
 import React, { useState } from "react";
 import { generateWorksheet } from "./api";
+import RefineWorksheet from "./RefineWorksheet"; 
 
-export default function WorksheetGenerator({ 
-  classList, subjectList, chapterList, topicList,
-  selectedClass, selectedSubject, selectedChapter, selectedTopicId,
-  handleClassChange, handleSubjectChange, handleChapterChange, setSelectedTopicId
-}) {
+export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }) {
   const [loading, setLoading] = useState(false);
   const [worksheetHTML, setWorksheetHTML] = useState("");
-  const [contentId, setContentId] = useState(null); // PDF ডাউনলোডের জন্য আইডি
+  const [contentId, setContentId] = useState(null); 
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
+  const [showRefine, setShowRefine] = useState(false);
 
   const onGenerate = async () => {
     if (!selectedTopicId) {
-      alert("Please select Class, Subject, Chapter and Topic first!");
+      alert("Please select a Topic from the dropdowns above first!");
       return;
     }
 
-    const storedUser = JSON.parse(localStorage.getItem("user"));
-    const userId = storedUser?.user_id || 1; 
+    const userId = user?.user_id || 1; 
 
     setLoading(true);
-    setWorksheetHTML(""); // নতুন করে জেনারেট করার আগে পুরনোটা মুছে ফেলা
+    setWorksheetHTML(""); 
     try {
       const { data } = await generateWorksheet(
         selectedTopicId, 
         userId, 
         difficulty.toLowerCase(), 
-        numQuestions
+        numQuestions,
+        sampleFile
       );
-
       if (data && data.html) {
         setWorksheetHTML(data.html);
-        setContentId(data.content_id); // ব্যাকএন্ড থেকে আসা আইডি সেভ করা
+        setContentId(data.content_id); 
+        setShowRefine(false);
       } else {
-        alert("Worksheet generated but content is empty. Ensure the PDF is ingested correctly.");
+        alert("Worksheet generated but content is empty.");
       }
     } catch (err) {
-      console.error("Error response:", err.response?.data);
-      alert("Failed to generate worksheet. Please check if curriculum file is uploaded.");
+      console.error("Error:", err);
+      alert("Failed to generate worksheet.");
     }
     setLoading(false);
   };
 
   const handleDownloadPDF = () => {
     if (!contentId) return;
-    // ব্যাকএন্ডের ডাউনলোড রাউটে হিট করা
     window.open(`http://127.0.0.1:8000/generate/download/${contentId}`, "_blank");
   };
 
+  const handleUpdateFromRefine = (newData) => {
+    setWorksheetHTML(newData.html);
+    setContentId(newData.content_id);
+  };
+
   return (
-    <div style={{ border: "2px solid #52c41a", padding: "20px", marginTop: "20px", borderRadius: "12px", backgroundColor: "#f6ffed", boxShadow: "0 4px 10px rgba(0,0,0,0.05)" }}>
-      <h3 style={{ color: "#389e0d" }}>📝 AI Worksheet Generator</h3>
-      
-      {/* Dropdowns Row */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "15px" }}>
-        <select value={selectedClass} onChange={(e) => handleClassChange(e.target.value)} style={{ padding: "8px" }}>
-          <option value="">-- Select Class --</option>
-          {classList.map(c => <option key={c.class_name} value={c.class_name}>{c.class_name}</option>)}
-        </select>
-
-        <select disabled={!selectedClass} value={selectedSubject} onChange={(e) => handleSubjectChange(e.target.value)} style={{ padding: "8px" }}>
-          <option value="">-- Select Subject --</option>
-          {subjectList.map(s => <option key={s.subject_id} value={s.subject_id}>{s.name}</option>)}
-        </select>
-
-        <select disabled={!selectedSubject} value={selectedChapter} onChange={(e) => handleChapterChange(e.target.value)} style={{ padding: "8px" }}>
-          <option value="">-- Select Chapter --</option>
-          {chapterList.map(ch => <option key={ch.chapter_id} value={ch.chapter_id}>Ch {ch.chapter_no}: {ch.name}</option>)}
-        </select>
-
-        <select disabled={!selectedChapter} value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)} style={{ padding: "8px" }}>
-          <option value="">-- Select Topic --</option>
-          {topicList.map(t => <option key={t.topic_id} value={t.topic_id}>{t.name}</option>)}
-        </select>
-      </div>
-
+    <div style={{ marginTop: "20px" }}>
       {/* Config & Button Row */}
-      <div style={{ display: "flex", gap: "15px", alignItems: "center", marginBottom: "15px", flexWrap: "wrap" }}>
-        <label>Difficulty:</label>
-        <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} style={{ padding: "5px" }}>
-          <option value="Easy">Easy</option>
-          <option value="Medium">Medium</option>
-          <option value="Hard">Hard</option>
-        </select>
+      <div style={{ 
+        display: "flex", 
+        gap: "15px", 
+        alignItems: "center", 
+        marginBottom: "15px", 
+        flexWrap: "wrap", 
+        backgroundColor: "#fff", 
+        padding: "15px", 
+        borderRadius: "8px", 
+        border: "1px solid #ddd" 
+      }}>
+        
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <label style={{ fontWeight: "bold", fontSize: "14px" }}>Difficulty:</label>
+          <select 
+            value={difficulty} 
+            onChange={(e) => setDifficulty(e.target.value)} 
+            style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
+          >
+            <option value="Easy">Easy</option>
+            <option value="Medium">Medium</option>
+            <option value="Hard">Hard</option>
+          </select>
+        </div>
 
-        <label>Questions:</label>
-        <input type="number" value={numQuestions} onChange={(e) => setNumQuestions(e.target.value)} style={{ width: "60px", padding: "5px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <label style={{ fontWeight: "bold", fontSize: "14px" }}>Questions:</label>
+          <input 
+            type="number" 
+            value={numQuestions} 
+            onChange={(e) => setNumQuestions(e.target.value)} 
+            style={{ width: "60px", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }} 
+            min="1"
+          />
+        </div>
 
         <button 
           onClick={onGenerate} 
           disabled={loading || !selectedTopicId} 
-          style={{ backgroundColor: "#52c41a", color: "white", padding: "10px 20px", cursor: "pointer", border: "none", borderRadius: "6px", fontWeight: "bold" }}
+          style={{ 
+            backgroundColor: "#52c41a", 
+            color: "white", 
+            padding: "10px 25px", 
+            cursor: "pointer", 
+            border: "none", 
+            borderRadius: "6px", 
+            fontWeight: "bold",
+            fontSize: "15px",
+            transition: "0.3s",
+            opacity: (!selectedTopicId || loading) ? 0.6 : 1
+          }}
         >
           {loading ? "⌛ Generating..." : "✨ Generate Worksheet"}
         </button>
       </div>
 
-      {/* Preview Section */}
+      {/* Preview & Action Buttons Section */}
       {worksheetHTML && (
-        <div style={{ marginTop: "20px", backgroundColor: "white", padding: "30px", border: "1px solid #d9d9d9", borderRadius: "8px", overflowX: "auto" }}>
-          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "15px" }}>
-            <button 
-              onClick={handleDownloadPDF} 
-              style={{ backgroundColor: "#1890ff", color: "white", padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
-            >
-              📥 Download as PDF
-            </button>
+        <div style={{ 
+          marginTop: "20px", 
+          backgroundColor: "white", 
+          padding: "40px", 
+          border: "1px solid #d9d9d9", 
+          borderRadius: "8px", 
+          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+          maxWidth: "100%",
+          overflowX: "auto"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
+            <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
+              ✨ Worksheet ready. You can refine specific parts before downloading.
+            </div>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                onClick={() => setShowRefine(true)}
+                style={{
+                  backgroundColor: "#eef2ff",
+                  color: "#4338ca",
+                  padding: "10px 16px",
+                  border: "1px solid #c7d2fe",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontWeight: "700",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                🛠 Refine Worksheet
+              </button>
+
+              <button 
+                onClick={handleDownloadPDF} 
+                style={{ 
+                  backgroundColor: "#1890ff", 
+                  color: "white", 
+                  padding: "10px 20px", 
+                  border: "none", 
+                  borderRadius: "8px", 
+                  cursor: "pointer", 
+                  fontWeight: "bold",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                📥 Download as PDF
+              </button>
+            </div>
           </div>
           
-          {/* এই অংশটি ব্যাকএন্ড থেকে আসা HTML রেন্ডার করবে */}
           <div 
             className="worksheet-render-area"
+            style={{ 
+              fontFamily: "'Times New Roman', serif", 
+              lineHeight: "1.6",
+              color: "#000" 
+            }}
             dangerouslySetInnerHTML={{ __html: worksheetHTML }} 
           />
         </div>
+      )}
+
+      {/* Refinement Interface */}
+      {showRefine && (
+        <RefineWorksheet 
+          contentId={contentId} 
+          onClose={() => setShowRefine(false)} 
+          onUpdate={handleUpdateFromRefine} 
+        />
       )}
     </div>
   );

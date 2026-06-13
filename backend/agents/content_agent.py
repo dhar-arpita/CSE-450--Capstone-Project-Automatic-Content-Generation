@@ -3,6 +3,7 @@ import json
 from settings import gemini_client
 from settings import gemini_client, SMART_MODEL
 from google.genai import types
+from agents.json_utils import repair_json
 
 
 
@@ -44,22 +45,34 @@ def run_content_agent(
     # Call Gemini
     from settings import gemini_client, SMART_MODEL
 
+    config = types.GenerateContentConfig(
+        temperature=0.3,
+        response_mime_type="application/json"
+    )
+
     response = gemini_client.models.generate_content(
         model=SMART_MODEL,
         contents=prompt,
-        config=types.GenerateContentConfig(
-        temperature=0.3
-    )
-        
+        config=config
     )
 
-    # Parse the JSON response
-    raw = response.text.replace("```json", "").replace("```", "").strip()
-    
+    raw = repair_json(response.text)
     try:
         result = json.loads(raw)
         print(f"[Content Agent] Generated {len(result['problems'])} problems")
         return result
     except json.JSONDecodeError as e:
-        print(f"[Content Agent] JSON parse error: {e}")
-        return {"problems": [], "error": str(e)}
+        print(f"[Content Agent] JSON parse error: {e} — retrying once")
+        try:
+            response = gemini_client.models.generate_content(
+                model=SMART_MODEL,
+                contents=prompt,
+                config=config
+            )
+            raw = repair_json(response.text)
+            result = json.loads(raw)
+            print(f"[Content Agent] Generated {len(result['problems'])} problems (retry)")
+            return result
+        except json.JSONDecodeError as e2:
+            print(f"[Content Agent] JSON parse error after retry: {e2}")
+            return {"problems": [], "error": str(e2)}

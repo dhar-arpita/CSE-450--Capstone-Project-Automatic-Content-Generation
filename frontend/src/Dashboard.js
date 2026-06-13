@@ -1,267 +1,418 @@
-
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import ReactMarkdown from 'react-markdown';
-import remarkMath from 'remark-math';
-import rehypeKatex from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import { getClasses } from "./api";
 
-// API Functions
-import { 
-  getClasses, getSubjects, getChapters, getTopics, 
-  uploadCurriculumFile, getIngestionStatus, askQuestion, generateFlashcard 
-} from "./api";
+/* ── tiny hook for counting-up numbers ── */
+function useCountUp(target, duration = 1200) {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    let start = 0;
+    const step = Math.ceil(target / (duration / 16));
+    const timer = setInterval(() => {
+      start += step;
+      if (start >= target) { setVal(target); clearInterval(timer); }
+      else setVal(start);
+    }, 16);
+    return () => clearInterval(timer);
+  }, [target, duration]);
+  return val;
+}
 
+/* ── stat counter card ── */
+function StatCard({ icon, value, label, color, bg }) {
+  const count = useCountUp(value);
+  return (
+    <div style={{
+      background: bg,
+      border: `1px solid ${color}22`,
+      borderRadius: "14px",
+      padding: "20px 24px",
+      display: "flex", alignItems: "center", gap: "16px",
+      boxShadow: `0 4px 16px ${color}18`,
+      transition: "transform 0.2s, box-shadow 0.2s",
+    }}
+    onMouseEnter={e => {
+      e.currentTarget.style.transform = "translateY(-2px)";
+      e.currentTarget.style.boxShadow = `0 8px 24px ${color}28`;
+    }}
+    onMouseLeave={e => {
+      e.currentTarget.style.transform = "translateY(0)";
+      e.currentTarget.style.boxShadow = `0 4px 16px ${color}18`;
+    }}>
+      <div style={{
+        width: "46px", height: "46px", borderRadius: "12px",
+        background: `${color}20`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "22px", flexShrink: 0,
+      }}>{icon}</div>
+      <div>
+        <div style={{ fontSize: "24px", fontWeight: "800", color, lineHeight: 1 }}>{count}+</div>
+        <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "500", marginTop: "3px" }}>{label}</div>
+      </div>
+    </div>
+  );
+}
 
-import WorksheetGenerator from "./WorksheetGenerator";
+/* ── feature navigation card ── */
+function FeatureCard({ icon, title, description, color, bg, borderColor, onClick, badge }) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? bg : "#fff",
+        border: `2px solid ${hovered ? borderColor : "#e2e8f0"}`,
+        borderRadius: "20px",
+        padding: "32px 28px",
+        cursor: "pointer",
+        transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+        transform: hovered ? "translateY(-4px)" : "translateY(0)",
+        boxShadow: hovered
+          ? `0 16px 40px ${color}25`
+          : "0 2px 8px rgba(0,0,0,0.05)",
+        position: "relative", overflow: "hidden",
+      }}
+    >
+      {/* glow blob */}
+      <div style={{
+        position: "absolute", top: "-30px", right: "-30px",
+        width: "120px", height: "120px", borderRadius: "50%",
+        background: `${color}12`,
+        transition: "opacity 0.3s",
+        opacity: hovered ? 1 : 0,
+        pointerEvents: "none",
+      }} />
+
+      {badge && (
+        <div style={{
+          position: "absolute", top: "16px", right: "16px",
+          background: `${color}18`, color: color,
+          fontSize: "10px", fontWeight: "700",
+          padding: "3px 8px", borderRadius: "20px",
+          border: `1px solid ${color}30`,
+          textTransform: "uppercase", letterSpacing: "0.06em",
+        }}>{badge}</div>
+      )}
+
+      <div style={{
+        width: "60px", height: "60px", borderRadius: "16px",
+        background: `${color}15`,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: "30px", marginBottom: "18px",
+        border: `1px solid ${color}25`,
+        transition: "transform 0.3s",
+        transform: hovered ? "scale(1.08)" : "scale(1)",
+      }}>{icon}</div>
+
+      <h3 style={{
+        fontSize: "17px", fontWeight: "700",
+        color: "#0f172a", marginBottom: "8px",
+        fontFamily: "'Poppins', sans-serif",
+      }}>{title}</h3>
+
+      <p style={{
+        fontSize: "13px", color: "#64748b",
+        lineHeight: "1.6", marginBottom: "20px",
+      }}>{description}</p>
+
+      <div style={{
+        display: "inline-flex", alignItems: "center", gap: "6px",
+        color: color, fontSize: "13px", fontWeight: "600",
+        transition: "gap 0.2s",
+        gap: hovered ? "10px" : "6px",
+      }}>
+        Get started <span style={{ fontSize: "16px" }}>→</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser]           = useState(null);
+  const [classList, setClassList] = useState([]);
+  const [greeting, setGreeting]   = useState("Good day");
   const navigate = useNavigate();
 
-  // --- Curriculum States ---
-  const [classList, setClassList] = useState([]);
-  const [subjectList, setSubjectList] = useState([]);
-  const [chapterList, setChapterList] = useState([]);
-  const [topicList, setTopicList] = useState([]);
-
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedChapter, setSelectedChapter] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
-
-  // --- File & Status States ---
-  const [file, setFile] = useState(null);
-  const [ingestionStatus, setIngestionStatus] = useState("");
-  
-  // --- RAG States ---
-  const [topicSearch, setTopicSearch] = useState("");
-  const [flashcard, setFlashcard] = useState(null);
-  const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState("");
-
-  // ১. ইউজার সেশন চেক এবং ক্লাস লোড করা
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    if (!storedUser) {
-        navigate("/"); 
-    } else {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        loadClasses();
-    }
+    if (!storedUser) { navigate("/"); return; }
+    setUser(JSON.parse(storedUser));
+
+    // time-based greeting
+    const h = new Date().getHours();
+    if (h < 12) setGreeting("Good morning");
+    else if (h < 17) setGreeting("Good afternoon");
+    else setGreeting("Good evening");
+
+    getClasses().then(({ data }) => setClassList(data || [])).catch(() => {});
   }, [navigate]);
 
-  // --- ড্রপডাউন চেইন লজিক ---
-  const loadClasses = async () => {
-    try {
-      const { data } = await getClasses();
-      setClassList(data);
-    } catch (err) { console.error("Classes load failed", err); }
-  };
+  const handleLogout = () => { localStorage.clear(); navigate("/"); };
 
-  const handleClassChange = async (className) => {
-    setSelectedClass(className);
-    setSubjectList([]); setChapterList([]); setTopicList([]);
-    setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
-    try {
-      const { data } = await getSubjects(className);
-      setSubjectList(data);
-    } catch (err) { console.error(err); }
-  };
+  const features = [
+    {
+      icon: "📂",
+      title: "Upload Curriculum",
+      description: "Ingest textbooks, notes, and PDFs. Our AI processes and indexes your material instantly for content generation.",
+      color: "#4f46e5",
+      bg: "#eef2ff",
+      borderColor: "#a5b4fc",
+      badge: "Step 1",
+      path: "/upload",
+    },
+    {
+      icon: "📝",
+      title: "Generate Worksheet",
+      description: "Create standards-aligned, AI-crafted worksheets with custom difficulty levels and question count in seconds.",
+      color: "#059669",
+      bg: "#ecfdf5",
+      borderColor: "#6ee7b7",
+      badge: "Step 2",
+      path: "/generate",
+    },
+  ];
 
-  const handleSubjectChange = async (subjectId) => {
-    setSelectedSubject(subjectId);
-    setChapterList([]); setTopicList([]);
-    setSelectedChapter(""); setSelectedTopicId("");
-    try {
-      const { data } = await getChapters(subjectId);
-      setChapterList(data);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleChapterChange = async (chapterId) => {
-    setSelectedChapter(chapterId);
-    setTopicList([]);
-    setSelectedTopicId("");
-    try {
-      const { data } = await getTopics(chapterId);
-      setTopicList(data);
-    } catch (err) { console.error(err); }
-  };
-
-  
-  const handleUpload = async () => {
-    if (!file || !selectedTopicId) {
-      alert("Please select Class, Subject, Chapter, Topic and a File!");
-      return;
-    }
-    setLoading(true);
-    setIngestionStatus("Uploading...");
-    try {
-      const { data } = await uploadCurriculumFile(file, selectedTopicId, user.user_id || 1);
-      setIngestionStatus("Job Queued. Processing...");
-      startPolling(data.job_id);
-    } catch (err) {
-      setIngestionStatus("❌ Upload Failed");
-      setLoading(false);
-    }
-  };
-
-  const startPolling = (jobId) => {
-    const interval = setInterval(async () => {
-      try {
-        const { data } = await getIngestionStatus(jobId);
-        setIngestionStatus(`Processing: ${data.job_status}...`);
-        if (data.job_status === "SUCCESS") {
-          clearInterval(interval);
-          setIngestionStatus("✅ Upload Successfully!");
-          setLoading(false);
-        } else if (data.job_status === "FAILED") {
-          clearInterval(interval);
-          setIngestionStatus(`❌ Failed: ${data.error_message}`);
-          setLoading(false);
-        }
-      } catch (err) { 
-          clearInterval(interval); 
-          setLoading(false); 
-      }
-    }, 3000);
-  };
-
-
-  const handleGenerateFlashcard = async () => {
-    if (!topicSearch) return;
-    setLoading(true); setFlashcard(null);
-    try {
-      const { data } = await generateFlashcard(topicSearch);
-      setFlashcard(data);
-    } catch (err) { alert("Flashcard Generation Failed"); }
-    setLoading(false);
-  };
-
-  const handleAskAI = async () => {
-    if (!question) return;
-    setLoading(true); setAnswer(""); 
-    try {
-      const { data } = await askQuestion(question);
-      setAnswer(data.answer); 
-    } catch (err) { alert("AI Answer Failed"); }
-    setLoading(false);
-  };
+  const stats = [
+    { icon: "📚", value: classList.length || 6, label: "Classes Available",  color: "#4f46e5", bg: "#eef2ff" },
+    { icon: "✍️", value: 100,                    label: "Worksheets Created", color: "#059669", bg: "#ecfdf5" },
+    // { icon: "⚡", value: 200,                   label: "Topics Indexed",     color: "#f59e0b", bg: "#fffbeb" },
+    { icon: "🎯", value: 3,                     label: "Difficulty Levels",  color: "#8b5cf6", bg: "#f5f3ff" },
+  ];
 
   return (
-    <div style={{ padding: "40px", maxWidth: "1000px", margin: "auto", fontFamily: "Segoe UI, sans-serif", backgroundColor: "#fdfdfd" }}>
-      
-      {/* HEADER SECTION */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "2px solid #1890ff", paddingBottom: "15px", marginBottom: "30px" }}>
-        <h2 style={{ color: "#1890ff", margin: 0 }}>EduAI Capstone: Content Hub</h2>
-        <div style={{ textAlign: "right" }}>
-          <span>Welcome, <strong>{user?.name}</strong> </span><br/>
-          <button 
-            onClick={() => { localStorage.clear(); navigate("/"); }}
-            style={{ marginTop: "5px", color: "red", border: "1px solid red", background: "none", cursor: "pointer", borderRadius: "4px", fontSize: "12px" }}
-          >Logout</button>
-        </div>
-      </div>
-      
-      {/* SECTION 1: UPLOAD AREA */}
-      <div style={{ border: "1px solid #1890ff", padding: "20px", marginBottom: "30px", borderRadius: "12px", boxShadow: "0 4px 6px rgba(0,0,0,0.05)" }}>
-        <h3 style={{ marginTop: 0 }}>📁 1. Upload Curriculum Material</h3>
-        <p style={{ fontSize: "13px", color: "#666" }}>Select the exact topic where this file belongs.</p>
-        
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px", marginBottom: "15px" }}>
-          <select value={selectedClass} onChange={(e) => handleClassChange(e.target.value)}>
-            <option value="">-- Select Class --</option>
-            {classList.map(c => <option key={c.class_name} value={c.class_name}>{c.class_name}</option>)}
-          </select>
-          <select disabled={!selectedClass} value={selectedSubject} onChange={(e) => handleSubjectChange(e.target.value)}>
-            <option value="">-- Select Subject --</option>
-            {subjectList.map(s => <option key={s.subject_id} value={s.subject_id}>{s.name}</option>)}
-          </select>
-          <select disabled={!selectedSubject} value={selectedChapter} onChange={(e) => handleChapterChange(e.target.value)}>
-            <option value="">-- Select Chapter --</option>
-            {chapterList.map(ch => <option key={ch.chapter_id} value={ch.chapter_id}>Ch {ch.chapter_no}: {ch.name}</option>)}
-          </select>
-          <select disabled={!selectedChapter} value={selectedTopicId} onChange={(e) => setSelectedTopicId(e.target.value)}>
-            <option value="">-- Select Topic --</option>
-            {topicList.map(t => <option key={t.topic_id} value={t.topic_id}>{t.name}</option>)}
-          </select>
-        </div>
+    <div style={{ minHeight: "100vh", background: "linear-gradient(160deg, #f0f4ff 0%, #f8fafc 50%, #f0fdf4 100%)" }}>
 
-        <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
-          <input type="file" onChange={(e) => setFile(e.target.files[0])} style={{ flex: 1, padding: "5px", border: "1px dashed #ccc" }} />
-          <button 
-            onClick={handleUpload} 
-            disabled={loading || !selectedTopicId} 
-            style={{ backgroundColor: "#1890ff", color: "white", padding: "8px 25px", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "bold" }}
-          >
-            {loading && ingestionStatus.includes("Processing") ? "Processing..." : "Upload & Ingest"}
-          </button>
-        </div>
-        {ingestionStatus && <div style={{ marginTop: "12px", fontWeight: "bold", color: ingestionStatus.includes("✅") ? "green" : "#444" }}>{ingestionStatus}</div>}
-      </div>
+      {/* ── TOP NAV ── */}
+      <header className="app-header">
+        <div style={{
+          maxWidth: "1100px", margin: "0 auto",
+          padding: "0 24px", height: "64px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          {/* logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{
+              width: "36px", height: "36px", borderRadius: "10px",
+              background: "linear-gradient(135deg, #4f46e5, #6366f1)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: "18px",
+            }}>🎓</div>
+            <span style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontWeight: "700", fontSize: "17px", color: "#0f172a",
+            }}>EduAI <span style={{ color: "#4f46e5" }}>Hub</span></span>
+          </div>
 
-      {/* SECTION 2: WORKSHEET GENERATOR */}
-      {/* এখানে আমরা সব লজিক এবং লিস্টগুলো পাস করছি যাতে জেনারেটর সেকশনে ড্রপডাউনগুলো দেখা যায় */}
-      <WorksheetGenerator 
-        classList={classList}
-        subjectList={subjectList}
-        chapterList={chapterList}
-        topicList={topicList}
-        selectedClass={selectedClass}
-        selectedSubject={selectedSubject}
-        selectedChapter={selectedChapter}
-        selectedTopicId={selectedTopicId}
-        handleClassChange={handleClassChange}
-        handleSubjectChange={handleSubjectChange}
-        handleChapterChange={handleChapterChange}
-        setSelectedTopicId={setSelectedTopicId}
-      />
+          {/* breadcrumb */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: "6px",
+            background: "#f1f5f9", borderRadius: "8px",
+            padding: "5px 12px", fontSize: "12px",
+          }}>
+            <span style={{ color: "#94a3b8" }}>🏠</span>
+            <span style={{ color: "#94a3b8" }}>/</span>
+            <span style={{ color: "#4f46e5", fontWeight: "600" }}>Dashboard</span>
+          </div>
 
-      {/* SECTION 3: FLASHCARDS & CHAT (RAG) */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "25px", marginTop: "30px" }}>
-        
-        {/* Flashcard Side */}
-        <div style={{ border: "1px solid #ddd", padding: "15px", borderRadius: "10px" }}>
-          <h4>🗂️ Generate Flashcard</h4>
-          <input 
-            placeholder="Topic (e.g. Comparison of numbers)" 
-            value={topicSearch} 
-            onChange={(e) => setTopicSearch(e.target.value)} 
-            style={{ width: "93%", padding: "8px", marginBottom: "10px" }} 
-          />
-          <button onClick={handleGenerateFlashcard} disabled={loading} style={{ width: "100%", cursor: "pointer" }}>Generate</button>
-          
-          {flashcard?.flashcard && (
-            <div style={{ marginTop: "15px", padding: "10px", backgroundColor: "#fffbe6", border: "1px solid #ffe58f", borderRadius: "5px" }}>
-              <strong>Q:</strong> {flashcard.flashcard.question}<br/><hr/>
-              <strong>A:</strong> {flashcard.flashcard.answer}
+          {/* user menu */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: "10px",
+              background: "#f8fafc", border: "1px solid #e2e8f0",
+              borderRadius: "40px", padding: "5px 14px 5px 6px",
+            }}>
+              <div style={{
+                width: "30px", height: "30px", borderRadius: "50%",
+                background: "linear-gradient(135deg, #4f46e5, #818cf8)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#fff", fontSize: "14px", fontWeight: "700",
+              }}>
+                {user?.name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
+              <span style={{ fontSize: "13px", fontWeight: "600", color: "#334155" }}>
+                {user?.name || "User"}
+              </span>
             </div>
-          )}
+            <button
+              className="btn-danger-ghost"
+              onClick={handleLogout}
+              style={{ fontSize: "12px", padding: "6px 12px" }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
+      </header>
 
-        {/* Chat Side */}
-        <div style={{ border: "1px solid #ddd", padding: "15px", borderRadius: "10px" }}>
-          <h4>🤖 Ask AI (RAG)</h4>
-          <input 
-            placeholder="Ask about salary grades or comparison..." 
-            value={question} 
-            onChange={(e) => setQuestion(e.target.value)} 
-            style={{ width: "93%", padding: "8px", marginBottom: "10px" }} 
-          />
-          <button onClick={handleAskAI} disabled={loading} style={{ width: "100%", backgroundColor: "#52c41a", color: "white", border: "none", padding: "8px", cursor: "pointer", borderRadius: "4px" }}>Ask AI</button>
-          
-          {answer && (
-            <div style={{ marginTop: "15px", maxHeight: "200px", overflowY: "auto", fontSize: "14px", padding: "10px", backgroundColor: "#f6ffed", border: "1px solid #b7eb8f" }}>
-              <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{answer}</ReactMarkdown>
+      {/* ── MAIN CONTENT ── */}
+      <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "40px 24px" }}>
+
+        {/* HERO GREETING */}
+        <div style={{
+          background: "linear-gradient(135deg, #3730a3 0%, #4f46e5 55%, #6366f1 100%)",
+          borderRadius: "24px",
+          padding: "40px 48px",
+          marginBottom: "32px",
+          position: "relative", overflow: "hidden",
+          animation: "fadeInUp 0.6s ease both",
+          boxShadow: "0 20px 60px rgba(79,70,229,0.30)",
+        }}>
+          {/* bg decorations */}
+          <div style={{ position: "absolute", top: "-60px", right: "-40px", width: "280px", height: "280px", borderRadius: "50%", background: "rgba(255,255,255,0.06)" }} />
+          <div style={{ position: "absolute", bottom: "-40px", right: "160px", width: "180px", height: "180px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
+          <div style={{ position: "absolute", top: "20px", right: "48px", fontSize: "80px", opacity: 0.15, animation: "float 3.5s ease-in-out infinite" }}>🎓</div>
+
+          <div style={{ position: "relative" }}>
+            <div style={{
+              display: "inline-flex", alignItems: "center", gap: "6px",
+              background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.25)",
+              borderRadius: "20px", padding: "4px 12px", marginBottom: "14px",
+            }}>
+              <span style={{ fontSize: "11px", color: "rgba(255,255,255,0.9)", fontWeight: "600", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                🟢 AI System Online
+              </span>
             </div>
-          )}
+
+            <h1 style={{
+              fontFamily: "'Poppins', sans-serif",
+              fontSize: "clamp(22px, 3vw, 34px)",
+              fontWeight: "800", color: "#fff",
+              lineHeight: 1.2, marginBottom: "10px",
+            }}>
+              {greeting}, {user?.name?.split(" ")[0] || "Educator"} 👋
+            </h1>
+            <p style={{ color: "rgba(255,255,255,0.78)", fontSize: "15px", maxWidth: "480px", lineHeight: 1.7 }}>
+              Your AI-powered content generation platform. Upload curriculum materials and generate professional worksheets in minutes.
+            </p>
+          </div>
         </div>
 
-      </div>
+        {/* STATS ROW */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
+          gap: "16px",
+          marginBottom: "32px",
+          animation: "fadeInUp 0.6s ease 0.1s both",
+        }}>
+          {stats.map((s, i) => <StatCard key={i} {...s} />)}
+        </div>
 
+        {/* SECTION LABEL */}
+        <div style={{ marginBottom: "20px", animation: "fadeInUp 0.6s ease 0.2s both" }}>
+          <h2 style={{
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: "20px", fontWeight: "700",
+            color: "#0f172a", marginBottom: "4px",
+          }}>🚀 Quick Actions</h2>
+          <p style={{ color: "#64748b", fontSize: "14px" }}>
+            Follow the two-step workflow to generate your first AI worksheet
+          </p>
+        </div>
+
+        {/* FEATURE CARDS */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          gap: "20px",
+          marginBottom: "36px",
+          animation: "fadeInUp 0.6s ease 0.25s both",
+        }}>
+          {features.map((f, i) => (
+            <FeatureCard key={i} {...f} onClick={() => navigate(f.path)} />
+          ))}
+        </div>
+
+        {/* WORKFLOW EXPLAINER */}
+        <div style={{
+          background: "#fff",
+          border: "1px solid #e2e8f0",
+          borderRadius: "20px",
+          padding: "28px 32px",
+          boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+          animation: "fadeInUp 0.6s ease 0.35s both",
+        }}>
+          <h3 style={{
+            fontFamily: "'Poppins', sans-serif",
+            fontSize: "15px", fontWeight: "700",
+            color: "#0f172a", marginBottom: "20px",
+            display: "flex", alignItems: "center", gap: "8px",
+          }}>
+            <span style={{
+              background: "#eef2ff", color: "#4f46e5",
+              width: "24px", height: "24px", borderRadius: "50%",
+              display: "inline-flex", alignItems: "center", justifyContent: "center",
+              fontSize: "12px", fontWeight: "700",
+            }}>💡</span>
+            How It Works
+          </h3>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+            gap: "0",
+          }}>
+            {[
+              { step: "01", icon: "📂", title: "Upload Material",    desc: "Select class, subject, chapter & topic, then upload your PDF." },
+              { step: "02", icon: "⚙️", title: "AI Processes It",    desc: "The backend chunks, embeds and indexes your content into the RAG system." },
+              { step: "03", icon: "📝", title: "Configure Output",   desc: "Choose difficulty and question count on the Generate page." },
+              { step: "04", icon: "📥", title: "Download Worksheet", desc: "Review the AI-generated worksheet and export it as a PDF." },
+            ].map((w, i) => (
+              <div key={i} style={{ display: "flex", gap: "0", position: "relative" }}>
+                {/* connector line */}
+                {i < 3 && (
+                  <div style={{
+                    position: "absolute", top: "20px", right: "0",
+                    width: "50%", height: "2px",
+                    background: "linear-gradient(90deg, #e2e8f0, #c7d2fe)",
+                    zIndex: 0,
+                    display: "none", // hide on small screens
+                  }} />
+                )}
+                <div style={{ padding: "0 16px 0 0", flex: 1 }}>
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: "10px",
+                    marginBottom: "10px",
+                  }}>
+                    <div style={{
+                      width: "40px", height: "40px", borderRadius: "12px",
+                      background: "#eef2ff",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "20px", flexShrink: 0,
+                    }}>{w.icon}</div>
+                    <span style={{
+                      fontSize: "11px", fontWeight: "700",
+                      color: "#4f46e5", letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                    }}>Step {w.step}</span>
+                  </div>
+                  <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", marginBottom: "4px" }}>{w.title}</h4>
+                  <p style={{ fontSize: "12px", color: "#64748b", lineHeight: "1.5" }}>{w.desc}</p>
+                </div>
+                {i < 3 && (
+                  <div style={{
+                    display: "flex", alignItems: "flex-start", paddingTop: "10px",
+                    color: "#cbd5e1", fontSize: "20px", userSelect: "none",
+                    paddingRight: "4px",
+                  }}>→</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+      </main>
+
+      {/* ── FOOTER ── */}
+      <footer style={{
+        textAlign: "center", padding: "24px",
+        borderTop: "1px solid #e2e8f0",
+        color: "#94a3b8", fontSize: "12px",
+        marginTop: "20px",
+      }}>
+        EduAI Content Hub · Automated Educational Content Generation · CSE 450 Capstone
+      </footer>
     </div>
   );
 }

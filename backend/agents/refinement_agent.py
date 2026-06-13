@@ -3,6 +3,7 @@ import json
 from settings import gemini_client, SMART_MODEL
 from google.genai import types
 from agents.content_agent import load_prompt_template
+from agents.json_utils import repair_json
 
 
 def run_refinement_agent(
@@ -38,18 +39,18 @@ def run_refinement_agent(
         refinement_instructions=refinement_instructions
     )
 
-    # Call Gemini
+    config = types.GenerateContentConfig(
+        temperature=0.3,
+        response_mime_type="application/json"
+    )
+
     response = gemini_client.models.generate_content(
         model=SMART_MODEL,
         contents=prompt,
-        config=types.GenerateContentConfig(
-            temperature=0.3
-        )
+        config=config
     )
 
-    # Parse the JSON response
-    raw = response.text.replace("```json", "").replace("```", "").strip()
-
+    raw = repair_json(response.text)
     try:
         result = json.loads(raw)
         if isinstance(result, list):
@@ -57,5 +58,19 @@ def run_refinement_agent(
         print(f"[Refinement Agent] Updated to {len(result['problems'])} problems")
         return result
     except json.JSONDecodeError as e:
-        print(f"[Refinement Agent] JSON parse error: {e}")
-        return {"problems": [], "error": str(e)}
+        print(f"[Refinement Agent] JSON parse error: {e} — retrying once")
+        try:
+            response = gemini_client.models.generate_content(
+                model=SMART_MODEL,
+                contents=prompt,
+                config=config
+            )
+            raw = repair_json(response.text)
+            result = json.loads(raw)
+            if isinstance(result, list):
+                result = {"problems": result}
+            print(f"[Refinement Agent] Updated to {len(result['problems'])} problems (retry)")
+            return result
+        except json.JSONDecodeError as e2:
+            print(f"[Refinement Agent] JSON parse error after retry: {e2}")
+            return {"problems": [], "error": str(e2)}

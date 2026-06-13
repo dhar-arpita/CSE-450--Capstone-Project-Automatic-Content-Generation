@@ -6,7 +6,7 @@
 from typing import List, Dict
 
 
-def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> List[str]:
     """
     Splits a single long string into smaller strings of at most 'chunk_size' characters.
     
@@ -44,7 +44,7 @@ def chunk_text(text: str, chunk_size: int = 800, overlap: int = 100) -> List[str
     return chunks
 
 
-def chunk_pages(pages: List[Dict], chunk_size: int = 800, overlap: int = 100) -> List[Dict]:
+def chunk_pages(pages: List[Dict], chunk_size: int = 1200, overlap: int = 150) -> List[Dict]:
     """
     Takes the full list of pages returned by the parser and chunks every page's text.
     
