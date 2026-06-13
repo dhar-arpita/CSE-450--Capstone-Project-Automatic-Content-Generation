@@ -1,44 +1,26 @@
 # chunker.py - Splits long extracted text into smaller overlapping pieces called "chunks".
-# Why chunking? LLMs and embedding models have token limits, so we can't feed
-# an entire textbook page as one unit. Smaller chunks also improve retrieval accuracy.
+# MODIFIED: Added chunk_pages_by_topic() which assigns each chunk to the most
+# relevant topic using simple keyword matching against Gemini-extracted topic names.
 
-# Type hints for cleaner, more readable function signatures
 from typing import List, Dict
+import re
 
 
 def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> List[str]:
     """
     Splits a single long string into smaller strings of at most 'chunk_size' characters.
-    
-    The 'overlap' parameter means the last 'overlap' characters of one chunk
-    are repeated at the start of the next chunk. This ensures that a sentence
-    sitting at the boundary between two chunks is not lost — it appears in both.
-
-    Example: chunk_size=800, overlap=100 means each chunk is 800 chars,
-    and 100 chars are shared between consecutive chunks.
+    Overlap ensures sentences at chunk boundaries appear in both adjacent chunks.
     """
-
-    # This list accumulates all the resulting chunks
     chunks = []
-
-    # 'start' marks the beginning index of the current chunk in the full text
     start = 0
 
-    # Keep creating chunks until we've covered the entire text
     while start < len(text):
-
-        # Calculate where this chunk ends (capped at the end of the text)
         end = start + chunk_size
-
-        # Slice the text from 'start' to 'end' to get this chunk
         chunk = text[start:end]
 
-        # Only add the chunk if it contains actual content after stripping whitespace
         if chunk.strip():
             chunks.append(chunk.strip())
 
-        # Advance 'start' by (chunk_size - overlap) to create the overlapping effect.
-        # If overlap=100, we move forward by 700 instead of 800, so 100 chars are shared.
         start += chunk_size - overlap
 
     return chunks
@@ -46,43 +28,97 @@ def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 150) -> List[st
 
 def chunk_pages(pages: List[Dict], chunk_size: int = 1200, overlap: int = 150) -> List[Dict]:
     """
-    Takes the full list of pages returned by the parser and chunks every page's text.
-    
-    Returns a flat list of chunk dictionaries. Each dictionary contains:
-    - 'chunk_index': A unique sequential number across ALL chunks from ALL pages
-    - 'text': The actual text content of this chunk
-    - 'page_num': Which page this chunk originally came from (for traceability)
+    Original function — chunks all pages without topic assignment.
+    Kept for backward compatibility.
     """
-
-    # This list will hold all chunks from all pages combined in order
     all_chunks = []
-
-    # A global counter that keeps incrementing across pages so every chunk
-    # gets a unique index number (not reset per page)
     chunk_index = 0
 
-    # Process each page one at a time
     for page in pages:
+        page_chunks = chunk_text(page["text"], chunk_size=chunk_size, overlap=overlap)
 
-        # Call chunk_text to split this specific page's text into pieces
-        page_chunks = chunk_text(
-            page["text"],
-            chunk_size=chunk_size,
-            overlap=overlap
-        )
-
-        # For each piece of text from this page, record its metadata
         for chunk_text_content in page_chunks:
             all_chunks.append({
-                # Global unique chunk number (used as part of the Qdrant vector ID)
                 "chunk_index": chunk_index,
-                # The actual text that will be embedded and stored
                 "text": chunk_text_content,
-                # Which page this chunk came from (stored in Qdrant payload)
                 "page_num": page["page_num"]
             })
+            chunk_index += 1
 
-            # Increment the global counter for the next chunk
+    return all_chunks
+
+
+def assign_topic_to_chunk(chunk_text: str, topics: List[dict]) -> dict:
+    """
+    Assigns the most relevant topic to a chunk using keyword matching.
+
+    Strategy:
+    - For each topic, split its name into keywords
+    - Count how many keywords appear in the chunk text
+    - The topic with the highest keyword match wins
+    - Falls back to the first topic if nothing matches
+
+    This is fast (no extra API call) and good enough for NCTB curriculum text
+    where topic names are descriptive (e.g. "Addition of Two-Digit Numbers").
+    """
+    chunk_lower = chunk_text.lower()
+    best_topic = topics[0]
+    best_score = 0
+
+    for topic in topics:
+        # Split topic name into meaningful keywords (ignore short words like "of", "the")
+        keywords = [
+            w.lower() for w in re.split(r'\W+', topic["name"])
+            if len(w) > 3
+        ]
+
+        # Count how many keywords appear in this chunk
+        score = sum(1 for kw in keywords if kw in chunk_lower)
+
+        if score > best_score:
+            best_score = score
+            best_topic = topic
+
+    return best_topic
+
+
+def chunk_pages_by_topic(
+    pages: List[Dict],
+    topics: List[dict],
+    chunk_size: int = 1200,
+    overlap: int = 150
+) -> List[Dict]:
+    """
+    NEW FUNCTION — chunks all pages AND assigns each chunk to the most relevant topic.
+
+    topics format (from extract_topics_from_text):
+        [{"topic_id": 3, "name": "Addition of Two-Digit Numbers"}, ...]
+
+    Returns a flat list of chunk dicts, each with:
+    - chunk_index : global sequential index
+    - text        : chunk content
+    - page_num    : source page number
+    - topic_id    : auto-assigned topic ID (FK to topic table)
+    - topic_name  : human-readable topic name (stored in Qdrant payload)
+    """
+    all_chunks = []
+    chunk_index = 0
+
+    for page in pages:
+        page_chunks = chunk_text(page["text"], chunk_size=chunk_size, overlap=overlap)
+
+        for chunk_text_content in page_chunks:
+            # Auto-assign the most relevant topic to this chunk
+            assigned_topic = assign_topic_to_chunk(chunk_text_content, topics)
+
+            all_chunks.append({
+                "chunk_index": chunk_index,
+                "text": chunk_text_content,
+                "page_num": page["page_num"],
+                "topic_id": assigned_topic["topic_id"],
+                "topic_name": assigned_topic["name"]
+            })
+
             chunk_index += 1
 
     return all_chunks
