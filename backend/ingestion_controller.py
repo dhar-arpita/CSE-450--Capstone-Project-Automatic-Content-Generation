@@ -35,46 +35,38 @@ def extract_topics_from_text(full_text: str, chapter_id: int, db: Session) -> Li
     prompt = f"""
 You are an expert curriculum analyst for Bangladeshi NCTB textbooks.
 
-Read the following chapter text carefully.
-Extract the MAIN topics based on the major headings present in the text.
-Minor sub-headings and examples should be merged under their parent heading.
-Do NOT over-segment. Maximum 6-8 topics per chapter.
-Each topic should represent a meaningful teachable unit — the way a teacher would divide a chapter.
+Your job is to extract topics from a chapter by looking at the MAIN SECTIONS which is lated decsribed into different sub sections.FOLLOW THE EXAMPLES.The topic name covers all the chapter
 
-IMPORTANT:
-- Use the actual headings from the text as a guide
-- Merge closely related sub-headings under one topic
-- Return topic names in ENGLISH only
+STRICT RULES:
+1. Look at the chapter text and find the MAIN SECTION (e.g. "2.1 Rest and Motion", "2.3 Scalar and Vector Quantities")
+2. Each MAIN HEADING/SECTION = one topic
+3. Sub-headings/section (e.g. "2.1.1", "Circular Motion", "Translational Motion") must be MERGED under their parent main heading
+4. Topic names must match the heading names in the book — do NOT rename or invent new names
+5. Do NOT over-segment — if a concept is a sub-section of a heading, it is NOT a separate topic
+6. Return topic names in the SAME LANGUAGE as the chapter text (Bengali text = Bengali topics, English text = English topics)
 
-Return ONLY a valid JSON array. No explanation, no markdown.
+Return ONLY a valid JSON array of topic names. No explanation, no markdown, no extra text.
 
 Examples:
 
-Chapter: Numbers (Class 3 Math)
-Output: ["Counting Reading and Writing Numbers", "Comparing Numbers", "Ordinal Numbers", "Number Patterns"]
-
-Chapter: Addition (Class 3 Math)
-Output: ["Three-Digit Addition without Carrying", "Three-Digit Addition with Carrying", "Adding Three or More Numbers", "Four-Digit Addition", "Large Number Addition"]
-
-Chapter: Subtraction (Class 3 Math)
-Output: ["Three-Digit Subtraction with Borrowing", "Subtraction with Zeros", "Large Number Subtraction", "Horizontal Subtraction"]
-
-Chapter: Multiplication (Class 3 Math)
-Output: ["Multiplication Tables", "Properties of Multiplication", "Two-Digit by One-Digit Multiplication", "Three-Digit by One-Digit Multiplication", "Two-Digit by Two-Digit Multiplication"]
-
-Chapter: Division (Class 3 Math)
-Output: ["Concept of Division", "Division Using Multiplication Tables", "Dividend Divisor and Quotient", "Division with Remainder", "Larger Number Division"]
-
-Chapter: Physical Quantities and Their Measurements (Class 9-10 Physics)
-Output: ["Development of Physics", "Objectives of Physics", "Physical Quantities", "Measurement and Units", "Error and Accuracy"]
-
-Chapter: Motion (Class 9-10 Physics)
+Chapter: Motion (Class 9-10 Physics) — headings in book: 2.1 Rest and Motion, 2.2 Types of Motion, 2.3 Scalar and Vector Quantities, 2.4 Distance and Displacement, 2.5 Speed and Velocity, 2.6 Acceleration, 2.7 Equations of Motion, 2.8 Graphs of Motion, 2.9 Freely Falling Bodies
 Output: ["Rest and Motion", "Types of Motion", "Scalar and Vector Quantities", "Distance and Displacement", "Speed and Velocity", "Acceleration", "Equations of Motion", "Graphs of Motion", "Freely Falling Bodies"]
 
-Now extract topics from this chapter:
+Chapter: Physical Quantities and Their Measurements (Class 9-10 Physics) — headings in book: 1.1 Physics and Its Branches, 1.2 Objectives of Physics, 1.3 Development of Physics, 1.4 Physical Quantities, 1.5 Measurement and Units, 1.6 Measuring Instruments, 1.7 Error and Accuracy
+Output: ["Physics and Its Branches", "Objectives of Physics", "Development of Physics", "Physical Quantities", "Measurement and Units", "Measuring Instruments", "Error and Accuracy"]
+
+Chapter: Addition (Class 3 Math) — headings in book: Three-Digit Addition, Addition with Carrying, Adding Three or More Numbers, Four-Digit Addition, Large Number Addition, Word Problems
+Output: ["Three-Digit Addition", "Addition with Carrying", "Adding Three or More Numbers", "Four-Digit Addition", "Large Number Addition", "Word Problems on Addition"]
+
+Chapter: Subtraction (Class 3 Math) — headings in book: Three-Digit Subtraction, Subtraction with Borrowing, Subtraction with Zeros, Large Number Subtraction, Horizontal Subtraction
+Output: ["Three-Digit Subtraction", "Subtraction with Borrowing", "Subtraction with Zeros", "Large Number Subtraction", "Horizontal Subtraction"]
+
+Now read the chapter text below, find the MAIN HEADINGS, and extract topics accordingly:
+
 Chapter text:
-{full_text[:8000]}
+{full_text[:50000]}
 """
+
     response = gemini_client.models.generate_content(
     model="gemini-2.5-flash",
     contents=prompt
