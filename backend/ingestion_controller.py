@@ -15,8 +15,73 @@ from chunker import chunk_pages_by_chapter
 from embedding_service import generate_embeddings_for_chunks
 from settings import qdrant_client, COLLECTION_NAME, SessionLocal
 from models import IngestionJob, UploadMetadata, ContentEmbedding, UploadRequest, Topic
+from models import Chapter
 
 from settings import gemini_client
+
+
+
+
+# Add this NEW function in ingestion_controller.py (BEFORE extract_topics_from_text)
+
+def generate_topic_descriptions(topic_names: list, chapter_name: str, full_text: str) -> dict:
+    """
+    Uses Gemini to generate a short semantic description for each topic.
+    These descriptions are stored in DB and used as embedding queries at
+    worksheet generation time — gives much better semantic search than
+    using topic names alone.
+
+    Returns: { "topic_name": "description", ... }
+    """
+    topics_list = "\n".join([f"- {name}" for name in topic_names])
+
+    prompt = f"""You are analyzing a chapter from a Bangladeshi NCTB textbook.
+
+Chapter: {chapter_name}
+
+Topics in this chapter:
+{topics_list}
+
+For each topic, write a 2-3 sentence description that:
+- Explains what the topic covers conceptually
+- Mentions key terms, formulas, or sub-concepts that belong to this topic
+- Does NOT include things that belong to other topics in the same chapter
+
+This description will be used for semantic search to find relevant content.
+Match the language of the topic names (English topics = English descriptions, Bengali topics = Bengali descriptions).
+
+Return ONLY a valid JSON object mapping topic name to description. No markdown, no extra text.
+
+Example:
+{{
+  "Acceleration": "Acceleration is the rate of change of velocity with respect to time. It includes positive acceleration, negative acceleration (deceleration), and the formula a = (v-u)/t. Acceleration is a vector quantity measured in m/s².",
+  "Equations of Motion": "The three kinematic equations relating displacement, velocity, acceleration, and time: v = u + at, s = ut + (1/2)at², and v² = u² + 2as. These equations apply to uniformly accelerated motion in a straight line."
+}}
+
+Chapter text (for context):
+{full_text[:30000]}
+"""
+
+    response = gemini_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    raw = response.text.strip()
+
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+    
+    import re
+    # Replace \X where X is not a valid JSON escape character
+    raw = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+
+
+    descriptions = json.loads(raw)
+    print(f"[Topic Description] Generated descriptions for {len(descriptions)} topics")
+    return descriptions
 
 
 # ── TOPIC EXTRACTION ──────────────────────────────────────────────────────────
@@ -82,25 +147,39 @@ Chapter text:
 
     topic_names = json.loads(raw)
     print(f"[Auto-Extract] Gemini found {len(topic_names)} topics: {topic_names}")
+    
+    
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+    chapter_name = chapter.name if chapter else "Unknown"
+
+    # ── NEW: Generate descriptions for all topics ────────────────
+    descriptions = generate_topic_descriptions(topic_names, chapter_name, full_text)
+
 
     # For each topic name, get or create a row in the Topic table
     result = []
     for name in topic_names:
         name = name.strip()
-
-        # Check if this topic already exists for this chapter
         existing = db.query(Topic).filter(
             Topic.chapter_id == chapter_id,
             Topic.name == name
         ).first()
 
+        # ── NEW: get description for this topic ──────────────────
+        description = descriptions.get(name, name)
+        
         if existing:
             topic_id = existing.topic_id
+            existing.description = description   # update description
             print(f"  [Topic] Already exists: '{name}' (id={topic_id})")
         else:
-            new_topic = Topic(chapter_id=chapter_id, name=name)
+            new_topic = Topic(
+                chapter_id=chapter_id, 
+                name=name,
+                description=description    # save description
+            )
             db.add(new_topic)
-            db.flush()  # Get the generated topic_id immediately
+            db.flush()
             topic_id = new_topic.topic_id
             print(f"  [Topic] Created: '{name}' (id={topic_id})")
 

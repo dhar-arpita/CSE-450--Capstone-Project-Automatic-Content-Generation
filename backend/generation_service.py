@@ -268,29 +268,42 @@ def handle_visuals(problems: list, visual_refs: list) -> list:
     print(f"[Visuals] Flagged {len(visual_ids)} problems for diagrams")
     return problems
 
-# REPLACE the search_curriculum_context function with this:
+
 
 def search_curriculum_context(topic_id: int, topic_name: str, chapter_id: int) -> str:
     """
     Fetches curriculum content using semantic search within a chapter.
     
-    NEW APPROACH:
-    - Filter by chapter_id (chunks are no longer assigned to topics)
-    - Use topic_name as semantic query to find most relevant chunks
-    - Returns top-K most semantically similar chunks within the chapter
+    Uses topic DESCRIPTION (not just name) as the semantic query for better
+    accuracy — description includes key terms, formulas, and sub-concepts
+    that belong to the topic.
     """
 
     MAX_CONTEXT_CHARS = 15000
-    TOP_K = 10  # how many chunks to retrieve
+    TOP_K = 10
 
-    # Get embedding for the topic name (this is our semantic query)
-    query_vector = get_embedding(topic_name, is_query=True)
+    # Fetch topic description from DB
+    from models import Topic
+    from settings import SessionLocal
     
+    db = SessionLocal()
+    try:
+        topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
+        # Use description if available, fall back to name
+        query_text = topic.description if topic and topic.description else topic_name
+    finally:
+        db.close()
+    
+    print(f"[Context] Using query: '{query_text[:100]}...'")
+
+    # Get embedding for the query (description if available, else name)
+    query_vector = get_embedding(query_text, is_query=True)
+
     if not query_vector:
-        print(f"[Context] Could not generate embedding for topic '{topic_name}'")
+        print(f"[Context] Could not generate embedding for query")
         return "No curriculum content found for this topic."
 
-    # Build filter to restrict search within this chapter only
+    # Filter by chapter_id
     chapter_filter = Filter(
         must=[
             FieldCondition(
@@ -313,9 +326,9 @@ def search_curriculum_context(topic_id: int, topic_name: str, chapter_id: int) -
         print(f"[Context] No chunks found for chapter_id={chapter_id}")
         return "No curriculum content found for this topic."
 
-    print(f"[Context] Found {len(results)} relevant chunks for topic '{topic_name}' in chapter_id={chapter_id}")
+    print(f"[Context] Found {len(results)} relevant chunks for topic '{topic_name}'")
 
-    # Build context string, respecting size cap
+    # Build context string
     context_parts = []
     total_chars = 0
     

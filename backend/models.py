@@ -101,6 +101,7 @@ class Topic(Base):
     topic_id = Column(Integer,primary_key = True)
     chapter_id = Column(Integer,ForeignKey("chapter.chapter_id"))
     name = Column(String(255),nullable=False)
+    description = Column(Text) 
     
     
 class LearningObjective(Base):
