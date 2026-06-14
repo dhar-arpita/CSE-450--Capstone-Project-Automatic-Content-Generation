@@ -311,7 +311,7 @@ def run_ingestion_pipeline(
             content_embedding = ContentEmbedding(
                 embedding_vector=vector_json,
                 embedding_metadata=meta_json,
-                topic_id=None,   # per-chunk topic
+                chapter_id = chapter_id,   
                 job_id=job_id
             )
             db.add(content_embedding)

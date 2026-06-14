@@ -402,15 +402,8 @@ async def refine_worksheet(
     
     
 # debuging endpoint
-
 @router.get("/debug/retrieved-chunks/{topic_id}")
 def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
-    """
-    Debug endpoint to inspect what chunks get retrieved for a given topic.
-    Returns the topic info + all chunks that would be sent to the Content Agent
-    when generating a worksheet for this topic.
-    """
-    # Look up topic and chapter
     topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
     if not topic:
         raise HTTPException(status_code=404, detail="Topic not found")
@@ -419,25 +412,22 @@ def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
-    # Use the same search function the pipeline uses
-    from generation_service import search_curriculum_context
     from services import get_embedding
     from settings import qdrant_client, COLLECTION_NAME
     from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-    # Get query embedding
-    query_vector = get_embedding(topic.name, is_query=True)
+    # ── CHANGED: use description if available, fall back to name ──
+    query_text = topic.description if topic.description else topic.name
+    
+    query_vector = get_embedding(query_text, is_query=True)
 
     if not query_vector:
         return {
             "topic_id": topic_id,
             "topic_name": topic.name,
-            "chapter_id": chapter.chapter_id,
-            "chapter_name": chapter.name,
-            "error": "Could not generate embedding for topic name"
+            "error": "Could not generate embedding"
         }
 
-    # Filter by chapter_id
     chapter_filter = Filter(
         must=[
             FieldCondition(
@@ -447,7 +437,6 @@ def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
         ]
     )
 
-    # Search
     results = qdrant_client.query_points(
         collection_name=COLLECTION_NAME,
         query=query_vector,
@@ -456,7 +445,6 @@ def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
         with_payload=True
     ).points
 
-    # Build detailed response showing what was retrieved
     retrieved_chunks = []
     for i, point in enumerate(results, 1):
         retrieved_chunks.append({
@@ -472,8 +460,10 @@ def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
     return {
         "topic_id": topic_id,
         "topic_name": topic.name,
+        "topic_description": topic.description,   # ← description ও দেখাও
+        "query_used": query_text[:200],            # ← কী query করলাম
         "chapter_id": chapter.chapter_id,
         "chapter_name": chapter.name,
         "total_chunks_retrieved": len(retrieved_chunks),
         "retrieved_chunks": retrieved_chunks
-    }    
+    }
