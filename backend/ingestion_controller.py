@@ -11,12 +11,77 @@ from sqlalchemy.orm import Session
 from qdrant_client.http.models import PointStruct
 
 from parser import parse_file
-from chunker import chunk_pages_by_topic
+from chunker import chunk_pages_by_chapter
 from embedding_service import generate_embeddings_for_chunks
 from settings import qdrant_client, COLLECTION_NAME, SessionLocal
 from models import IngestionJob, UploadMetadata, ContentEmbedding, UploadRequest, Topic
+from models import Chapter
 
 from settings import gemini_client
+
+
+
+
+# Add this NEW function in ingestion_controller.py (BEFORE extract_topics_from_text)
+
+def generate_topic_descriptions(topic_names: list, chapter_name: str, full_text: str) -> dict:
+    """
+    Uses Gemini to generate a short semantic description for each topic.
+    These descriptions are stored in DB and used as embedding queries at
+    worksheet generation time — gives much better semantic search than
+    using topic names alone.
+
+    Returns: { "topic_name": "description", ... }
+    """
+    topics_list = "\n".join([f"- {name}" for name in topic_names])
+
+    prompt = f"""You are analyzing a chapter from a Bangladeshi NCTB textbook.
+
+Chapter: {chapter_name}
+
+Topics in this chapter:
+{topics_list}
+
+For each topic, write a 2-3 sentence description that:
+- Explains what the topic covers conceptually
+- Mentions key terms, formulas, or sub-concepts that belong to this topic
+- Does NOT include things that belong to other topics in the same chapter
+
+This description will be used for semantic search to find relevant content.
+Match the language of the topic names (English topics = English descriptions, Bengali topics = Bengali descriptions).
+
+Return ONLY a valid JSON object mapping topic name to description. No markdown, no extra text.
+
+Example:
+{{
+  "Acceleration": "Acceleration is the rate of change of velocity with respect to time. It includes positive acceleration, negative acceleration (deceleration), and the formula a = (v-u)/t. Acceleration is a vector quantity measured in m/s².",
+  "Equations of Motion": "The three kinematic equations relating displacement, velocity, acceleration, and time: v = u + at, s = ut + (1/2)at², and v² = u² + 2as. These equations apply to uniformly accelerated motion in a straight line."
+}}
+
+Chapter text (for context):
+{full_text[:30000]}
+"""
+
+    response = gemini_client.models.generate_content(
+        model="gemini-2.5-flash",
+        contents=prompt
+    )
+    raw = response.text.strip()
+
+    if raw.startswith("```"):
+        raw = raw.split("```")[1]
+        if raw.startswith("json"):
+            raw = raw[4:]
+    raw = raw.strip()
+    
+    import re
+    # Replace \X where X is not a valid JSON escape character
+    raw = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+
+
+    descriptions = json.loads(raw)
+    print(f"[Topic Description] Generated descriptions for {len(descriptions)} topics")
+    return descriptions
 
 
 # ── TOPIC EXTRACTION ──────────────────────────────────────────────────────────
@@ -38,10 +103,10 @@ You are an expert curriculum analyst for Bangladeshi NCTB textbooks.
 Your job is to extract topics from a chapter by looking at the MAIN SECTIONS which is lated decsribed into different sub sections.FOLLOW THE EXAMPLES.The topic name covers all the chapter
 
 STRICT RULES:
-1. Look at the chapter text and find the MAIN SECTION (e.g. "2.1 Rest and Motion", "2.3 Scalar and Vector Quantities")
-2. Each MAIN HEADING/SECTION = one topic
+1. Look at the chapter text and find the MAIN SECTION (e.g. "2.1 Rest and Motion", "2.3 Scalar and Vector Quantities").
+2. Each MAIN HEADING/SECTION = one topic.But keep the closely related topic under one topic.
 3. Sub-headings/section (e.g. "2.1.1", "Circular Motion", "Translational Motion") must be MERGED under their parent main heading
-4. Topic names must match the heading names in the book — do NOT rename or invent new names
+4. Topic names must match the heading names in the book — do NOT rename or invent new names.If you need to merge closly related topic make sure topic name should be matched with book.
 5. Do NOT over-segment — if a concept is a sub-section of a heading, it is NOT a separate topic
 6. Return topic names in the SAME LANGUAGE as the chapter text (Bengali text = Bengali topics, English text = English topics)
 
@@ -82,25 +147,39 @@ Chapter text:
 
     topic_names = json.loads(raw)
     print(f"[Auto-Extract] Gemini found {len(topic_names)} topics: {topic_names}")
+    
+    
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+    chapter_name = chapter.name if chapter else "Unknown"
+
+    # ── NEW: Generate descriptions for all topics ────────────────
+    descriptions = generate_topic_descriptions(topic_names, chapter_name, full_text)
+
 
     # For each topic name, get or create a row in the Topic table
     result = []
     for name in topic_names:
         name = name.strip()
-
-        # Check if this topic already exists for this chapter
         existing = db.query(Topic).filter(
             Topic.chapter_id == chapter_id,
             Topic.name == name
         ).first()
 
+        # ── NEW: get description for this topic ──────────────────
+        description = descriptions.get(name, name)
+        
         if existing:
             topic_id = existing.topic_id
+            existing.description = description   # update description
             print(f"  [Topic] Already exists: '{name}' (id={topic_id})")
         else:
-            new_topic = Topic(chapter_id=chapter_id, name=name)
+            new_topic = Topic(
+                chapter_id=chapter_id, 
+                name=name,
+                description=description    # save description
+            )
             db.add(new_topic)
-            db.flush()  # Get the generated topic_id immediately
+            db.flush()
             topic_id = new_topic.topic_id
             print(f"  [Topic] Created: '{name}' (id={topic_id})")
 
@@ -169,7 +248,7 @@ def run_ingestion_pipeline(
         # ── STEP 4: CHUNK TEXT PER TOPIC ──────────────────────────────────────
         # chunk_pages_by_topic assigns each chunk to the most relevant topic
         print(f"[Job {job_id}] Chunking text with topic assignment...")
-        chunks = chunk_pages_by_topic(pages, topics)
+        chunks = chunk_pages_by_chapter(pages)
 
         print(f"[Job {job_id}] Created {len(chunks)} chunk(s).")
 
@@ -202,8 +281,6 @@ def run_ingestion_pipeline(
                     "filename": filename,
                     "page": chunk["page_num"],
                     "chunk_index": chunk["chunk_index"],
-                    "topic_id": chunk["topic_id"],       # auto-assigned topic
-                    "topic_name": chunk["topic_name"],   # human-readable name
                     "chapter_id": chapter_id,
                     "job_id": job_id
                 }
@@ -227,14 +304,14 @@ def run_ingestion_pipeline(
                 "filename": filename,
                 "page_num": item["chunk"]["page_num"],
                 "chunk_index": item["chunk"]["chunk_index"],
-                "topic_name": item["chunk"]["topic_name"],
+                "chapter_id": chapter_id,
                 "qdrant_point_id": item["point_id"]
             })
 
             content_embedding = ContentEmbedding(
                 embedding_vector=vector_json,
                 embedding_metadata=meta_json,
-                topic_id=item["chunk"]["topic_id"],   # per-chunk topic
+                chapter_id = chapter_id,   
                 job_id=job_id
             )
             db.add(content_embedding)

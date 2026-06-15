@@ -101,6 +101,7 @@ class Topic(Base):
     topic_id = Column(Integer,primary_key = True)
     chapter_id = Column(Integer,ForeignKey("chapter.chapter_id"))
     name = Column(String(255),nullable=False)
+    description = Column(Text) 
     
     
 class LearningObjective(Base):
@@ -153,8 +154,8 @@ class ContentEmbedding(Base):
     embedding_id = Column(Integer, primary_key=True)
     embedding_vector = Column(Text)
     embedding_metadata = Column(Text)
-    topic_id = Column(Integer, ForeignKey("topic.topic_id"))
-    job_id = Column(Integer, ForeignKey("ingestion_job.job_id"))      
+    chapter_id = Column(Integer, ForeignKey("chapter.chapter_id"))
+    job_id = Column(Integer, ForeignKey("ingestion_job.job_id"))
     
     
 class TeacherSession(Base):
