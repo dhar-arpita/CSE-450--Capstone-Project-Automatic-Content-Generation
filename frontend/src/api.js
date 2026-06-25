@@ -26,10 +26,10 @@ export const getTopics = (chapterId) =>
   api.get(`/curriculum/topics?chapter_id=${chapterId}`);
 
 
-export const uploadCurriculumFile = (file, topicId, userId) => {
+export const uploadCurriculumFile = (file, chapterId, userId) => {
   const formData = new FormData();
   formData.append("file", file);
-  formData.append("topic_id", topicId);
+  formData.append("chapter_id", chapterId);
   formData.append("user_id", userId);
   
   return api.post("/ingest/upload", formData, {
@@ -42,7 +42,7 @@ export const uploadCurriculumFile = (file, topicId, userId) => {
 
 // export const generateWorksheet = (topicId, userId, difficulty, numProblems) => {
 //   const formData = new FormData();
-//   formData.append("topic_id", topicId);
+//   formData.append("chapter_id", chapterId);
 //   formData.append("user_id", userId);
 //   formData.append("difficulty", difficulty);
 //   formData.append("num_problems", numProblems); // নিশ্চিত করো এটি 'num_problems'

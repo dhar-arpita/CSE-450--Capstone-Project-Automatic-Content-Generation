@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  getClasses, getSubjects, getChapters, getTopics,
+  getClasses, getSubjects, getChapters,
   uploadCurriculumFile, getIngestionStatus,
 } from "./api";
 
@@ -166,11 +166,11 @@ export default function UploadPage() {
   const [classList,    setClassList]    = useState([]);
   const [subjectList,  setSubjectList]  = useState([]);
   const [chapterList,  setChapterList]  = useState([]);
-  const [topicList,    setTopicList]    = useState([]);
+  // const [topicList,    setTopicList]    = useState([]);
   const [selectedClass,   setSelectedClass]   = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedChapter, setSelectedChapter] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
+  // const [selectedTopicId, setSelectedTopicId] = useState("");
 
   const [file,         setFile]         = useState(null);
   const [loading,      setLoading]      = useState(false);
@@ -184,7 +184,7 @@ export default function UploadPage() {
     !!selectedClass,
     !!selectedSubject,
     !!selectedChapter,
-    !!selectedTopicId,
+    // !!selectedTopicId,
   ];
   const selectionDone = selectionProgress.filter(Boolean).length;
 
@@ -195,18 +195,17 @@ export default function UploadPage() {
   }, []);
 
   const handleClassChange = async (v) => {
-    setSelectedClass(v); setSubjectList([]); setChapterList([]); setTopicList([]);
-    setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
+    setSelectedClass(v); setSubjectList([]); setChapterList([]);
+    setSelectedSubject(""); setSelectedChapter("");
     try { const { data } = await getSubjects(v);   setSubjectList(data || []); } catch {}
   };
   const handleSubjectChange = async (v) => {
-    setSelectedSubject(v); setChapterList([]); setTopicList([]);
-    setSelectedChapter(""); setSelectedTopicId("");
+    setSelectedSubject(v); setChapterList([]);
+    setSelectedChapter("");
     try { const { data } = await getChapters(v);   setChapterList(data || []); } catch {}
   };
   const handleChapterChange = async (v) => {
-    setSelectedChapter(v); setTopicList([]); setSelectedTopicId("");
-    try { const { data } = await getTopics(v);     setTopicList(data  || []); } catch {}
+    setSelectedChapter(v);
   };
 
   const startPolling = (jobId, isSample) => {
@@ -239,13 +238,13 @@ export default function UploadPage() {
 
   const handleIngest = async (isSample = false) => {
     const f = isSample ? sampleFile : file;
-    if (!f || !selectedTopicId) {
+    if (!f || !selectedChapter) {
       alert("Please select a topic and a file first!"); return;
     }
     setLoading(true);
     setStatus("Uploading file…");
     try {
-      const res = await uploadCurriculumFile(f, selectedTopicId, user?.user_id || 1);
+      const res = await uploadCurriculumFile(f, selectedChapter, user?.user_id || 1);
       if (res.data?.job_id) {
         setStatus("Job queued — processing…");
         startPolling(res.data.job_id, isSample);
@@ -344,14 +343,14 @@ export default function UploadPage() {
               options={chapterList.map(ch => ({ key: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
               placeholder="Select Chapter"
             />
-            <SelectField
+            {/* <SelectField
               label="Topic"
               value={selectedTopicId}
               onChange={setSelectedTopicId}
               disabled={!selectedChapter}
               options={topicList.map(t => ({ key: t.topic_id, label: t.name }))}
               placeholder="Select Topic"
-            />
+            /> */}
           </div>
 
           <hr className="divider" />
@@ -378,13 +377,15 @@ export default function UploadPage() {
                 </div>
               </div>
 
-              <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedTopicId} />
+              {/* <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedTopicId} /> */}
+              <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedChapter} />
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
                 <button
                   className="btn-primary"
                   onClick={() => handleIngest(false)}
-                  disabled={loading || !file || !selectedTopicId}
+                  // disabled={loading || !file || !selectedTopicId}
+                  disabled={loading || !file || !selectedChapter}
                   style={{ minWidth: "180px" }}
                 >
                   {loading
