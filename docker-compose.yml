@@ -1,26 +1,27 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15
-    container_name: capstone_postgres
-    environment:
-      POSTGRES_DB: capstone_db
-      POSTGRES_USER: capstone_user
-      POSTGRES_PASSWORD: capstone_pass
+  backend:
+    build: ./backend
+    container_name: capstone_backend
     ports:
-      - "5433:5432"
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    # 1. Mount the local backend folder to /app in the container
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./backend:/app
+    # 2. Tell Uvicorn to watch for changes
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: capstone_qdrant
+  frontend:
+    build: ./frontend
+    container_name: capstone_frontend
     ports:
-      - "6333:6333"
+      - "3000:3000"
+    # 3. Mount the frontend, but protect node_modules!
     volumes:
-      - qdrant_data:/qdrant/storage
-
-volumes:
-  postgres_data:
-  qdrant_data:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend

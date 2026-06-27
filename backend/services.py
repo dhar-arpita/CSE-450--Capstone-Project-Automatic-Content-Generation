@@ -51,10 +51,10 @@ def init_vector_db():
     try:
         qdrant_client.create_payload_index(
             collection_name=COLLECTION_NAME,
-            field_name="topic_id",
+            field_name="chapter_id",
             field_schema=PayloadSchemaType.INTEGER,
         )
-        print("Ensured payload index exists for 'topic_id'.")
+        print("Ensured payload index exists for 'chapter_id'.")
     except Exception as e:
         pass
 

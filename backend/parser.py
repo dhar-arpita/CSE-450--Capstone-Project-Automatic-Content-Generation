@@ -5,6 +5,7 @@
 
 import io
 import os
+import time  # <--- ADD THIS
 from typing import List, Dict
 from mistralai.client import Mistral
 
@@ -43,6 +44,9 @@ def extract_text_from_pdf(file_bytes: bytes, filename: str = "document.pdf") -> 
         purpose="ocr",
     )
     print(f"[Parser] File uploaded. ID: {uploaded.id}")
+     # ── ADD THIS PAUSE ────────────────────────────────────────────────────────
+    print("[Parser] Waiting for Mistral servers to process the upload...")
+    time.sleep(5)
 
     # ── STEP 2: Get signed URL ────────────────────────────────────────────────
     signed_url = mistral_client.files.get_signed_url(file_id=uploaded.id)

@@ -80,6 +80,7 @@ def assign_topic_to_chunk(chunk_text: str, topics: List[dict]) -> dict:
 
     return best_topic
 
+
 def chunk_pages_by_chapter(
     pages: List[Dict],
     chunk_size: int = 800,

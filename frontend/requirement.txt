@@ -1,1 +1,0 @@
-npm install axios react-router-dom@6 react-markdown remark-math rehype-katex katex
