@@ -1,1 +1,0 @@
-I have already done  step 7 and it works perfectly. Now I want to see my tables in pgadmin 4. I have already installed pgadmin 4 . How to connect to my database in pgadmin 4? and see my tables ? Think step by step.
