@@ -23,12 +23,13 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct, Paylo
 from sqlalchemy.orm import Session
 
 # Import the new gemini_client instead of the old genai object
-from settings import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
-from models import User, UserCreate, Teacher
+from core.config import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
+from models.db_models import User, Teacher
+from schemas.user import UserCreate
 # for delete specific pdf from qdrant................................................
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
 # from sqlalchemy.orm import Session
-from models import ContentEmbedding, UploadMetadata, IngestionJob, UploadRequest
+from models.db_models import ContentEmbedding, UploadMetadata, IngestionJob, UploadRequest
 # --- INITIALIZATION ---
 def init_vector_db():
     """Ensures the Qdrant collection exists on startup."""

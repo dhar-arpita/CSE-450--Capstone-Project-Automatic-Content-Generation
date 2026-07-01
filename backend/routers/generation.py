@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
 import weasyprint
-from settings import get_db
-from models import Topic, Chapter, Subject, Class, TeacherSession, TeacherSessionTopic, GeneratedContent
-from generation_service import (
+from core.config import get_db
+from models.db_models import Topic, Chapter, Subject, Class, TeacherSession, TeacherSessionTopic, GeneratedContent
+from services.generation_service import (
     generate_worksheet,
     search_curriculum_context,
     handle_remove,
@@ -412,8 +412,8 @@ def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
     if not chapter:
         raise HTTPException(status_code=404, detail="Chapter not found")
 
-    from services import get_embedding
-    from settings import qdrant_client, COLLECTION_NAME
+    from services.rag_service import get_embedding
+    from core.config import qdrant_client, COLLECTION_NAME
     from qdrant_client.models import Filter, FieldCondition, MatchValue
 
     # ── CHANGED: use description if available, fall back to name ──

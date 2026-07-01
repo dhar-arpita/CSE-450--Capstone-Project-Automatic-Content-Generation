@@ -1,6 +1,6 @@
 import json
-from services import get_embedding, analyze_worksheet_style
-from settings import qdrant_client, COLLECTION_NAME
+from services.rag_service import get_embedding, analyze_worksheet_style
+from core.config import qdrant_client, COLLECTION_NAME
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 from agents.content_agent import run_content_agent
 from agents.refinement_agent import run_refinement_agent
@@ -283,8 +283,8 @@ def search_curriculum_context(topic_id: int, topic_name: str, chapter_id: int) -
     TOP_K = 10
 
     # Fetch topic description from DB
-    from models import Topic
-    from settings import SessionLocal
+    from models.db_models import Topic
+    from core.config import SessionLocal
     
     db = SessionLocal()
     try:

@@ -1,5 +1,5 @@
 # test_db.py
-from settings import engine
+from core.config import engine
 
 try:
     conn = engine.connect()

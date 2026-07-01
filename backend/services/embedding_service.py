@@ -7,7 +7,7 @@
 from typing import List, Dict, Optional
 
 # Import the existing get_embedding function from services.py so we don't rewrite it
-from services import get_embedding
+from services.rag_service import get_embedding
 
 
 def generate_embeddings_for_chunks(chunks: List[Dict]) -> List[Optional[List[float]]]:

@@ -2,24 +2,8 @@
 from sqlalchemy import TIMESTAMP, Column, Integer, String, Text, Boolean, Date, BigInteger, Numeric, ForeignKey
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
-from pydantic import BaseModel, EmailStr
 from sqlalchemy import CheckConstraint
-from settings import Base
-
-class UserCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    role: str
-    
-    
-class UserResponse(BaseModel):
-    user_id: int
-    name: str
-    email: EmailStr
-
-    class Config:
-        from_attributes = True
+from core.config import Base
 
 
 class User(Base):

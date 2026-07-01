@@ -26,7 +26,7 @@ from google.genai import types
 
 # Import Gemini client and FAST_MODEL — expression extraction is a simple task
 # so we use the cheap fast model to minimize API cost and latency
-from settings import gemini_client, SMART_MODEL
+from core.config import gemini_client, SMART_MODEL
 
 # List and Optional for type hints
 from typing import List, Optional

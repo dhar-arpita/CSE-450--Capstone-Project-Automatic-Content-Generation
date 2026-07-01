@@ -1,7 +1,7 @@
 # content_agent.py
 import json
-from settings import gemini_client
-from settings import gemini_client, SMART_MODEL
+from core.config import gemini_client
+from core.config import gemini_client, SMART_MODEL
 from google.genai import types
 from agents.json_utils import repair_json
 
@@ -43,7 +43,7 @@ def run_content_agent(
     )
 
     # Call Gemini
-    from settings import gemini_client, SMART_MODEL
+    from core.config import gemini_client, SMART_MODEL
 
     config = types.GenerateContentConfig(
         temperature=0.3,

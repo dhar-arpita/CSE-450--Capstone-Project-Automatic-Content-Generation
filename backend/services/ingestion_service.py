@@ -10,14 +10,14 @@ from typing import List
 from sqlalchemy.orm import Session
 from qdrant_client.http.models import PointStruct
 
-from parser import parse_file
-from chunker import chunk_pages_by_chapter
-from embedding_service import generate_embeddings_for_chunks
-from settings import qdrant_client, COLLECTION_NAME, SessionLocal
-from models import IngestionJob, UploadMetadata, ContentEmbedding, UploadRequest, Topic
-from models import Chapter
+from utils.parser import parse_file
+from utils.chunker import chunk_pages_by_chapter
+from services.embedding_service import generate_embeddings_for_chunks
+from core.config import qdrant_client, COLLECTION_NAME, SessionLocal
+from models.db_models import IngestionJob, UploadMetadata, ContentEmbedding, UploadRequest, Topic
+from models.db_models import Chapter
 
-from settings import gemini_client
+from core.config import gemini_client
 
 
 

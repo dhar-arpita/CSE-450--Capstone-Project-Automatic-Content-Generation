@@ -5,11 +5,11 @@
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
 from sqlalchemy.orm import Session
-import services
 from pydantic import BaseModel
-from settings import get_db
-from models import UploadRequest, IngestionJob, Chapter
-from ingestion_controller import run_ingestion_pipeline
+from core.config import get_db
+from services import rag_service
+from models.db_models import UploadRequest, IngestionJob, Chapter
+from services.ingestion_service import run_ingestion_pipeline
 
 router = APIRouter(prefix="/ingest", tags=["Curriculum Ingestion"])
 
@@ -152,7 +152,7 @@ def list_all_jobs(db: Session = Depends(get_db)):
 
 @router.delete("/delete-file/{filename}")
 def delete_file(filename: str, db: Session = Depends(get_db)):
-    result = services.delete_file_from_system(filename, db)
+    result = rag_service.delete_file_from_system(filename, db)
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result["message"])
     return result

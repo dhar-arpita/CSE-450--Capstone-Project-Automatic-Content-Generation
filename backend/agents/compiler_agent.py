@@ -1,7 +1,7 @@
 # compiler_agent.py
 import json 
 from agents.content_agent import load_prompt_template
-from settings import gemini_client, SMART_MODEL
+from core.config import gemini_client, SMART_MODEL
 from google.genai import types
 
 

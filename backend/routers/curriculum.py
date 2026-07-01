@@ -8,10 +8,10 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 # Import the database session factory
-from settings import get_db
+from core.config import get_db
 
 # Import all the ORM models needed for the curriculum hierarchy
-from models import Class, Subject, Chapter, Topic
+from models.db_models import Class, Subject, Chapter, Topic
 
 
 # Create a router with prefix /curriculum so all routes are grouped under it
