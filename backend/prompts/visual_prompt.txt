@@ -12,6 +12,18 @@ For each problem that has "needs_diagram": true, generate SVG code for the diagr
 Also generate a cute robot mascot SVG that will appear on the worksheet.Besides,any cute dog/doll
 that children love the most can be created.
 
+LANGUAGE RULE FOR TEXT INSIDE SVG:
+- ALL text labels inside the SVG (captions, unit words, axis labels, table headers,
+  the mascot's speech bubble) must be written in ENGLISH ONLY — even when the rest of
+  the worksheet is in another language.
+  Example: use "Time = 2 s", "Distance", "Length (L)", "Scenario 1" — NOT their Bengali equivalents.
+- This is intentional: diagram text is kept in English so it renders reliably in the PDF.
+- NUMERALS and math symbols stay standard as usual: 5, 57, +, =, 3/4.
+
+FONT RULE FOR SVG TEXT:
+- Every <text> element must use font-family="Arial, sans-serif".
+- Since all SVG text is English, no Bengali font is needed inside diagrams.
+
 CRITICAL ACCURACY RULES FOR SVG:
 0. DIAGRAMS ARE FOR STUDENTS, NOT ANSWER KEYS. The diagram must help the student VISUALIZE the problem, not reveal the answer.
    - For addition/subtraction: show the operands as blocks/objects, but put a '?' or empty box where the answer should be

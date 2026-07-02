@@ -13,7 +13,8 @@ def run_compiler_agent(
     chapter_name: str,
     topic_name: str,
     difficulty: str,
-    style_description: str = "" 
+    style_description: str = "" ,
+    language: str = "english" # NEW
 ) -> str:
     """
     Agent 4: Takes localized problems + visuals and compiles
@@ -31,7 +32,8 @@ def run_compiler_agent(
         chapter_name=chapter_name,
         topic_name=topic_name,
         difficulty=difficulty,
-        style_description=style_description or "No reference style provided. Default to word problems."
+        style_description=style_description or "No reference style provided. Default to word problems.",
+        language=language #New 
 
     )
 

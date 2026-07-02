@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     libcairo2 \
     libgdk-pixbuf-xlib-2.0-0 \
     shared-mime-info \
+    fonts-noto-core \
+    fonts-noto-ui-core \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Copy only the requirements file first 

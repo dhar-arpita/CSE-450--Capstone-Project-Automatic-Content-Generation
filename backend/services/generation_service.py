@@ -359,6 +359,7 @@ def generate_worksheet(
     chapter_id: int,        # ← এটা add করো
     difficulty: str,
     num_problems: int,
+    language: str = "english",   # NEW: output language chosen at generation time..............................
     sample_pdf_bytes: bytes = None
 ) -> dict:
     """
@@ -393,7 +394,8 @@ def generate_worksheet(
         difficulty=difficulty,
         num_problems=num_problems,
         curriculum_context=curriculum_context,
-        style_description=style_description
+        style_description=style_description,
+        language=language          # NEW
     )
 
     if not content_output.get("problems"):
@@ -413,7 +415,8 @@ def generate_worksheet(
 
     # Step 3: Agent 2 — Localization Agent
     print("\n[Pipeline] Running Localization Agent...")
-    localization_output = run_localization_agent(content_output, style_description=style_description)
+    localization_output = run_localization_agent(content_output, style_description=style_description,language=language          # NEW
+    )
 
     if not localization_output.get("localized_problems"):
         # Fallback: use original problems without localization
@@ -435,7 +438,8 @@ def generate_worksheet(
 
     # Step 4: Agent 3 — Visual Agent
     print("\n[Pipeline] Running Visual Agent...")
-    visual_output = run_visual_agent(localization_output, style_description)
+    visual_output = run_visual_agent(localization_output, style_description,language=language         # NEW
+    )
 
     # Step 5: Agent 4 — Compiler Agent
     print("\n[Pipeline] Running Compiler Agent...")
@@ -447,7 +451,8 @@ def generate_worksheet(
         chapter_name=chapter_name,
         topic_name=topic_name,
         difficulty=difficulty,
-        style_description=style_description
+        style_description=style_description,
+        language=language          # NEW
     )
 
     print(f"\n{'='*50}")

@@ -7,7 +7,7 @@ from google.genai import types
 from agents.json_utils import repair_json
 
 
-def run_visual_agent(localization_output: dict, style_description: str = "") -> dict:
+def run_visual_agent(localization_output: dict, style_description: str = "", language: str = "english") -> dict:
     """
     Agent 3: Creates SVG diagrams for problems that need visuals
     and a robot mascot character.
@@ -27,7 +27,8 @@ def run_visual_agent(localization_output: dict, style_description: str = "") -> 
 
     prompt = template.format(
         problems_json=json.dumps(problems_needing_visuals, indent=2),
-        style_description=style_description or "Clean, colorful, child-friendly math worksheet style."
+        style_description=style_description or "Clean, colorful, child-friendly math worksheet style.",
+        language=language  # new: output language chosen at generation time
     )
 
     config = types.GenerateContentConfig(

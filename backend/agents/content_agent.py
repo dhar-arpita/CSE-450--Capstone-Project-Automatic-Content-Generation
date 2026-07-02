@@ -20,7 +20,8 @@ def run_content_agent(
     difficulty: str,
     num_problems: int,
     curriculum_context: str,
-    style_description: str = "" 
+    style_description: str = "" ,
+    language: str = "english"      # NEW
 ) -> dict:
     """
     Agent 1: Creates math problems based on curriculum context.
@@ -39,7 +40,8 @@ def run_content_agent(
         chapter_name=chapter_name,
         topic_name=topic_name,
         difficulty=difficulty,
-        style_description=style_description or "No reference style provided. Default to word problems."
+        style_description=style_description or "No reference style provided. Default to word problems.",
+        language=language
     )
 
     # Call Gemini

@@ -33,6 +33,7 @@ async def create_worksheet(
     user_id: int = Form(...),
     difficulty: str = Form("easy"),
     num_problems: int = Form(5),
+    language: str = Form("english"),   # NEW — teacher's output-language choice
     sample_worksheet: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
@@ -79,7 +80,8 @@ async def create_worksheet(
         chapter_id= topic.chapter_id,
         difficulty=difficulty,
         num_problems=num_problems,
-        sample_pdf_bytes=sample_bytes
+        sample_pdf_bytes=sample_bytes,
+        language=language
     )
 
     if result.get("error"):

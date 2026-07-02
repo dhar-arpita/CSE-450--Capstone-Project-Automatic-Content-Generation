@@ -9,7 +9,7 @@ from agents.json_utils import repair_json
 
 
 
-def run_localization_agent(content_agent_output: dict, style_description: str = "") -> dict:
+def run_localization_agent(content_agent_output: dict, style_description: str = "",language: str = "english") -> dict:
     """
     Agent 2: Takes problems from Content Agent and rewrites 
     them with Bangladeshi cultural context.
@@ -19,7 +19,8 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
 
     prompt = template.format(
         problems_json=json.dumps(content_agent_output, indent=2),
-        style_description=style_description or "No reference style provided. Default to word problems."
+        style_description=style_description or "No reference style provided. Default to word problems.",
+        language=language # new: output language chosen at generation time
     )
 
     config = types.GenerateContentConfig(

@@ -19,17 +19,13 @@ Compile all the problems and visuals into ONE beautiful, print-ready HTML worksh
 Follow the STYLE description above — match its layout, colors, fonts.Always maintain the 
 format .Try to be creative.
 ═════════════════════════════════════════════════════════════╗
-ABSOLUTE LANGUAGE RULE — READ THIS FIRST BEFORE ANYTHING   
-                                                              
-This worksheet must be 100% in ENGLISH ONLY.               
-  • Header title: English only                               
-  • Section labels: English only                             
-  • Answer labels: write "Answer:" NOT "উত্তর:"              
-  • Answer key section: write "Answer Key" NOT "উত্তরমালা"   
-  • Unit words: write "books", "pithas", "kg" NOT "বই/পিঠা"  
-  • Footer: English only                                     
-                                                              
-DO NOT write a single character of Bangla/Bengali script. 
+ABSOLUTE LANGUAGE RULE — READ THIS FIRST
+The worksheet chrome (title, section labels, answer labels, footer) must be in {language}.
+  • If {language} is "bangla": use Bengali labels (উত্তর: for Answer, উত্তরমালা for Answer Key).
+  • If {language} is "english": use English labels (Answer:, Answer Key).
+Copy the problem text and answers EXACTLY as given in the JSON — they are already in the 
+correct language; do not translate or alter them.
+In ALL cases keep numerals and math symbols standard (5, +, =), never Bengali numerals. 
 
 CRITICAL RULE: You MUST include ALL problems. NEVER write "remaining problems omitted" 
 or skip any problem. If there are 5 problems, show all 5. If there are 12, show all 12. 
@@ -40,6 +36,7 @@ MATH ACCURACY IS NON-NEGOTIABLE:
 - Every SVG diagram must show the EXACT number of objects stated in the problem
 - Double-check: if problem says 36 + 21, the answer MUST be 57, not 56 or 58
 - Verify every calculation before including it
+
 
 HTML RULES:
 1. Use inline CSS only (no external stylesheets)
@@ -54,6 +51,12 @@ HTML RULES:
 10. Add the robot mascot in the top-right corner of the header. Wrap it in a div with max-width: 70px; max-height: 70px; overflow: hidden; so it never overlaps the title text.
 11. Include space for student name and date at the top
 12. Problems should have enough white space for students to write answers
+
+FONT RULE:
+When {language} is "bangla", every font-family declaration MUST include a Bengali font 
+as a fallback, e.g.:
+  font-family: 'Comic Sans MS', 'Noto Sans Bengali', sans-serif;
+This ensures Bengali characters render with a font that supports them.
 
 PAGE LAYOUT RULES:
 - Total page width: 210mm (A4). Content width: 170mm max.
