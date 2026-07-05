@@ -107,6 +107,7 @@ class UploadRequest(Base):
     subject_id = Column(Integer, ForeignKey("subject.subject_id"))
     file_name = Column(String(255))
     status = Column(String(50), default="pending")
+    source_type = Column(String(50), default="nctb")
     requested_at = Column(TIMESTAMP, server_default=func.now())
 
 
@@ -140,6 +141,7 @@ class ContentEmbedding(Base):
     embedding_metadata = Column(Text)
     chapter_id = Column(Integer, ForeignKey("chapter.chapter_id"))
     job_id = Column(Integer, ForeignKey("ingestion_job.job_id"))
+    source_type = Column(String(50), default="nctb")
     
     
 class TeacherSession(Base):
@@ -170,6 +172,7 @@ class GeneratedContent(Base):
      display_body = Column(Text) 
      answer_key = Column(Text)
      explanation = Column(Text)
+     language = Column(String(50), default="english")
      generated_at = Column(TIMESTAMP, server_default=func.now())    
      
      

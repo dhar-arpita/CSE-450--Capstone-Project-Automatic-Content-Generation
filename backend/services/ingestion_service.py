@@ -196,7 +196,8 @@ def run_ingestion_pipeline(
     chapter_id: int,       # CHANGED from topic_id
     file_bytes: bytes,
     filename: str,
-    file_size: int
+    file_size: int,
+    source_type: str = "nctb",      # NEW
 ):
     """
     Background pipeline. Steps:
@@ -234,15 +235,18 @@ def run_ingestion_pipeline(
         # Combine all page text for topic extraction
         full_text = "\n".join([p["text"] for p in pages])
 
-
+        topics = []
         # ── STEP 3: AUTO-EXTRACT TOPICS ───────────────────────────────────────
-        print(f"[Job {job_id}] Extracting topics with Gemini...")
-        topics = extract_topics_from_text(full_text, chapter_id, db)
-
-        if not topics:
-            raise ValueError("Gemini could not extract any topics from the uploaded file.")
-
-        print(f"[Job {job_id}] {len(topics)} topic(s) ready.")
+        if source_type == "nctb":
+            print(f"[Job {job_id}] Extracting topics with Gemini...")
+            topics = extract_topics_from_text(full_text, chapter_id, db)
+            if not topics:
+                raise ValueError("Gemini could not extract any topics from the uploaded file.")
+            print(f"[Job {job_id}] {len(topics)} topic(s) ready.")
+        else :
+            print(f"Foreign content , no topic extraction")
+        
+        
 
 
         # ── STEP 4: CHUNK TEXT PER TOPIC ──────────────────────────────────────
@@ -282,7 +286,8 @@ def run_ingestion_pipeline(
                     "page": chunk["page_num"],
                     "chunk_index": chunk["chunk_index"],
                     "chapter_id": chapter_id,
-                    "job_id": job_id
+                    "job_id": job_id,
+                    "source_type": source_type,     # NEW
                 }
             ))
 
@@ -312,7 +317,8 @@ def run_ingestion_pipeline(
                 embedding_vector=vector_json,
                 embedding_metadata=meta_json,
                 chapter_id = chapter_id,   
-                job_id=job_id
+                job_id=job_id,
+                source_type=source_type,        # NEW
             )
             db.add(content_embedding)
 

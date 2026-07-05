@@ -1,4 +1,4 @@
-# # services.py 
+# # rag_service.py 
 # import time
 # import uuid
 # import io
@@ -56,6 +56,18 @@ def init_vector_db():
             field_schema=PayloadSchemaType.INTEGER,
         )
         print("Ensured payload index exists for 'chapter_id'.")
+    except Exception as e:
+        pass
+    # In init_vector_db(), next to your language index:
+# Lets retrieval filter chunks by curriculum source.
+# 'nctb' = official ground truth, 'foreign' = enrichment material.
+    try:
+        qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="source_type",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        print("Ensured payload index exists for 'source_type'.")
     except Exception as e:
         pass
 

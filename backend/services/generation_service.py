@@ -1,3 +1,4 @@
+# generation_service.py
 import json
 from services.rag_service import get_embedding, analyze_worksheet_style
 from core.config import qdrant_client, COLLECTION_NAME

@@ -40,6 +40,7 @@ async def upload_curriculum(
     # Topics will be auto-extracted from the PDF by Gemini
     chapter_id: int = Form(...),
     user_id: int = Form(...),
+    source_type: str = Form("nctb"),   # 'nctb' or 'foreign'
     db: Session = Depends(get_db)
 ):
     """
@@ -60,7 +61,11 @@ async def upload_curriculum(
             status_code=400,
             detail="Only .pdf and .txt files are supported."
         )
-
+    if source_type not in ("nctb", "foreign"):
+        raise HTTPException(
+            status_code=400,
+            detail="source_type must be 'nctb' or 'foreign'."
+        )
     # ── VALIDATION 2: Chapter existence ──────────────────────────────────────
     chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
     if not chapter:
@@ -81,7 +86,8 @@ async def upload_curriculum(
         user_id=user_id,
         subject_id=subject_id,
         file_name=file.filename,
-        status="pending"
+        status="pending",
+        source_type=source_type,
     )
     db.add(upload_request)
     db.flush()
@@ -107,7 +113,8 @@ async def upload_curriculum(
         chapter_id=chapter_id,       # CHANGED
         file_bytes=file_bytes,
         filename=file.filename,
-        file_size=file_size
+        file_size=file_size,
+        source_type=source_type,        # NEW
     )
 
     return UploadResponse(
