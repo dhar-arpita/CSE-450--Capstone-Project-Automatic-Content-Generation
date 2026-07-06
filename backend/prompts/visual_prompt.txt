@@ -61,6 +61,34 @@ SVG RULES:
     g. VALIDATION: After generating each SVG, mentally verify: can every single text label be read without overlapping any other text? If not, increase the viewBox width or reduce font sizes.
     h. For bar models with a "Total" bar below, add at least 60px vertical gap between the segment bars and the total bar. The total bar should span the full width of all segments above it.
 
+13. GRAPH / SCENE / LEGEND SPACING RULES (CRITICAL — applies to axis graphs, multi-object
+    scenes, and any diagram with a legend or key; these are denser than bar models):
+    a. LEGENDS BELOW, NEVER INLINE: a legend/key must NEVER be placed inside or across the
+       plot/scene area. Render it as ONE horizontal row BELOW the diagram, with each legend
+       entry's x position ≥120px apart in viewBox coordinates. Add the legend row's height
+       to the viewBox height so nothing is clipped.
+    b. AXIS GRAPHS (velocity-time, distance-time, any x-y plot): reserve a left margin of
+       ≥50px for the y-axis label and its tick numbers, and a bottom margin of ≥40px for
+       the x-axis label. Axis labels live ONLY in these margins. Labels naming a curve/line
+       go near the curve INSIDE the plot area and must never enter the axis margins or
+       touch another label — if a curve label would collide with anything, move it along
+       the curve to open space.
+    c. MULTI-OBJECT SCENES (e.g. people on a train/platform, several actors or objects):
+       give each labelled object ≥110px of horizontal separation (center to center). Put
+       each object's caption directly BELOW its object with one consistent y-offset used
+       for all captions (e.g. 20px below the object's bottom). Two captions may share the
+       same y-band ONLY if their x positions are ≥110px apart; otherwise move one caption
+       to a second y-band lower down.
+    d. EXTRA PADDING: these diagrams need more breathing room than bar models — use ≥40px
+       padding on ALL four sides of the viewBox (in addition to the axis margins in rule b),
+       and size the viewBox from the content, not the other way around.
+    e. The LANGUAGE and FONT rules above still apply: ALL text inside the SVG in ENGLISH
+       ONLY, every <text> element with font-family="Arial, sans-serif".
+    f. VALIDATION: after generating, mentally scan every pair of text elements (labels,
+       captions, tick numbers, legend entries): none may overlap another text element, a
+       curve, an axis, or an object. If any pair is closer than its rule allows, enlarge
+       the viewBox and re-space — never shrink text below rule 11's minimums.
+
 ROBOT MASCOT:
 Generate ONE cute robot mascot SVG that says something encouraging.
 Style: simple geometric shapes, friendly face, speech bubble.

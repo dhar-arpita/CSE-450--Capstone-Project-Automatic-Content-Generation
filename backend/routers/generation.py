@@ -7,6 +7,7 @@ from core.config import get_db
 from models.db_models import Topic, Chapter, Subject, Class, TeacherSession, TeacherSessionTopic, GeneratedContent
 from services.generation_service import (
     generate_worksheet,
+    generate_study_note,
     search_curriculum_context,
     handle_remove,
     handle_add,
@@ -146,6 +147,107 @@ async def create_worksheet(
     }
     
 
+@router.post("/study-note")
+async def create_study_note(
+    topic_id: int = Form(...),
+    user_id: int = Form(...),
+    language: str = Form("english"),
+    db: Session = Depends(get_db)
+):
+    # ── STEP 1: DB lookups BEFORE the pipeline (fast, no timeout risk) ────────
+    # These queries are instant — do them first while connection is fresh
+    topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    # Extract all the values we need from DB objects NOW,
+    # before the connection potentially goes stale during the pipeline.
+    topic_name = topic.name
+    chapter_id = topic.chapter_id
+    chapter_name = chapter.name
+    subject_name = subject.name
+    class_name = subject.class_name
+
+    # ── STEP 2: Close the DB connection BEFORE running the pipeline ───────────
+    db.expire_all()
+
+    # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ──────────────────────
+    result = generate_study_note(
+        topic_id=topic_id,
+        topic_name=topic_name,
+        class_name=class_name,
+        subject_name=subject_name,
+        chapter_name=chapter_name,
+        chapter_id=chapter_id,
+        language=language
+    )
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    # ── STEP 4: Re-establish DB connection AFTER pipeline finishes ────────────
+    try:
+        # Create TeacherSession record
+        teacher_session = TeacherSession(
+            teacher_id=user_id,
+            started_at=datetime.utcnow()
+        )
+        db.add(teacher_session)
+        db.flush()
+
+        # Link session to topic
+        session_topic = TeacherSessionTopic(
+            session_id=teacher_session.session_id,
+            topic_id=topic_id
+        )
+        db.add(session_topic)
+
+        # Save generated content
+        generated = GeneratedContent(
+            teacher_session_id=teacher_session.session_id,
+            topic_id=topic_id,
+            content_type="study_note",
+            difficulty_level="standard",
+            display_body=result["html"],
+            answer_key=str(result.get("note", "")),
+            explanation=str(result.get("visuals", "")),
+            language=language,
+            generated_at=datetime.utcnow()
+        )
+        db.add(generated)
+        db.flush()
+
+        teacher_session.ended_at = datetime.utcnow()
+        db.commit()
+
+    except Exception as db_error:
+        # If DB save fails after the pipeline succeeded,
+        # still return the HTML to the teacher — don't lose their study note.
+        print(f"[DB Error] Failed to save study note to DB: {db_error}")
+        return {
+            "content_id": None,
+            "session_id": None,
+            "html": result["html"],
+            "concept_blocks_count": len(result.get("note", {}).get("concept_blocks", [])),
+            "warning": "Study note generated successfully but could not be saved to database."
+        }
+
+    return {
+        "content_id": generated.content_id,
+        "session_id": teacher_session.session_id,
+        "html": result["html"],
+        "concept_blocks_count": len(result.get("note", {}).get("concept_blocks", []))
+    }
+
+
 @router.get("/download/{content_id}")
 def download_worksheet_pdf(content_id: int, db: Session = Depends(get_db)):
     content = db.query(GeneratedContent).filter(
@@ -156,11 +258,13 @@ def download_worksheet_pdf(content_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Worksheet not found")
     
     pdf_bytes = weasyprint.HTML(string=content.display_body).write_pdf()
-    
+
+    # Name the file by content type: worksheet_5.pdf, study_note_7.pdf, ...
+    file_prefix = content.content_type or "worksheet"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=worksheet_{content_id}.pdf"}
+        headers={"Content-Disposition": f"attachment; filename={file_prefix}_{content_id}.pdf"}
     )
 
 

@@ -7,7 +7,8 @@ from agents.content_agent import run_content_agent
 from agents.refinement_agent import run_refinement_agent
 from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
-from agents.compiler_agent import run_compiler_agent
+from agents.compiler_agent import run_compiler_agent, run_study_note_compiler
+from agents.study_note_agent import run_study_note_agent
 # verification_agent handles all other problem types using blind LLM verification
 # from agents.verification_agent import run_verification_agent
 # Add these two new imports at the top of generation_service.py
@@ -466,4 +467,93 @@ def generate_worksheet(
         "visuals": visual_output,
         "curriculum_context_used": curriculum_context[:200] + "...",
         "style_used": bool(style_description)
+    }
+
+
+def generate_study_note(
+    topic_id: int,
+    topic_name: str,
+    class_name: str,
+    subject_name: str,
+    chapter_name: str,
+    chapter_id: int,
+    language: str = "english"
+) -> dict:
+    """
+    Runs the study-note pipeline for one topic.
+    Returns dict with html, note, and metadata.
+
+    Note: there is no separate localization step — the localization prompt's schema
+    is worksheet-specific (localized_problems), so the Study Note Agent writes the
+    note directly in the target language instead.
+    """
+
+    print(f"\n{'='*50}")
+    print(f"STUDY NOTE GENERATION STARTED")
+    print(f"Topic: {topic_name} | Class: {class_name} | Language: {language}")
+    print(f"{'='*50}\n")
+
+    # Step 1: Search Qdrant for curriculum context
+    print("[Pipeline] Searching curriculum context in Qdrant...")
+    curriculum_context = search_curriculum_context(topic_id, topic_name, chapter_id)
+    print(f"[Pipeline] Found context ({len(curriculum_context)} chars)")
+
+    # Step 2: Study Note Agent (writes directly in the target language)
+    print("\n[Pipeline] Running Study Note Agent...")
+    note_output = run_study_note_agent(
+        topic_name=topic_name,
+        class_name=class_name,
+        subject_name=subject_name,
+        chapter_name=chapter_name,
+        curriculum_context=curriculum_context,
+        language=language
+    )
+
+    if not note_output.get("concept_blocks"):
+        return {"error": "Study Note Agent failed to generate the note", "html": ""}
+
+    # Step 3: Visual Agent — reuse as-is by wrapping flagged concept blocks
+    # in the localized_problems shape it expects. The "id" is the block's
+    # 1-based position in concept_blocks, so visuals map back to their blocks.
+    print("\n[Pipeline] Running Visual Agent...")
+    diagram_blocks = []
+    for i, block in enumerate(note_output["concept_blocks"], start=1):
+        if block.get("needs_diagram", False):
+            diagram_blocks.append({
+                "id": i,
+                "localized_question": block.get("heading", ""),
+                "answer": "",
+                "solution_steps": [],
+                "needs_diagram": True,
+                "diagram_type": block.get("diagram_type", "none"),
+                "diagram_description": block.get("diagram_description", "")
+            })
+
+    if diagram_blocks:
+        visual_output = run_visual_agent({"localized_problems": diagram_blocks}, "", language=language)
+    else:
+        print("[Visual Agent] No visuals needed, skipping.")
+        visual_output = {"robot_mascot": "", "problem_visuals": []}
+
+    # Step 4: Study Note Compiler
+    print("\n[Pipeline] Running Study Note Compiler...")
+    note_html = run_study_note_compiler(
+        note_output=note_output,
+        visual_output=visual_output,
+        class_name=class_name,
+        subject_name=subject_name,
+        chapter_name=chapter_name,
+        topic_name=topic_name,
+        language=language
+    )
+
+    print(f"\n{'='*50}")
+    print(f"STUDY NOTE GENERATION COMPLETE")
+    print(f"{'='*50}\n")
+
+    return {
+        "html": note_html,
+        "note": note_output,
+        "visuals": visual_output,
+        "curriculum_context_used": curriculum_context[:200] + "..."
     }

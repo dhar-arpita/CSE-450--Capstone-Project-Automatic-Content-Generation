@@ -17,10 +17,38 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 QDRANT_URL = os.getenv("QDRANT_URL")
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY")
 
-SMART_MODEL = "gemini-2.5-flash"
-FAST_MODEL = "gemini-3.1-flash-lite-preview"
-# Initialize the Gemini client — this replaces the old genai.configure() call
-gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
+# Vertex AI mode: when "true", Gemini calls go through Vertex AI and bill the
+# GCP project instead of the AI Studio API key.
+GOOGLE_GENAI_USE_VERTEXAI = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "false").strip().lower() == "true"
+GOOGLE_VERTEX_API_KEY = os.getenv("GOOGLE_VERTEX_API_KEY")
+GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+
+SMART_MODEL = "gemini-3.5-flash"
+FAST_MODEL = "gemini-3.1-flash-lite"
+
+if GOOGLE_GENAI_USE_VERTEXAI:
+    if GOOGLE_VERTEX_API_KEY:
+        # Express mode: the key is bound to a service account in the GCP
+        # project, so project/location are inferred and billed automatically.
+        gemini_client = genai.Client(vertexai=True, api_key=GOOGLE_VERTEX_API_KEY)
+    elif GOOGLE_CLOUD_PROJECT and os.getenv("GOOGLE_APPLICATION_CREDENTIALS"):
+        # ADC mode: auth via the service-account file pointed to by
+        # GOOGLE_APPLICATION_CREDENTIALS — no API key in this mode.
+        gemini_client = genai.Client(
+            vertexai=True,
+            project=GOOGLE_CLOUD_PROJECT,
+            location=GOOGLE_CLOUD_LOCATION,
+        )
+    else:
+        raise ValueError(
+            "GOOGLE_GENAI_USE_VERTEXAI is true but no Vertex credentials found. "
+            "Set GOOGLE_VERTEX_API_KEY (express mode key), or set both "
+            "GOOGLE_CLOUD_PROJECT and GOOGLE_APPLICATION_CREDENTIALS (service-account mode) in .env."
+        )
+else:
+    # Fallback: AI Studio via API key (original behavior)
+    gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
 
 # Qdrant setup — uses cloud if URL is provided, otherwise falls back to local memory
 if QDRANT_URL:
