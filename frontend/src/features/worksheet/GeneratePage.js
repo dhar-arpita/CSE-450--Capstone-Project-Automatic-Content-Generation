@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getClasses, getSubjects, getChapters, getTopics } from "./api";
-import WorksheetGenerator from "./WorksheetGenerator";
+// import { getClasses, getSubjects, getChapters, getTopics } from "./api";
+// import WorksheetGenerator from "./WorksheetGenerator";
+
+import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
+import WorksheetGenerator from "../worksheet/WorksheetGenerator";
 
 function SelectField({ label, icon, value, onChange, disabled, options, placeholder }) {
   return (

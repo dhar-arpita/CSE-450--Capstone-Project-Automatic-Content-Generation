@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   getClasses, getSubjects, getChapters,
   uploadCurriculumFile, getIngestionStatus,
-} from "./api";
+} from "../../shared/services/api";
 
 /* ── shared nav header (reused look) ── */
 function PageHeader({ title, subtitle, icon, onBack, breadcrumb }) {

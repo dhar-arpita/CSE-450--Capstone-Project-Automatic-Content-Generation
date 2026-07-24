@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { getWorksheetDetails, refineWorksheet } from "./api";
+// import { getWorksheetDetails, refineWorksheet } from "./api";
+import { getWorksheetDetails, refineWorksheet } from "../../shared/services/api";
 
 export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
   const [loading, setLoading] = useState(false);

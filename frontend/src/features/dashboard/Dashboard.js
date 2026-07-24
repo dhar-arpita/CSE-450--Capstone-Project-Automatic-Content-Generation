@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { getClasses } from "./api";
+// import { getClasses } from "./api";
+import { getClasses } from "../../shared/services/api";
 
 /* ── tiny hook for counting-up numbers ── */
 function useCountUp(target, duration = 1200) {

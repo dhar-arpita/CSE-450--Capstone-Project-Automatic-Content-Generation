@@ -14,6 +14,8 @@ from agents.study_note_agent import run_study_note_agent
 # Add these two new imports at the top of generation_service.py
 # math_verifier handles pure arithmetic using exact Python computation
 from agents.math_verifier import verify_and_fix_problems
+#video add
+from agents.video_search_agent import run_video_search_agent
 
 
 
@@ -534,6 +536,17 @@ def generate_study_note(
     else:
         print("[Visual Agent] No visuals needed, skipping.")
         visual_output = {"robot_mascot": "", "problem_visuals": []}
+    
+    #video agent 
+    print("\n[Pipeline] Searching relevant YouTube videos...")
+    videos = run_video_search_agent(
+        topic_name   = topic_name,
+        class_name   = class_name,
+        subject_name = subject_name,
+        language     = language,
+        max_results  = 4
+    )
+    print(f"[Pipeline] Found {len(videos)} videos")
 
     # Step 4: Study Note Compiler
     print("\n[Pipeline] Running Study Note Compiler...")
@@ -544,7 +557,8 @@ def generate_study_note(
         subject_name=subject_name,
         chapter_name=chapter_name,
         topic_name=topic_name,
-        language=language
+        language=language,
+        videos= videos                    #video add
     )
 
     print(f"\n{'='*50}")
@@ -555,5 +569,6 @@ def generate_study_note(
         "html": note_html,
         "note": note_output,
         "visuals": visual_output,
+        "videos": videos,
         "curriculum_context_used": curriculum_context[:200] + "..."
     }

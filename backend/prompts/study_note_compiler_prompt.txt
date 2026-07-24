@@ -124,3 +124,11 @@ CRITICAL:
 
 OUTPUT: Return ONLY the complete HTML string. No markdown, no explanation, just HTML.
 Start with <!DOCTYPE html> and end with </html>.
+
+
+YOUTUBE VIDEOS:
+{videos_json}
+
+Add a "Helpful Videos" section at the end of the HTML with these videos.
+For each video show: thumbnail image, title, channel name, duration, views, and a clickable link.
+If videos list is empty, do not add the section.

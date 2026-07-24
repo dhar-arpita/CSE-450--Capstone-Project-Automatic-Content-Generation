@@ -107,7 +107,8 @@
 // }
 
 import React, { useState } from "react";
-import { generateWorksheet } from "./api";
+// import { generateWorksheet } from "./api";
+import { generateWorksheet } from "../../shared/services/api";
 import RefineWorksheet from "./RefineWorksheet"; 
 
 export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }) {

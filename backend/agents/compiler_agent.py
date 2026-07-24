@@ -96,7 +96,8 @@ def run_study_note_compiler(
     subject_name: str,
     chapter_name: str,
     topic_name: str,
-    language: str = "english"
+    language: str = "english",
+    videos: list = None        # ← ADD
 ) -> str:
     """
     Compiler for study notes: takes the study note JSON + visuals and compiles
@@ -123,6 +124,7 @@ def run_study_note_compiler(
     prompt = template.format(
         note_json=json.dumps(note_output, indent=2),
         visuals_json=json.dumps(visuals_for_prompt, indent=2),
+        videos_json  = json.dumps(videos or [], indent=2),   # ← ADD
         class_name=class_name,
         subject_name=subject_name,
         chapter_name=chapter_name,
