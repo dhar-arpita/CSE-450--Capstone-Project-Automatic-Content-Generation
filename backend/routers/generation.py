@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
 import weasyprint
+from google.genai import errors as genai_errors
 from core.config import get_db
 from models.db_models import Topic, Chapter, Subject, Class, TeacherSession, TeacherSessionTopic, GeneratedContent
 from services.generation_service import (
@@ -72,18 +73,28 @@ async def create_worksheet(
 
     # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ──────────────────────
     # No DB connection is held open during this step.
-    result = generate_worksheet(
-        topic_id=topic_id,
-        topic_name=topic_name,
-        class_name=class_name,
-        subject_name=subject_name,
-        chapter_name=chapter_name,
-        chapter_id= topic.chapter_id,
-        difficulty=difficulty,
-        num_problems=num_problems,
-        sample_pdf_bytes=sample_bytes,
-        language=language
-    )
+    try:
+        result = generate_worksheet(
+            topic_id=topic_id,
+            topic_name=topic_name,
+            class_name=class_name,
+            subject_name=subject_name,
+            chapter_name=chapter_name,
+            chapter_id= topic.chapter_id,
+            difficulty=difficulty,
+            num_problems=num_problems,
+            sample_pdf_bytes=sample_bytes,
+            language=language
+        )
+    except genai_errors.ClientError as e:
+        # 429 that survived generate_with_backoff's retries — quota is truly
+        # exhausted right now, so tell the teacher rather than traceback.
+        if e.code == 429:
+            raise HTTPException(
+                status_code=503,
+                detail="The AI model is over capacity right now. Please try again in a minute."
+            )
+        raise
 
     if result.get("error"):
         raise HTTPException(status_code=500, detail=result["error"])
@@ -180,15 +191,23 @@ async def create_study_note(
     db.expire_all()
 
     # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ──────────────────────
-    result = generate_study_note(
-        topic_id=topic_id,
-        topic_name=topic_name,
-        class_name=class_name,
-        subject_name=subject_name,
-        chapter_name=chapter_name,
-        chapter_id=chapter_id,
-        language=language
-    )
+    try:
+        result = generate_study_note(
+            topic_id=topic_id,
+            topic_name=topic_name,
+            class_name=class_name,
+            subject_name=subject_name,
+            chapter_name=chapter_name,
+            chapter_id=chapter_id,
+            language=language
+        )
+    except genai_errors.ClientError as e:
+        if e.code == 429:
+            raise HTTPException(
+                status_code=503,
+                detail="The AI model is over capacity right now. Please try again in a minute."
+            )
+        raise
 
     if result.get("error"):
         raise HTTPException(status_code=500, detail=result["error"])
@@ -256,8 +275,32 @@ def download_worksheet_pdf(content_id: int, db: Session = Depends(get_db)):
     
     if not content:
         raise HTTPException(status_code=404, detail="Worksheet not found")
-    
-    pdf_bytes = weasyprint.HTML(string=content.display_body).write_pdf()
+
+    try:
+        pdf_bytes = weasyprint.HTML(string=content.display_body).write_pdf()
+    except AssertionError:
+        # WeasyPrint dies ("assert not page_is_empty") when an unbreakable
+        # element (break-inside/after: avoid, or a huge SVG) is taller than a
+        # page. Retry once with break protections stripped and image height
+        # capped — layout degrades slightly, but the PDF renders. The rescue
+        # rules go in as an extra stylesheet, so the stored HTML is untouched.
+        print(f"[PDF] Layout assertion for content {content_id} — retrying with rescue CSS")
+        rescue_css = weasyprint.CSS(string="""
+            * { break-inside: auto !important; page-break-inside: auto !important;
+                break-after: auto !important;  page-break-after: auto !important;
+                break-before: auto !important; page-break-before: auto !important; }
+            svg, img { max-height: 220mm !important; max-width: 100% !important;
+                       width: auto !important; height: auto !important; }
+        """)
+        try:
+            pdf_bytes = weasyprint.HTML(string=content.display_body).write_pdf(
+                stylesheets=[rescue_css]
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"PDF rendering failed for content {content_id}: {e}"
+            )
 
     # Name the file by content type: worksheet_5.pdf, study_note_7.pdf, ...
     file_prefix = content.content_type or "worksheet"

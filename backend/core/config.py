@@ -1,10 +1,13 @@
 # settings.py
 import os
+import time
+import random
 from dotenv import load_dotenv
 
 # NEW: use the modern google-genai package instead of google-generativeai
 from google import genai
 from google.genai import types
+from google.genai import errors as genai_errors
 
 from qdrant_client import QdrantClient
 from sqlalchemy import create_engine
@@ -49,6 +52,29 @@ if GOOGLE_GENAI_USE_VERTEXAI:
 else:
     # Fallback: AI Studio via API key (original behavior)
     gemini_client = genai.Client(api_key=GOOGLE_API_KEY)
+
+def generate_with_backoff(model, contents, config=None, max_attempts=4):
+    """
+    gemini_client.models.generate_content with exponential backoff on
+    429 RESOURCE_EXHAUSTED. The pipeline fires several Gemini calls
+    back-to-back per request, so per-minute quota can run out mid-pipeline;
+    waiting out the quota window (~15s/30s/60s + jitter) saves the request
+    instead of throwing away all the work done by earlier agents.
+    Any other error, and a 429 on the final attempt, is re-raised.
+    """
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return gemini_client.models.generate_content(
+                model=model, contents=contents, config=config
+            )
+        except genai_errors.ClientError as e:
+            if e.code != 429 or attempt == max_attempts:
+                raise
+            delay = 15 * (2 ** (attempt - 1)) + random.uniform(0, 3)
+            print(f"[Gemini] 429 quota hit — retrying in {delay:.0f}s "
+                  f"(attempt {attempt}/{max_attempts})")
+            time.sleep(delay)
+
 
 # Qdrant setup — uses cloud if URL is provided, otherwise falls back to local memory
 if QDRANT_URL:

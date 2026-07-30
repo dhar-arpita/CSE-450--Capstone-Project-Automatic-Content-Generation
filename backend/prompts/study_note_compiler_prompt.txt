@@ -46,13 +46,12 @@ BILINGUAL EXCEPTION: the Intuition label is the ONLY bilingual label. When
 Bengali label is Bengali ONLY — never append the English name in brackets to any
 other heading, and never leave an English heading in a Bengali note.
 
-TITLE RULE: the page title is the note JSON's "topic_title" field. Copy it EXACTLY as
-given. For a Bengali note it arrives bilingual, e.g. "আপেক্ষিক তাপ (Specific Heat)"; for an
-English note it arrives as plain English, e.g. "Specific Heat". Either way, copy it
-verbatim: do not translate it, do not reorder or drop anything, do not add a bracketed
-translation of your own, and do not add the class or chapter into it. If "topic_title" is
-missing or empty, fall back to {topic_name}. Concept block headings work the same way —
-copy each one exactly as given.
+TITLE RULE: you do NOT render the page title or header yourself. The system injects a
+fixed header (title + class/subject/chapter line) after you finish. Your job: the very
+first thing inside <body> must be the literal token [[NOTE_HEADER]] on its own line.
+Never write your own <h1>, page title, or class/subject/chapter line anywhere — the
+token is the entire header. Concept block headings are different: copy each one exactly
+as given in the JSON — do not translate, reorder, or add bracketed translations.
 
 When {language} is "english" the finished page must contain NO Bengali characters at all.
 If a Bengali word reaches you in an English note, drop the Bengali and keep the English.
@@ -78,8 +77,7 @@ another section (e.g. never place a worked example between two misconception pai
 All worked examples appear together in section 5; all misconceptions together in section 6.
 Every section heading below is written using the LABEL TABLE column for {language}.
 
-1. Header: the bilingual "topic_title" as the page title, with class / subject / chapter
-   shown small beneath it.
+1. Header: the literal token [[NOTE_HEADER]] — nothing else. See TITLE RULE.
 2. Hook — an inviting opening paragraph, visually distinct (e.g. subtle tinted intro box).
    It carries NO heading.
 3. Learning objectives — bulleted list, under the "Learning objectives" label.
@@ -133,9 +131,9 @@ HTML RULES:
 
 HEADING TAG RULE (CRITICAL — prevents a heading stranded alone at the foot of a page):
 Every heading MUST be a real heading element, never a styled <div> or <p>:
-  - the page title            → <h1>
   - each section label        → <h2>
   - each concept block heading→ <h3>
+(The page title/<h1> is injected by the system via [[NOTE_HEADER]] — never write one.)
 Style them however you like, but keep the tag. A heading written as a <div> gets
 separated from the content beneath it and leaves a large blank gap on the page.
 Additionally, give every heading rule this declaration:

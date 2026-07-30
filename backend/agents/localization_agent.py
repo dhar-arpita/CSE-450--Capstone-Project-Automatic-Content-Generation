@@ -1,8 +1,7 @@
 # localization_agent.py
 import json
 from agents.content_agent import load_prompt_template
-from core.config import gemini_client
-from core.config import gemini_client, SMART_MODEL
+from core.config import SMART_MODEL, generate_with_backoff
 from google.genai import types
 from agents.json_utils import repair_json
 
@@ -28,7 +27,7 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
         response_mime_type="application/json"
     )
 
-    response = gemini_client.models.generate_content(
+    response = generate_with_backoff(
         model=SMART_MODEL,
         contents=prompt,
         config=config
@@ -42,7 +41,7 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
     except json.JSONDecodeError as e:
         print(f"[Localization Agent] JSON parse error: {e} — retrying once")
         try:
-            response = gemini_client.models.generate_content(
+            response = generate_with_backoff(
                 model=SMART_MODEL,
                 contents=prompt,
                 config=config

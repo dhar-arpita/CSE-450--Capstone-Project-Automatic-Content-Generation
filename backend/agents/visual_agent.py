@@ -1,10 +1,25 @@
 # visual_agent.py
 import json
 from agents.content_agent import load_prompt_template
-from core.config import gemini_client
-from core.config import gemini_client, SMART_MODEL
+from core.config import SMART_MODEL, generate_with_backoff
 from google.genai import types
 from agents.json_utils import repair_json
+
+
+def _normalize_visual_result(parsed) -> dict:
+    """
+    Gemini sometimes returns a bare JSON array of visuals instead of the
+    {"robot_mascot", "problem_visuals"} object the prompt asks for. json.loads
+    succeeds on that, so it slips past the JSONDecodeError retry and crashes
+    downstream on result.get(). Coerce every shape into the expected dict.
+    """
+    if isinstance(parsed, dict):
+        return parsed
+    if isinstance(parsed, list):
+        print("[Visual Agent] Model returned a list — wrapping as problem_visuals")
+        return {"robot_mascot": "", "problem_visuals": parsed}
+    print(f"[Visual Agent] Unexpected JSON type {type(parsed).__name__} — using empty result")
+    return {"robot_mascot": "", "problem_visuals": []}
 
 
 def run_visual_agent(localization_output: dict, style_description: str = "", language: str = "english") -> dict:
@@ -36,7 +51,7 @@ def run_visual_agent(localization_output: dict, style_description: str = "", lan
         response_mime_type="application/json"
     )
 
-    response = gemini_client.models.generate_content(
+    response = generate_with_backoff(
         model=SMART_MODEL,
         contents=prompt,
         config=config
@@ -44,7 +59,7 @@ def run_visual_agent(localization_output: dict, style_description: str = "", lan
 
     raw = repair_json(response.text)
     try:
-        result = json.loads(raw)
+        result = _normalize_visual_result(json.loads(raw))
         visual_count = len(result.get("problem_visuals", []))
         has_mascot = bool(result.get("robot_mascot", ""))
         print(f"[Visual Agent] Created {visual_count} diagrams, mascot: {'Yes' if has_mascot else 'No'}")
@@ -52,13 +67,13 @@ def run_visual_agent(localization_output: dict, style_description: str = "", lan
     except json.JSONDecodeError as e:
         print(f"[Visual Agent] JSON parse error: {e} — retrying once")
         try:
-            response = gemini_client.models.generate_content(
+            response = generate_with_backoff(
                 model=SMART_MODEL,
                 contents=prompt,
                 config=config
             )
             raw = repair_json(response.text)
-            result = json.loads(raw)
+            result = _normalize_visual_result(json.loads(raw))
             visual_count = len(result.get("problem_visuals", []))
             has_mascot = bool(result.get("robot_mascot", ""))
             print(f"[Visual Agent] Created {visual_count} diagrams, mascot: {'Yes' if has_mascot else 'No'} (retry)")

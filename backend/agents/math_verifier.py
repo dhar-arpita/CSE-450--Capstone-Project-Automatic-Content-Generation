@@ -26,7 +26,7 @@ from google.genai import types
 
 # Import Gemini client and FAST_MODEL — expression extraction is a simple task
 # so we use the cheap fast model to minimize API cost and latency
-from core.config import gemini_client, SMART_MODEL
+from core.config import SMART_MODEL, generate_with_backoff
 
 # List and Optional for type hints
 from typing import List, Optional
@@ -108,7 +108,7 @@ Answer: "Two thousand seven hundred fifty-six"
 
     try:
         # Call Gemini with FAST_MODEL — extraction is a simple classification task
-        response = gemini_client.models.generate_content(
+        response = generate_with_backoff(
             model=SMART_MODEL,
             contents=extraction_prompt,
             config=types.GenerateContentConfig(

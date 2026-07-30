@@ -1,6 +1,6 @@
 # refinement_agent.py
 import json
-from core.config import gemini_client, SMART_MODEL
+from core.config import SMART_MODEL, generate_with_backoff
 from google.genai import types
 from agents.content_agent import load_prompt_template
 from agents.json_utils import repair_json
@@ -44,7 +44,7 @@ def run_refinement_agent(
         response_mime_type="application/json"
     )
 
-    response = gemini_client.models.generate_content(
+    response = generate_with_backoff(
         model=SMART_MODEL,
         contents=prompt,
         config=config
@@ -60,7 +60,7 @@ def run_refinement_agent(
     except json.JSONDecodeError as e:
         print(f"[Refinement Agent] JSON parse error: {e} — retrying once")
         try:
-            response = gemini_client.models.generate_content(
+            response = generate_with_backoff(
                 model=SMART_MODEL,
                 contents=prompt,
                 config=config

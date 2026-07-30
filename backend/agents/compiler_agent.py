@@ -1,8 +1,9 @@
 # compiler_agent.py
 import json
 import re
+import html as html_lib
 from agents.content_agent import load_prompt_template
-from core.config import gemini_client, SMART_MODEL
+from core.config import SMART_MODEL, generate_with_backoff
 from google.genai import types
 
 
@@ -157,7 +158,7 @@ def run_compiler_agent(
 
     )
 
-    response = gemini_client.models.generate_content(
+    response = generate_with_backoff(
         model=SMART_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
@@ -175,8 +176,92 @@ def run_compiler_agent(
     if html.endswith("```"):
         html = html[:-3]
 
+    html = convert_math_notation(html)
+
     print(f"[Compiler Agent] Generated HTML worksheet ({len(html)} chars)")
     return html.strip()
+
+
+# Protected regions convert_math_notation() must never touch: whole SVG diagrams
+# (<sub>/<sup> are not valid SVG markup), style/script blocks, and HTML tags
+# themselves (attributes and URLs are full of underscores).
+_MATH_PROTECTED = re.compile(
+    r"(<svg\b.*?</svg>|<style\b.*?</style>|<script\b.*?</script>|<[^>]+>)",
+    re.IGNORECASE | re.DOTALL,
+)
+# v_avg / F_net / x_1: a SINGLE Latin or Greek letter, then _, then 1-6
+# alphanumerics. Requiring a single letter is what makes this safe — math
+# notation always has one-letter bases, while underscores in prose, video
+# titles, or filenames sit between multi-letter words and never match.
+_SUBSCRIPT = re.compile(r"(?<![A-Za-z0-9_])([A-Za-zΑ-ω])_([A-Za-z0-9]{1,6})(?![A-Za-z0-9_])")
+# v^2 / 10^-3: caret after an alphanumeric (or closing bracket) base.
+_SUPERSCRIPT = re.compile(r"(?<=[A-Za-z0-9)\]])\^(-?[A-Za-z0-9]{1,4})(?![A-Za-z0-9_])")
+
+
+def convert_math_notation(html: str) -> str:
+    """
+    Render plain-ASCII math notation properly: v_avg → v<sub>avg</sub>,
+    v^2 → v<sup>2</sup>. Unicode has no subscript form for most letters
+    (there is no subscript g, so "avg" cannot be written), which forces the
+    LLM to emit underscore notation — this converts it deterministically.
+    Only visible text is processed; tags, SVGs, styles and scripts pass
+    through untouched.
+    """
+    parts = _MATH_PROTECTED.split(html)
+    # re.split with one capture group alternates [text, protected, text, ...]
+    for i in range(0, len(parts), 2):
+        part = _SUBSCRIPT.sub(r"\1<sub>\2</sub>", parts[i])
+        parts[i] = _SUPERSCRIPT.sub(r"<sup>\1</sup>", part)
+    return "".join(parts)
+
+
+NOTE_HEADER_TOKEN = "[[NOTE_HEADER]]"
+
+
+def build_note_header(topic_title: str, class_name: str,
+                      subject_name: str, chapter_name: str) -> str:
+    """
+    The fixed top section every study note must open with: the topic title big
+    and bold (bilingual for Bangla notes, plain English otherwise — exactly as
+    topic_title arrives from the Study Note Agent), and a muted uppercase
+    class/subject/chapter line over a divider. Built here, not by the LLM, so
+    the format is identical on every note. Styles are inline so the header is
+    immune to whatever CSS the model wrote.
+    """
+    esc = html_lib.escape
+    fonts = "'Noto Sans Bengali', 'Kohinoor Bangla', 'Bangla MN', 'Segoe UI', Arial, sans-serif"
+    return (
+        f'<header class="note-fixed-header" style="text-align:center; '
+        f'padding:2mm 0 5mm 0; border-bottom:2px solid #E8EBF0; margin:0 0 6mm 0;">'
+        f'<h1 style="font-family:{fonts}; font-size:25pt; font-weight:800; '
+        f'color:#1B2437; margin:0 0 3mm 0; break-after:avoid; page-break-after:avoid;">'
+        f'{esc(topic_title)}</h1>'
+        f'<p style="font-family:{fonts}; font-size:10.5pt; color:#5B6B87; '
+        f'text-transform:uppercase; letter-spacing:0.05em; margin:0;">'
+        f'{esc(class_name)} &bull; Subject: {esc(subject_name)} &bull; '
+        f'Chapter: {esc(chapter_name)}</p>'
+        f'</header>'
+    )
+
+
+def inject_note_header(html: str, header_html: str) -> str:
+    """
+    Replace the NOTE_HEADER_TOKEN the prompt asks for with the fixed header.
+    LLM compliance is not 100%: if the token is missing, strip the model's own
+    <h1> (its improvised title) and insert the header at the top of <body>, so
+    every note gets exactly one header in the exact format.
+    """
+    if NOTE_HEADER_TOKEN in html:
+        html = html.replace(NOTE_HEADER_TOKEN, header_html, 1)
+        # remove any duplicate tokens the model may have scattered
+        return html.replace(NOTE_HEADER_TOKEN, "")
+
+    print("[Study Note Compiler] WARNING: [[NOTE_HEADER]] missing — stripping model header and injecting")
+    html = re.sub(r"<h1\b[^>]*>.*?</h1>", "", html, count=1, flags=re.DOTALL | re.IGNORECASE)
+    match = re.search(r"<body[^>]*>", html, flags=re.IGNORECASE)
+    if match:
+        return html[:match.end()] + "\n" + header_html + html[match.end():]
+    return header_html + "\n" + html
 
 
 def run_study_note_compiler(
@@ -222,7 +307,7 @@ def run_study_note_compiler(
         language=language
     )
 
-    response = gemini_client.models.generate_content(
+    response = generate_with_backoff(
         model=SMART_MODEL,
         contents=prompt,
         config=types.GenerateContentConfig(
@@ -240,6 +325,16 @@ def run_study_note_compiler(
     if html.endswith("```"):
         html = html[:-3]
 
+    # Fixed header: built in Python, not by the LLM, so every note opens with
+    # the exact same title + class/subject/chapter format.
+    header_html = build_note_header(
+        topic_title=(note_output.get("topic_title") or "").strip() or topic_name,
+        class_name=class_name,
+        subject_name=subject_name,
+        chapter_name=chapter_name,
+    )
+    html = inject_note_header(html, header_html)
+
     # Substitute the real SVG code for each placeholder: first occurrence gets
     # the SVG, any duplicates are removed so a diagram can never appear twice.
     for token, svg in svg_by_token.items():
@@ -248,6 +343,8 @@ def run_study_note_compiler(
             html = html.replace(token, "")
         else:
             print(f"[Study Note Compiler] WARNING: {token} missing from HTML — diagram dropped")
+
+    html = convert_math_notation(html)
 
     if language and language.strip().lower() == "bangla":
         html = ensure_bengali_font_fallbacks(html)
