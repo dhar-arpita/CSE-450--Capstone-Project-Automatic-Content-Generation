@@ -94,12 +94,38 @@ FIXED SECTION STRUCTURE — the note MUST contain these sections in this exact o
 Sections 6 (misconceptions), 7 (real_world_connection), 8 (recap) and 9 (self_check) are
 MANDATORY in every note — never drop or leave any of them empty.
 
-SECTION LABELS (English keys — do not localize):
-The schema keys below ARE the section labels; the compiler renders them under fixed ENGLISH
-headings ("Learning Objectives", "Core Concepts", "Worked Examples", "Common Misconceptions",
-"Real-World Connection", "Quick Recap", "Check Yourself") regardless of {language}.
+SECTION LABELS (English keys — do not localize the KEYS):
+The schema keys below ARE the section labels. The compiler renders each key under its own
+heading in {language} — it owns that wording completely, and it already knows the Bengali
+wording for every section.
 Therefore: never write your own section headings inside any text field (no "শিখনফল:",
-"Worked Example 1:" etc. embedded in prose) — emit content only; structure comes from the keys.
+"মূল বিষয়বস্তু", "Worked Example 1:" etc. embedded in prose) — emit content only;
+structure and headings come from the keys.
+
+BILINGUAL NAMING RULE (applies to titles and headings only):
+1. When {language} is "english", the note is ENGLISH ONLY. No Bengali anywhere — not in
+   the title, not in headings, not in brackets, not one word. Write "Specific Heat", never
+   "Specific Heat (আপেক্ষিক তাপ)".
+2. When {language} is "bangla", "topic_title" MUST be bilingual: the Bengali name first,
+   then the English name in round brackets — "আপেক্ষিক তাপ (Specific Heat)".
+   Use the standard, established term in each language — the term an NCTB textbook and an
+   international textbook would each actually use. Never transliterate an English term into
+   Bengali script when a real Bengali term exists (write "আপেক্ষিক তাপ", never "স্পেসিফিক হিট"),
+   and never invent a term. The topic given to you is {topic_name}; if that string is in
+   English, supply the Bengali name for it.
+3. When {language} is "bangla", every concept block "heading" follows the same pattern, e.g.
+   "গলন ও স্ফুটন (Melting and Boiling)". When {language} is "english", block headings are
+   plain English: "Melting and Boiling".
+4. The bracketed pattern applies ONLY to "topic_title" and block headings. Body prose
+   (hook, intuition, formal, examples, misconceptions, recap, self-check) is written in
+   {language} alone — do NOT scatter bracketed glosses through the prose. In a Bengali note
+   only, one exception: a technical term whose English form a student genuinely needs to
+   recognise may be glossed in brackets at its FIRST occurrence only (e.g. "সুপ্ততাপ
+   (Latent Heat)"), never again. An English note gets no glosses at all.
+
+SCRIPT RULE: write Bengali in Bengali script only. Never emit Devanagari, Hindi, or any
+other Indic script — not even for a single word or a single letter inside a word. If you
+are unsure how a word is spelled in Bengali, choose a simpler word you are sure of.
 
 DIAGRAM RULES:
 - Flag a concept block with "needs_diagram": true ONLY when a picture genuinely aids
@@ -132,15 +158,19 @@ SELF-CHECK — before returning your response, verify:
 7. Everything is about {topic_name} only, nothing is fabricated beyond the context and
    standard subject knowledge, and nothing exceeds the {class_name} NCTB grade scope.
 8. Vocabulary and rigor fit {class_name}.
+9. "topic_title" and every concept block "heading" are bilingual in the correct order for
+   {language}, using real terms in both languages — and no body text field contains a
+   heading you wrote yourself.
 
 OUTPUT FORMAT (return ONLY valid JSON, no markdown):
 {{
     "topic_name": "{topic_name}",
+    "topic_title": "the bilingual title, e.g. আপেক্ষিক তাপ (Specific Heat)",
     "hook": "...",
     "learning_objectives": ["..."],
     "concept_blocks": [
         {{
-            "heading": "...",
+            "heading": "bilingual, e.g. গলন ও স্ফুটন (Melting and Boiling)",
             "intuition": "...",
             "formal": "...",
             "formula": "... or null",

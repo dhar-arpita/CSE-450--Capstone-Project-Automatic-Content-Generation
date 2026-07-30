@@ -48,7 +48,23 @@ SVG RULES:
 6. For number lines: use line with tick marks and labels
 7. For grids: use rect elements in rows and columns
 8. For shapes: use polygon, rect, circle with measurement labels
-9. Every SVG must use viewBox (e.g., viewBox='0 0 400 280') and set width='100%' so it scales. Minimum viewBox: 300x200. Maximum viewBox: 800x500 (the cap is intentionally generous so bar-model rule 12 can fit all segments and labels without overlap). Do NOT set fixed pixel width/height attributes — use viewBox + width='100%' only.
+9. Every SVG must use viewBox (e.g., viewBox='0 0 800 360') and set width='100%' so it scales.
+   Do NOT set fixed pixel width/height attributes — use viewBox + width='100%' only.
+
+   ASPECT RATIO RULE (CRITICAL — this, and ONLY this, controls how much vertical space
+   the diagram takes on the printed page):
+   Because the SVG is rendered at the full width of the text column, the absolute viewBox
+   numbers do not affect its printed size at all — only the ratio height/width does.
+   A viewBox of '0 0 300 200' prints TALLER than one of '0 0 800 500', because 200/300 is
+   a bigger ratio than 500/800. Therefore:
+     - Keep viewBox height / viewBox width at or below 0.55. Aim for about 0.45 (roughly 2:1,
+       landscape). Example good values: 800x360, 800x400, 700x315, 600x270.
+     - NEVER emit a square or portrait viewBox (like 600x600 or 400x500). A square diagram
+       is over half a page tall and wrecks the page layout.
+     - Choose the viewBox WIDTH freely — make it as large as the spacing rules below need
+       (that costs nothing on the page), then set the height to width x 0.45.
+     - If the content genuinely will not fit at that ratio, lay it out horizontally (side by
+       side) instead of stacking vertically, and widen the viewBox rather than heightening it.
 10. Include text labels inside SVG where needed
 11. Use readable font sizes in SVG: minimum 14px for numbers and labels, 12px for small annotations. Text must be legible when printed on A4.
 12. BAR MODEL / LABEL SPACING RULES (CRITICAL — prevents overlapping garbled text):
@@ -57,7 +73,7 @@ SVG RULES:
     c. NO TEXT OVERLAP: Before placing any text element, ensure its x position is at least 100px away from the previous text element's x position. If bars are too narrow for text, stack labels vertically or use abbreviations.
     d. TEXT ANCHORING: Always use text-anchor="middle" and position text at the center of its bar segment: x = bar_x + (bar_width / 2).
     e. FONT SIZE VS BAR WIDTH: If a bar segment is narrower than 80px, reduce the font size inside it to 12px. Never use font-size larger than the bar width.
-    f. VIEWBOX CALCULATION: Always calculate viewBox width based on content. Formula: total_bar_width + (gaps * gap_size) + left_padding + right_padding. Never use a fixed viewBox smaller than 350 width.
+    f. VIEWBOX CALCULATION: Always calculate viewBox width based on content. Formula: total_bar_width + (gaps * gap_size) + left_padding + right_padding. Never use a fixed viewBox smaller than 350 width. Then set the viewBox HEIGHT to at most 0.55 x that width (rule 9) — if the drawing needs more vertical room, increase the width to match rather than growing the height.
     g. VALIDATION: After generating each SVG, mentally verify: can every single text label be read without overlapping any other text? If not, increase the viewBox width or reduce font sizes.
     h. For bar models with a "Total" bar below, add at least 60px vertical gap between the segment bars and the total bar. The total bar should span the full width of all segments above it.
 

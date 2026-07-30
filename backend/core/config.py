@@ -24,7 +24,7 @@ GOOGLE_VERTEX_API_KEY = os.getenv("GOOGLE_VERTEX_API_KEY")
 GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
 GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
 
-SMART_MODEL = "gemini-3.5-flash"
+SMART_MODEL = "gemini-3.6-flash"
 FAST_MODEL = "gemini-3.1-flash-lite"
 
 if GOOGLE_GENAI_USE_VERTEXAI:

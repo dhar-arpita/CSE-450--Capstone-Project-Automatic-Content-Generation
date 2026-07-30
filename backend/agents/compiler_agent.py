@@ -35,6 +35,96 @@ def ensure_bengali_font_fallbacks(html: str) -> str:
     return re.sub(r'(font-family\s*:\s*)([^;}<"]+)', fix, html)
 
 
+NOTE_LAYOUT_CSS = """<style>
+/* ── injected by normalize_note_layout() — do not edit in generated HTML ──
+   Geometry guarantees for WeasyPrint/A4. Injected last so it wins the cascade;
+   !important is required because the model's own selectors are often more
+   specific than a bare tag selector. */
+
+@page { size: A4; margin: 15mm; }          /* printable area: 180mm x 267mm */
+
+/* A heading must never be stranded at the foot of a page, away from the content
+   it introduces. WeasyPrint's default stylesheet only protects real h1-h6 tags,
+   so a heading the model wrote as a styled <div> orphans itself. The attribute
+   selectors catch that case, since the model names such classes semantically
+   ("section-title", "block-heading", ...). */
+h1, h2, h3, h4, h5, h6,
+[class*="title"], [class*="heading"], [class*="header"], [class*="label"] {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
+    break-inside: avoid !important;
+}
+
+/* Keeping a whole concept card unbreakable is what empties a page: a card taller
+   than the space remaining is moved down in one piece and leaves a gap behind it.
+   Large containers must stay splittable... */
+[class*="card"], [class*="block"], [class*="concept"], [class*="section"],
+[class*="wrap"], [class*="container"], [class*="content"], ul, ol {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+}
+
+/* ...while the small indivisible units keep their protection. Declared after the
+   rule above so it wins for elements matching both. !important also beats the
+   inline styles the model likes to attach to these. */
+[class*="definition"], [class*="defbox"], [class*="formula"], [class*="symbol"],
+[class*="example"], [class*="misconception"], [class*="wrong"], [class*="correct"],
+[class*="recap-item"], [class*="check"], [class*="diagram"], [class*="visual"],
+[class*="video"], table, tr, svg {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+}
+
+/* Diagrams carry width='100%', so the viewBox numbers do not determine printed
+   size — only the aspect ratio does, and an unconstrained diagram runs 107mm to
+   170mm tall (over half a page). Capping the height is the only reliable lever.
+   width/height:auto lets the SVG keep its own ratio while the caps bound it. */
+svg {
+    max-height: 60mm !important;
+    max-width: 100% !important;
+    width: auto !important;
+    height: auto !important;
+}
+
+p, li { orphans: 2; widows: 2; }
+</style>"""
+
+
+def normalize_note_layout(html: str) -> str:
+    """
+    Guarantee the page geometry of a generated study note.
+
+    The compiler prompt asks for all of this, but the note is written fresh by an
+    LLM on every run, so compliance varies and layout regressions reappear. This
+    appends an authoritative stylesheet at the very end of <head> (or before the
+    first element, if the model omitted <head>) so the rules below hold no matter
+    what CSS the model produced:
+
+      - fixed A4 page box and margin, so printable height is not a lottery
+      - headings kept with the content that follows them
+      - every diagram capped at 60mm tall
+
+    Idempotent: re-running on already-normalized HTML is a no-op.
+    """
+    if "normalize_note_layout()" in html:
+        return html
+
+    lowered = html.lower()
+
+    idx = lowered.rfind("</head>")
+    if idx != -1:
+        return html[:idx] + NOTE_LAYOUT_CSS + "\n" + html[idx:]
+
+    # No </head> — fall back to just after <body>, else prepend to the document.
+    match = re.search(r"<body[^>]*>", html, flags=re.IGNORECASE)
+    if match:
+        print("[Study Note Compiler] WARNING: no </head> found, injecting layout CSS after <body>")
+        return html[:match.end()] + "\n" + NOTE_LAYOUT_CSS + html[match.end():]
+
+    print("[Study Note Compiler] WARNING: no </head> or <body> found, prepending layout CSS")
+    return NOTE_LAYOUT_CSS + "\n" + html
+
+
 def run_compiler_agent(
     localization_output: dict,
     visual_output: dict,
@@ -161,6 +251,10 @@ def run_study_note_compiler(
 
     if language and language.strip().lower() == "bangla":
         html = ensure_bengali_font_fallbacks(html)
+
+    # Applies to study notes only — the worksheet compiler keeps its own layout,
+    # where a full-width mascot and larger diagrams are intentional.
+    html = normalize_note_layout(html)
 
     print(f"[Study Note Compiler] Generated HTML study note ({len(html)} chars)")
     return html.strip()

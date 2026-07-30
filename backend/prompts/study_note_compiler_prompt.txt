@@ -20,15 +20,48 @@ modern, calm colors, generous white space, clear visual hierarchy. This is a rea
 document, NOT a worksheet — no mascot, no name/date fields, no answer blanks.
 ═════════════════════════════════════════════════════════════╗
 ABSOLUTE LANGUAGE RULE — READ THIS FIRST
-The fixed section headings are ALWAYS in English, regardless of {language} — exactly these
-labels, verbatim (this matches bilingual textbook convention):
-  "Learning Objectives", "Core Concepts", "Worked Examples", "Common Misconceptions",
-  "Real-World Connection", "Quick Recap", "Check Yourself"
-Never translate these labels into Bengali, even when {language} is "bangla".
+
+Every heading and label you generate must be copied VERBATIM from the LABEL TABLE
+below, from the column matching {language}. Never invent your own wording, never
+translate a label yourself, and never mix the two columns in one page.
+
+LABEL TABLE
+  Purpose                  | {language} = "english"  | {language} = "bangla"
+  -------------------------|-------------------------|--------------------------
+  Learning objectives      | Learning Objectives     | শিখনফল
+  Concept section heading  | Core Concepts           | মূল বিষয়বস্তু
+  Intuition label (block)  | Intuition               | সহজ উপলব্ধি (Intuition)
+  Definition label (block) | Definition              | সংজ্ঞা
+  Worked examples          | Worked Examples         | উদাহরণ ও সমাধান
+  Misconceptions           | Common Misconceptions   | প্রচলিত ভুল ধারণা
+  Wrong-idea marker        | ✗ Wrong Idea            | ✗ ভুল ধারণা
+  Correction marker        | ✓ Correction            | ✓ সঠিক ধারণা
+  Real-world connection    | Real-World Connection   | বাস্তব প্রয়োগ
+  Quick recap              | Quick Recap             | একনজরে
+  Self-check               | Check Yourself          | যাচাই করে দেখি
+  Videos section           | Helpful Videos          | সহায়ক ভিডিও
+
+BILINGUAL EXCEPTION: the Intuition label is the ONLY bilingual label. When
+{language} is "bangla" write it exactly as "সহজ উপলব্ধি (Intuition)". Every other
+Bengali label is Bengali ONLY — never append the English name in brackets to any
+other heading, and never leave an English heading in a Bengali note.
+
+TITLE RULE: the page title is the note JSON's "topic_title" field. Copy it EXACTLY as
+given. For a Bengali note it arrives bilingual, e.g. "আপেক্ষিক তাপ (Specific Heat)"; for an
+English note it arrives as plain English, e.g. "Specific Heat". Either way, copy it
+verbatim: do not translate it, do not reorder or drop anything, do not add a bracketed
+translation of your own, and do not add the class or chapter into it. If "topic_title" is
+missing or empty, fall back to {topic_name}. Concept block headings work the same way —
+copy each one exactly as given.
+
+When {language} is "english" the finished page must contain NO Bengali characters at all.
+If a Bengali word reaches you in an English note, drop the Bengali and keep the English.
+
 The note BODY text (hook, intuition, definitions, example text, misconception text,
 recap bullets, self-check questions) stays in {language}: copy it EXACTLY as given in
 the JSON — it is already in the correct language; do not translate, rewrite, shorten,
 or paraphrase it.
+The footer line stays in English in all cases.
 In ALL cases keep numerals and math symbols standard (5, +, =), never Bengali numerals.
 This includes ALL numbering you generate: question numbers, step numbers, example numbers,
 and ordered-list markers must use standard digits (1. 2. 3.), never ১. ২. ৩. — and never
@@ -43,20 +76,34 @@ THE ORDER IS FIXED AND MUST NEVER BE REORDERED OR INTERLEAVED: every section is 
 contiguous block. Never insert a worked example, diagram, or any other element inside
 another section (e.g. never place a worked example between two misconception pairs).
 All worked examples appear together in section 5; all misconceptions together in section 6.
-1. Header: topic name as the title, with class / subject / chapter shown small beneath it.
+Every section heading below is written using the LABEL TABLE column for {language}.
+
+1. Header: the bilingual "topic_title" as the page title, with class / subject / chapter
+   shown small beneath it.
 2. Hook — an inviting opening paragraph, visually distinct (e.g. subtle tinted intro box).
-3. Learning objectives — bulleted list.
-4. Concept blocks — one styled card per block, each showing IN THIS ORDER:
-   the heading, the intuition paragraph, the formal definition (visually distinguished,
-   e.g. bordered "Definition" box), then the formula (if not null) in a centered formula box
-   with the symbols table beneath it (symbol | meaning), then the block's diagram (see below).
-5. Worked examples — each in its own box: the problem, the numbered steps, then the answer
-   clearly highlighted.
-6. Misconceptions — each as a pair: the wrong idea (marked ✗ / warm warning tint) and the
-   correction (marked ✓ / calm confirming tint).
-7. Real-world connection — only if not null; a short highlighted aside.
-8. Quick recap — compact bulleted summary.
-9. Self-check — numbered questions, each followed by its answer in smaller, subdued text.
+   It carries NO heading.
+3. Learning objectives — bulleted list, under the "Learning objectives" label.
+4. Concept blocks — under the "Concept section heading" label, one styled card per block.
+   Each card shows IN THIS ORDER:
+   a. the block's bilingual heading, copied exactly from the JSON;
+   b. the "Intuition label (block)" as a small label, then the intuition paragraph;
+   c. the "Definition label (block)" as the caption of a visually distinguished box
+      (e.g. bordered/tinted), containing the formal definition;
+   d. the formula (if not null) in a centered formula box, with the symbols table
+      beneath it (symbol | meaning);
+   e. the block's diagram (see DIAGRAM PLACEMENT RULE below).
+   The Intuition and Definition labels appear in EVERY concept block — never omit them
+   and never substitute a different word.
+5. Worked examples — under the "Worked examples" label; each in its own box: the problem,
+   the numbered steps, then the answer clearly highlighted.
+6. Misconceptions — under the "Misconceptions" label; each as a pair: the wrong idea
+   (prefixed with the "Wrong-idea marker" / warm warning tint) and the correction
+   (prefixed with the "Correction marker" / calm confirming tint).
+7. Real-world connection — only if not null; a short highlighted aside under the
+   "Real-world connection" label.
+8. Quick recap — compact bulleted summary under the "Quick recap" label.
+9. Self-check — under the "Self-check" label; numbered questions, each followed by its
+   answer in smaller, subdued text.
 10. Footer (small text: "Generated by EduContent - NCTB Aligned").
 
 DIAGRAM PLACEMENT RULE:
@@ -77,12 +124,32 @@ MATH ACCURACY IS NON-NEGOTIABLE:
 
 HTML RULES:
 1. Use inline CSS only (no external stylesheets)
-2. Page size: A4 (210mm x 297mm)
+2. Open your <style> block with exactly this page rule — do not change the margin:
+     @page {{ size: A4; margin: 15mm; }}
+   This leaves a printable area of 180mm x 267mm. Every rule below assumes it.
 3. Use clean readable fonts: 'Georgia', 'Segoe UI', Arial, sans-serif — textbook feel, not childish
 4. Use calm background tints for boxes: #F0F7FF (light blue), #FFF9EC (soft cream), #F3FBF4 (soft green)
 5. Body text minimum 12pt equivalent; clear heading hierarchy (title > section > block heading)
-6. Sections must not break awkwardly: use "page-break-inside: avoid" on concept block,
-   worked example, and misconception boxes so printing on A4 stays clean
+
+HEADING TAG RULE (CRITICAL — prevents a heading stranded alone at the foot of a page):
+Every heading MUST be a real heading element, never a styled <div> or <p>:
+  - the page title            → <h1>
+  - each section label        → <h2>
+  - each concept block heading→ <h3>
+Style them however you like, but keep the tag. A heading written as a <div> gets
+separated from the content beneath it and leaves a large blank gap on the page.
+Additionally, give every heading rule this declaration:
+  break-after: avoid; page-break-after: avoid;
+
+PAGE-BREAK RULE (CRITICAL — prevents half-empty pages):
+Apply "break-inside: avoid; page-break-inside: avoid;" ONLY to small, indivisible units:
+  ✓ the definition box, the formula box, the symbols table, the diagram wrapper,
+    ONE worked example, ONE misconception pair, ONE self-check item
+Never apply it to a large container:
+  ✗ the concept block card, the body wrapper, the objectives list, the recap list,
+    the worked-examples section as a whole, the misconceptions section as a whole
+A big box that cannot split is moved to the next page in one piece, leaving everything
+behind it blank. Large containers MUST stay splittable so a page fills up properly.
 
 FONT RULE (CRITICAL — prevents corrupted Bengali glyphs in the PDF):
 When {language} is "bangla", EVERY font-family declaration in the page — body, headings,
@@ -100,14 +167,19 @@ PAGE LAYOUT RULES:
 - SVG DISPLAY RULES:
   - Place each diagram placeholder on its own line, centered within its concept block
   - Use this exact wrapper for every placeholder:
-    <div style='text-align: center; margin: 12px 0;'>
+    <div style='text-align: center; margin: 12px 0; break-inside: avoid;'>
       [[SVG_n]]
     </div>
-  - NEVER set max-width below 250px on SVG containers
-  - NEVER set explicit small width/height on SVGs (like width='150px')
-  - The SVG already has viewBox and width='100%', so it will scale correctly — do not override these attributes
-  - If an SVG looks too large, constrain the container div with max-width: 400px, not the SVG itself
-- Use "overflow: hidden" on all container divs
+  - Include this rule in your <style> block EXACTLY as written. It is the only thing
+    that controls how much vertical space a diagram consumes:
+      svg {{ max-height: 60mm; max-width: 100%; width: auto; height: auto; }}
+  - Do NOT set width, height, or max-width on the SVG anywhere else, and do NOT put a
+    max-width on the diagram wrapper — the rule above already sizes every diagram.
+  - Why 60mm: the printable area is 267mm tall. A diagram left unconstrained fills the
+    full column width and becomes 107mm-170mm tall — over half a page — which pushes the
+    surrounding content onto the next page and leaves a near-empty page behind it.
+- Do NOT use "overflow: hidden" on containers that hold body text; it can clip content
+  where a box crosses a page boundary. It is only acceptable on the diagram wrapper.
 - Test: if you print this page on A4 paper, nothing should be cut off
 - CENTERING RULES (CRITICAL — content must NOT shift right):
   1. The note must be perfectly centered on the A4 page. Use "margin: 0 auto" on the main content container. NEVER add margin-left, padding-left, or any left offset that would shift content rightward.
@@ -129,6 +201,8 @@ Start with <!DOCTYPE html> and end with </html>.
 YOUTUBE VIDEOS:
 {videos_json}
 
-Add a "Helpful Videos" section at the end of the HTML with these videos.
+Add the videos section at the end of the HTML with these videos, headed by the
+"Videos section" label from the LABEL TABLE ("Helpful Videos" for english,
+"সহায়ক ভিডিও" for bangla).
 For each video show: thumbnail image, title, channel name, duration, views, and a clickable link.
 If videos list is empty, do not add the section.
