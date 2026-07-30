@@ -1,50 +1,37 @@
-# content_agent.py
+# study_note_agent.py
 import json
 from core.config import gemini_client, SMART_MODEL, generate_content_with_fallback
 from google.genai import types
 from agents.json_utils import repair_json
+from agents.content_agent import load_prompt_template
 
 
-
-def load_prompt_template(filename: str) -> str:
-    with open(f"prompts/{filename}", "r") as f:
-        return f.read()
-
-
-def run_content_agent(
+def run_study_note_agent(
     topic_name: str,
     class_name: str,
     subject_name: str,
     chapter_name: str,
-    difficulty: str,
-    num_problems: int,
     curriculum_context: str,
-    style_description: str = "" ,
-    language: str = "english"      # NEW
+    language: str = "english"
 ) -> dict:
     """
-    Agent 1: Creates math problems based on curriculum context.
-    Returns parsed JSON with problems, answers, and diagram info.
+    Study Note Agent: writes a detailed, well-explained study note for one topic,
+    expanding on the curriculum context to an international-textbook standard.
+    Returns parsed JSON with hook, objectives, concept blocks, examples, etc.
     """
 
     # Load the prompt template
-    template = load_prompt_template("content_prompt.txt")
+    template = load_prompt_template("study_note_prompt.txt")
 
     # Fill in the variables
     prompt = template.format(
         curriculum_context=curriculum_context,
-        num_problems=num_problems,
+        topic_name=topic_name,
         class_name=class_name,
         subject_name=subject_name,
         chapter_name=chapter_name,
-        topic_name=topic_name,
-        difficulty=difficulty,
-        style_description=style_description or "No reference style provided. Default to word problems.",
         language=language
     )
-
-    # Call Gemini
-    from core.config import gemini_client, SMART_MODEL, generate_content_with_fallback
 
     config = types.GenerateContentConfig(
         temperature=0.3,
@@ -60,10 +47,10 @@ def run_content_agent(
     raw = repair_json(response.text)
     try:
         result = json.loads(raw)
-        print(f"[Content Agent] Generated {len(result['problems'])} problems")
+        print(f"[Study Note Agent] Generated note with {len(result.get('concept_blocks', []))} concept blocks")
         return result
     except json.JSONDecodeError as e:
-        print(f"[Content Agent] JSON parse error: {e} — retrying once")
+        print(f"[Study Note Agent] JSON parse error: {e} — retrying once")
         try:
             response = generate_content_with_fallback(
                 model=SMART_MODEL,
@@ -72,8 +59,8 @@ def run_content_agent(
             )
             raw = repair_json(response.text)
             result = json.loads(raw)
-            print(f"[Content Agent] Generated {len(result['problems'])} problems (retry)")
+            print(f"[Study Note Agent] Generated note with {len(result.get('concept_blocks', []))} concept blocks (retry)")
             return result
         except json.JSONDecodeError as e2:
-            print(f"[Content Agent] JSON parse error after retry: {e2}")
-            return {"problems": [], "error": str(e2)}
+            print(f"[Study Note Agent] JSON parse error after retry: {e2}")
+            return {"concept_blocks": [], "error": str(e2)}

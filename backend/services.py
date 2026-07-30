@@ -1,4 +1,4 @@
-# # services.py 
+# # rag_service.py 
 # import time
 # import uuid
 # import io
@@ -23,12 +23,13 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct, Paylo
 from sqlalchemy.orm import Session
 
 # Import the new gemini_client instead of the old genai object
-from settings import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
-from models import User, UserCreate, Teacher
+from core.config import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL, generate_content_with_fallback
+from models.db_models import User, Teacher
+from schemas.user import UserCreate
 # for delete specific pdf from qdrant................................................
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
 # from sqlalchemy.orm import Session
-from models import ContentEmbedding, UploadMetadata, IngestionJob, UploadRequest
+from models.db_models import ContentEmbedding, UploadMetadata, IngestionJob, UploadRequest
 # --- INITIALIZATION ---
 def init_vector_db():
     """Ensures the Qdrant collection exists on startup."""
@@ -51,10 +52,22 @@ def init_vector_db():
     try:
         qdrant_client.create_payload_index(
             collection_name=COLLECTION_NAME,
-            field_name="topic_id",
+            field_name="chapter_id",
             field_schema=PayloadSchemaType.INTEGER,
         )
-        print("Ensured payload index exists for 'topic_id'.")
+        print("Ensured payload index exists for 'chapter_id'.")
+    except Exception as e:
+        pass
+    # In init_vector_db(), next to your language index:
+# Lets retrieval filter chunks by curriculum source.
+# 'nctb' = official ground truth, 'foreign' = enrichment material.
+    try:
+        qdrant_client.create_payload_index(
+            collection_name=COLLECTION_NAME,
+            field_name="source_type",
+            field_schema=PayloadSchemaType.KEYWORD,
+        )
+        print("Ensured payload index exists for 'source_type'.")
     except Exception as e:
         pass
 
@@ -146,7 +159,7 @@ def generate_flashcard_content(context_text: str):
 
     try:
         # New SDK uses gemini_client.models.generate_content instead of GenerativeModel
-        response = gemini_client.models.generate_content(
+        response = generate_content_with_fallback(
             model="gemini-2.0-flash",
             contents=prompt
         )
@@ -255,7 +268,7 @@ def answer_question(question: str):
 
     try:
         # New SDK call
-        response = gemini_client.models.generate_content(
+        response = generate_content_with_fallback(
             model="gemini-2.0-flash",
             contents=prompt
         )
@@ -447,7 +460,7 @@ def analyze_worksheet_style(file_bytes: bytes) -> str:
     template = load_prompt_template("style_format_prompt.txt")
 
     try:
-        response = gemini_client.models.generate_content(
+        response = generate_content_with_fallback(
             model=SMART_MODEL,
             contents=[
                 {

@@ -179,6 +179,12 @@ class GeneratedContent(Base):
      content_id = Column(Integer,primary_key=True)
      learning_session_id = Column(Integer,ForeignKey("learning_session.session_id"),nullable=True) 
      teacher_session_id = Column(Integer,ForeignKey("teacher_session.session_id"),nullable=True)
+     # CHANGE: topic_id must be nullable because chapter/subject quizzes don't target a single topic 
+     topic_id = Column(Integer, ForeignKey("topic.topic_id"), nullable=True)    
+     
+     # ADD: These two columns to support chapter and subject scope storage 
+     chapter_id = Column(Integer, ForeignKey("chapter.chapter_id"), nullable=True)
+     subject_id = Column(Integer, ForeignKey("subject.subject_id"), nullable=True)
      topic_id = Column(Integer,ForeignKey("topic.topic_id"))    
      content_type = Column(String(100))
      difficulty_level = Column(String(50))

@@ -1,15 +1,14 @@
 # localization_agent.py
 import json
 from agents.content_agent import load_prompt_template
-from settings import gemini_client
-from settings import gemini_client, SMART_MODEL
+from core.config import gemini_client, SMART_MODEL, generate_content_with_fallback
 from google.genai import types
 from agents.json_utils import repair_json
 
 
 
 
-def run_localization_agent(content_agent_output: dict, style_description: str = "") -> dict:
+def run_localization_agent(content_agent_output: dict, style_description: str = "",language: str = "english") -> dict:
     """
     Agent 2: Takes problems from Content Agent and rewrites 
     them with Bangladeshi cultural context.
@@ -19,7 +18,8 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
 
     prompt = template.format(
         problems_json=json.dumps(content_agent_output, indent=2),
-        style_description=style_description or "No reference style provided. Default to word problems."
+        style_description=style_description or "No reference style provided. Default to word problems.",
+        language=language # new: output language chosen at generation time
     )
 
     config = types.GenerateContentConfig(
@@ -27,7 +27,7 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
         response_mime_type="application/json"
     )
 
-    response = gemini_client.models.generate_content(
+    response = generate_content_with_fallback(
         model=SMART_MODEL,
         contents=prompt,
         config=config
@@ -41,7 +41,7 @@ def run_localization_agent(content_agent_output: dict, style_description: str = 
     except json.JSONDecodeError as e:
         print(f"[Localization Agent] JSON parse error: {e} — retrying once")
         try:
-            response = gemini_client.models.generate_content(
+            response = generate_content_with_fallback(
                 model=SMART_MODEL,
                 contents=prompt,
                 config=config
