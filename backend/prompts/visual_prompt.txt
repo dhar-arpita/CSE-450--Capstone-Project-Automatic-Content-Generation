@@ -20,9 +20,15 @@ LANGUAGE RULE FOR TEXT INSIDE SVG:
 - This is intentional: diagram text is kept in English so it renders reliably in the PDF.
 - NUMERALS and math symbols stay standard as usual: 5, 57, +, =, 3/4.
 
-FONT RULE FOR SVG TEXT:
-- Every <text> element must use font-family="Arial, sans-serif".
-- Since all SVG text is English, no Bengali font is needed inside diagrams.
+JSON-SAFETY RULE FOR ALL SVG ATTRIBUTES (CRITICAL):
+Every "svg_code" and "robot_mascot" value you output is a JSON STRING. That string is
+already delimited by double quotes. Therefore, EVERY attribute inside the SVG — viewBox,
+width, fill, stroke, font-family, style, everything — MUST use single quotes ('...'),
+NEVER double quotes ("..."), anywhere inside the <svg>...</svg> markup, including inside
+style="..." or font-family="..." values. A single stray unescaped double quote inside the
+SVG will break the surrounding JSON and cause the entire response to be discarded. If you
+need quotes within a CSS value (e.g. a font name with a space), still use single quotes:
+style='font-family: Comic Sans MS, sans-serif'.
 
 CRITICAL ACCURACY RULES FOR SVG:
 0. DIAGRAMS ARE FOR STUDENTS, NOT ANSWER KEYS. The diagram must help the student VISUALIZE the problem, not reveal the answer.

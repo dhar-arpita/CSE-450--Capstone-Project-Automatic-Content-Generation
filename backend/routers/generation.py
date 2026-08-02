@@ -9,7 +9,11 @@ from models.db_models import Topic, Chapter, Subject, Class, TeacherSession, Tea
 from services.generation_service import (
     generate_worksheet,
     generate_study_note,
+    generate_quiz,
     search_curriculum_context,
+    search_curriculum_context_for_quiz,
+    debug_bulk_chapter_chunks,
+    debug_bulk_subject_chunks,
     handle_remove,
     handle_add,
     handle_difficulty,
@@ -69,8 +73,8 @@ async def create_worksheet(
     # ── STEP 2: Close the DB connection BEFORE running the pipeline ───────────
     # We explicitly expire all ORM objects so SQLAlchemy does not try to
     # lazily load anything from the now-potentially-stale connection.
-    db.expire_all()
-
+    db.close()
+    
     # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ──────────────────────
     # No DB connection is held open during this step.
     try:
@@ -188,8 +192,8 @@ async def create_study_note(
     class_name = subject.class_name
 
     # ── STEP 2: Close the DB connection BEFORE running the pipeline ───────────
-    db.expire_all()
-
+    db.close()
+    
     # ── STEP 3: Run the AI pipeline (takes 2-5 minutes) ──────────────────────
     try:
         result = generate_study_note(
@@ -613,6 +617,303 @@ def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
         "query_used": query_text[:200],            # ← কী query করলাম
         "chapter_id": chapter.chapter_id,
         "chapter_name": chapter.name,
+        "total_chunks_retrieved": len(retrieved_chunks),
+        "retrieved_chunks": retrieved_chunks
+    }
+    
+  
+@router.post("/quiz")
+async def create_quiz(
+    scope: str = Form(...),              # "topic", "chapter", or "subject"
+    user_id: int = Form(...),
+    topic_id: Optional[int] = Form(None),
+    chapter_id: Optional[int] = Form(None),
+    subject_id: Optional[int] = Form(None),
+    language: str = Form("english"),
+    db: Session = Depends(get_db)
+):
+    # ── STEP 1: Fast DB lookups ───────────────────────────────────────────────
+    # ── STEP 1: Fast DB lookups ───────────────────────────────────────────────
+    topic_name, chapter_name, subject_name, class_name = None, None, None, None
+    curr_chapter_id = None
+    curr_subject_id = None
+    target_topic_id = None
+
+    if scope == "topic":
+        if not topic_id:
+            raise HTTPException(status_code=400, detail="topic_id is required for topic scope")
+        topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
+        if not topic:
+            raise HTTPException(status_code=404, detail="Topic not found")
+        chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
+        subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+
+        target_topic_id = topic.topic_id
+        topic_name = topic.name
+        chapter_name = chapter.name
+        subject_name = subject.name
+        class_name = subject.class_name
+        curr_chapter_id = chapter.chapter_id
+        curr_subject_id = subject.subject_id
+
+    elif scope == "chapter":
+        if not chapter_id:
+            raise HTTPException(status_code=400, detail="chapter_id is required for chapter scope")
+        chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+        if not chapter:
+            raise HTTPException(status_code=404, detail="Chapter not found")
+        subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+
+        chapter_name = chapter.name
+        subject_name = subject.name
+        class_name = subject.class_name
+        curr_chapter_id = chapter.chapter_id
+        curr_subject_id = subject.subject_id
+
+    elif scope == "subject":
+        if not subject_id:
+            raise HTTPException(status_code=400, detail="subject_id is required for subject scope")
+        subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+        if not subject:
+            raise HTTPException(status_code=404, detail="Subject not found")
+
+        subject_name = subject.name
+        class_name = subject.class_name
+        curr_subject_id = subject.subject_id
+
+    else:
+        raise HTTPException(status_code=400, detail="scope must be 'topic', 'chapter', or 'subject'")
+
+    # ── STEP 2: Expire connection before long AI call ─────────────────────────
+    db.close()
+    
+    # ── STEP 3: Run AI pipeline ───────────────────────────────────────────────
+    try:
+        result = generate_quiz(
+            scope=scope,
+            class_name=class_name,
+            subject_name=subject_name,
+            subject_id=curr_subject_id,
+            chapter_name=chapter_name,
+            chapter_id=curr_chapter_id,
+            topic_name=topic_name,
+            topic_id=target_topic_id,
+            language=language
+        )
+    except genai_errors.ClientError as e:
+        if e.code == 429:
+            raise HTTPException(
+                status_code=503,
+                detail="The AI model is over capacity right now. Please try again in a minute."
+            )
+        raise
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    # ── STEP 4: Save Generated Content to DB and get content_id ───────────────
+    try:
+        teacher_session = TeacherSession(
+            teacher_id=user_id,
+            started_at=datetime.utcnow()
+        )
+        db.add(teacher_session)
+        db.flush()
+
+        if target_topic_id:
+            session_topic = TeacherSessionTopic(
+                session_id=teacher_session.session_id,
+                topic_id=target_topic_id
+            )
+            db.add(session_topic)
+
+        # Create database entry
+        generated = GeneratedContent(
+            teacher_session_id=teacher_session.session_id,
+            topic_id=target_topic_id,
+            content_type=f"quiz_{scope}",
+            difficulty_level="mixed",
+            display_body=result["html"],
+            answer_key=str(result.get("quiz", "")),
+            explanation=str(result.get("visuals", "")),
+            language=language,
+            generated_at=datetime.utcnow()
+        )
+        db.add(generated)
+        db.flush()
+
+        teacher_session.ended_at = datetime.utcnow()
+        db.commit()
+
+    except Exception as db_error:
+        print(f"[DB Error] Failed to save quiz to DB: {db_error}")
+        return {
+            "content_id": None,
+            "session_id": None,
+            "html": result["html"],
+            "quiz": result.get("quiz"),
+            "warning": "Quiz generated successfully but could not be saved to database."
+        }
+
+    return {
+        "content_id": generated.content_id,
+        "session_id": teacher_session.session_id,
+        "html": result["html"],
+        "quiz": result.get("quiz")
+    }
+# --------------------------------------------------------------------------
+# DEBUG ENDPOINTS
+# --------------------------------------------------------------------------
+
+@router.get("/debug/retrieved-chunks/{topic_id}")
+def debug_retrieved_chunks(topic_id: int, db: Session = Depends(get_db)):
+    topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
+    if not topic:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    from services.rag_service import get_embedding
+    from core.config import qdrant_client, COLLECTION_NAME
+    from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+    # Use description if available, fall back to name
+    query_text = topic.description if topic.description else topic.name
+    
+    query_vector = get_embedding(query_text, is_query=True)
+
+    if not query_vector:
+        return {
+            "topic_id": topic_id,
+            "topic_name": topic.name,
+            "error": "Could not generate embedding"
+        }
+
+    chapter_filter = Filter(
+        must=[
+            FieldCondition(
+                key="chapter_id",
+                match=MatchValue(value=chapter.chapter_id),
+            )
+        ]
+    )
+
+    results = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_vector,
+        query_filter=chapter_filter,
+        limit=10,
+        with_payload=True
+    ).points
+
+    retrieved_chunks = []
+    for i, point in enumerate(results, 1):
+        retrieved_chunks.append({
+            "rank": i,
+            "relevance_score": round(point.score, 4) if hasattr(point, "score") else None,
+            "page": point.payload.get("page", "?"),
+            "chunk_index": point.payload.get("chunk_index", "?"),
+            "filename": point.payload.get("filename", "unknown"),
+            "text_preview": point.payload.get("text", "")[:300] + "...",
+            "full_text": point.payload.get("text", "")
+        })
+
+    return {
+        "topic_id": topic_id,
+        "topic_name": topic.name,
+        "topic_description": topic.description,
+        "query_used": query_text[:200],
+        "chapter_id": chapter.chapter_id,
+        "chapter_name": chapter.name,
+        "total_chunks_retrieved": len(retrieved_chunks),
+        "retrieved_chunks": retrieved_chunks
+    }
+
+
+@router.get("/debug/retrieved-chunks/chapter/{chapter_id}")
+def debug_retrieved_chunks_chapter(chapter_id: int, db: Session = Depends(get_db)):
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+    if not chapter:
+        raise HTTPException(status_code=404, detail="Chapter not found")
+
+    subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    debug_result = debug_bulk_chapter_chunks(chapter_id, chapter.name)
+
+    retrieved_chunks = [
+        {
+            "rank": i,
+            "relevance_score": round(c["score"], 4),
+            "page": c["page"],
+            "chunk_index": c["chunk_index"],
+            "filename": c["filename"],
+            "topic": c["group"],
+            "text_preview": c["text"][:300] + "...",
+            "full_text": c["text"]
+        }
+        for i, c in enumerate(debug_result["selected_chunks"], 1)
+    ]
+
+    return {
+        "chapter_id": chapter_id,
+        "chapter_name": chapter.name,
+        "subject_id": subject.subject_id,
+        "subject_name": subject.name,
+        "per_topic_limit": debug_result["per_topic_limit"],
+        "max_context_chars": debug_result["max_context_chars"],
+        "total_topics": debug_result["total_topics"],
+        "topics_with_zero_chunks": debug_result["topics_with_zero_chunks"],
+        "per_topic_breakdown": debug_result["per_topic_breakdown"],
+        "total_chunks_fetched_before_budget": debug_result["total_chunks_fetched"],
+        "total_chunks_retrieved": len(retrieved_chunks),
+        "retrieved_chunks": retrieved_chunks
+    }
+
+
+@router.get("/debug/retrieved-chunks/subject/{subject_id}")
+def debug_retrieved_chunks_subject(subject_id: int, db: Session = Depends(get_db)):
+    subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    debug_result = debug_bulk_subject_chunks(subject_id)
+
+    if debug_result.get("error"):
+        return {
+            "subject_id": subject_id,
+            "subject_name": subject.name,
+            "error": debug_result["error"],
+            "total_chunks_retrieved": 0,
+            "retrieved_chunks": []
+        }
+
+    retrieved_chunks = [
+        {
+            "rank": i,
+            "relevance_score": round(c["score"], 4),
+            "page": c["page"],
+            "chunk_index": c["chunk_index"],
+            "filename": c["filename"],
+            "chapter": c["group"],
+            "text_preview": c["text"][:300] + "...",
+            "full_text": c["text"]
+        }
+        for i, c in enumerate(debug_result["selected_chunks"], 1)
+    ]
+
+    return {
+        "subject_id": subject_id,
+        "subject_name": subject.name,
+        "per_topic_limit": debug_result["per_topic_limit"],
+        "max_context_chars": debug_result["max_context_chars"],
+        "total_chapters": debug_result["total_chapters"],
+        "chapters_with_zero_chunks": debug_result["chapters_with_zero_chunks"],
+        "chapter_breakdown": debug_result["chapter_breakdown"],
+        "total_chunks_fetched_before_budget": debug_result["total_chunks_fetched"],
         "total_chunks_retrieved": len(retrieved_chunks),
         "retrieved_chunks": retrieved_chunks
     }

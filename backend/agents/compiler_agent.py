@@ -355,3 +355,89 @@ def run_study_note_compiler(
 
     print(f"[Study Note Compiler] Generated HTML study note ({len(html)} chars)")
     return html.strip()
+
+
+# --- Append this function to backend/agents/compiler_agent.py ---
+
+def run_quiz_compiler(
+    quiz_output: dict,
+    visual_output: dict,
+    class_name: str,
+    subject_name: str,
+    scope: str,
+    scope_name: str,
+    language: str = "english"
+) -> str:
+    """
+    Compiler for quizzes: takes the quiz JSON (from run_quiz_agent) + visuals and
+    compiles them into a complete printable HTML quiz sheet with an answer key.
+    Returns raw HTML string.
+    """
+
+    template = load_prompt_template("quiz_compiler_prompt.txt")
+
+    svg_by_token = {}
+    visuals_for_prompt = {"question_visuals": [], "stimulus_visuals": []}
+
+    for v in visual_output.get("question_visuals", []):
+        token = f"[[SVG_Q{v.get('question_number')}]]"
+        svg_by_token[token] = v.get("svg_code", "")
+        visuals_for_prompt["question_visuals"].append({
+            "question_number": v.get("question_number"),
+            "svg_placeholder": token,
+            "description": v.get("description", "")
+        })
+
+    for v in visual_output.get("stimulus_visuals", []):
+        token = f"[[SVG_S{v.get('stimulus_id')}]]"
+        svg_by_token[token] = v.get("svg_code", "")
+        visuals_for_prompt["stimulus_visuals"].append({
+            "stimulus_id": v.get("stimulus_id"),
+            "svg_placeholder": token,
+            "description": v.get("description", "")
+        })
+
+    prompt = template.format(
+        quiz_json=json.dumps(quiz_output, indent=2),
+        visuals_json=json.dumps(visuals_for_prompt, indent=2),
+        class_name=class_name,
+        subject_name=subject_name,
+        scope=scope,
+        scope_name=scope_name,
+        total_questions=quiz_output.get("total_questions", len(quiz_output.get("questions", []))),
+        language=language
+    )
+
+    # Replaced raw gemini_client call with teammate's generate_with_backoff function
+    response = generate_with_backoff(
+        model=SMART_MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            temperature=0.3
+        )
+    )
+
+    html = response.text.strip()
+
+    if html.startswith("```html"):
+        html = html[7:]
+    if html.startswith("```"):
+        html = html[3:]
+    if html.endswith("```"):
+        html = html[:-3]
+
+    for token, svg in svg_by_token.items():
+        if token in html:
+            html = html.replace(token, svg, 1)
+            html = html.replace(token, "")
+        else:
+            print(f"[Quiz Compiler] WARNING: {token} missing from HTML — diagram dropped")
+
+    # Pass through teammate's math notation helper
+    html = convert_math_notation(html)
+
+    if language and language.strip().lower() == "bangla":
+        html = ensure_bengali_font_fallbacks(html)
+
+    print(f"[Quiz Compiler] Generated HTML quiz ({len(html)} chars)")
+    return html.strip()

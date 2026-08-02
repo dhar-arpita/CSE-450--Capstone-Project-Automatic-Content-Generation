@@ -7,8 +7,9 @@ from agents.content_agent import run_content_agent
 from agents.refinement_agent import run_refinement_agent
 from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
-from agents.compiler_agent import run_compiler_agent, run_study_note_compiler
+from agents.compiler_agent import run_compiler_agent, run_study_note_compiler, run_quiz_compiler
 from agents.study_note_agent import run_study_note_agent
+from agents.quiz_agent import run_quiz_agent
 # verification_agent handles all other problem types using blind LLM verification
 # from agents.verification_agent import run_verification_agent
 # Add these two new imports at the top of generation_service.py
@@ -353,7 +354,258 @@ def search_curriculum_context(topic_id: int, topic_name: str, chapter_id: int) -
 
     return "\n\n---\n\n".join(context_parts)
 
+# ─── Bulk, scope-aware retrieval helpers for quiz generation ───
+#
+# A single global top-K query (the old approach) lets whichever chunk embeds
+# closest to the query text dominate the results — in practice this meant a
+# chapter-scoped quiz could return chunks from just one topic, and a
+# subject-scoped quiz could return chunks from just one chapter, while
+# everything else was silently starved out even though it exists in Qdrant.
+#
+# Fix: fetch a small top-K bucket PER TOPIC (for chapter scope) or PER
+# CHAPTER-OF-TOPICS (for subject scope), then interleave those buckets
+# round-robin into the final context instead of ranking everything globally.
 
+PER_TOPIC_LIMIT_CHAPTER = 5   # chunks per topic when bulk-fetching one chapter
+PER_TOPIC_LIMIT_SUBJECT = 3   # smaller — a subject fans out over far more topics
+MAX_CONTEXT_CHARS_CHAPTER = 20000
+MAX_CONTEXT_CHARS_SUBJECT = 35000
+
+
+def _fetch_chunks_raw(query_text: str, qdrant_filter, limit: int) -> list:
+    """One Qdrant semantic search, returned as plain chunk dicts (no formatting)."""
+    query_vector = get_embedding(query_text, is_query=True)
+    if not query_vector:
+        return []
+
+    results = qdrant_client.query_points(
+        collection_name=COLLECTION_NAME,
+        query=query_vector,
+        query_filter=qdrant_filter,
+        limit=limit,
+        with_payload=True
+    ).points
+
+    return [
+        {
+            "text": point.payload.get("text", ""),
+            "filename": point.payload.get("filename", "unknown"),
+            "page": point.payload.get("page", "?"),
+            "chunk_index": point.payload.get("chunk_index", "?"),
+            "score": point.score if hasattr(point, "score") else 0,
+        }
+        for point in results
+    ]
+
+
+def _get_topics_for_chapter(chapter_id: int) -> list:
+    from models.db_models import Topic as TopicModel
+    from core.config import SessionLocal
+    db = SessionLocal()
+    try:
+        topics = db.query(TopicModel).filter(TopicModel.chapter_id == chapter_id).all()
+        # Extract plain values NOW, while the session is still open — never
+        # return live ORM objects that outlive this session's lifetime.
+        return [
+            {"topic_id": t.topic_id, "name": t.name, "description": t.description}
+            for t in topics
+        ]
+    finally:
+        db.close()
+
+
+def _get_chapters_for_subject(subject_id: int) -> list:
+    from models.db_models import Chapter as ChapterModel
+    from core.config import SessionLocal
+    db = SessionLocal()
+    try:
+        chapters = db.query(ChapterModel).filter(ChapterModel.subject_id == subject_id).all()
+        return [
+            {"chapter_id": c.chapter_id, "name": c.name}
+            for c in chapters
+        ]
+    finally:
+        db.close()
+
+
+def _fetch_chunks_for_chapter_bulk(chapter_id: int, chapter_name: str, per_topic_limit: int) -> dict:
+    topics = _get_topics_for_chapter(chapter_id)
+    chapter_filter = Filter(
+        must=[FieldCondition(key="chapter_id", match=MatchValue(value=chapter_id))]
+    )
+
+    if not topics:
+        print(f"[Context] Chapter {chapter_id} ('{chapter_name}') has no topics in DB — falling back to one chapter-wide query")
+        return {chapter_name: _fetch_chunks_raw(chapter_name, chapter_filter, limit=20)}
+
+    groups = {}
+    for topic in topics:
+        query_text = topic["description"] if topic["description"] else topic["name"]
+        chunks = _fetch_chunks_raw(query_text, chapter_filter, limit=per_topic_limit)
+        if not chunks:
+            print(f"[Context] Topic '{topic['name']}' (id={topic['topic_id']}) returned 0 chunks — likely no source PDF covers it")
+        groups[topic["name"]] = chunks
+
+    return groups
+
+def _interleave_and_budget(groups: dict, max_chars: int) -> list:
+    """
+    Round-robins chunks across groups instead of draining one group before
+    moving to the next, so the char budget is spent breadth-first. This is
+    what stops one topic/chapter with strong embedding similarity from
+    crowding out everything else.
+    """
+    labeled_groups = [(label, list(chunks)) for label, chunks in groups.items() if chunks]
+    selected = []
+    total_chars = 0
+    pointer = [0] * len(labeled_groups)
+
+    progressed = True
+    while progressed:
+        progressed = False
+        for gi, (label, chunks) in enumerate(labeled_groups):
+            if pointer[gi] >= len(chunks):
+                continue
+            chunk = chunks[pointer[gi]]
+            entry_len = len(chunk["text"]) + 100
+            if total_chars + entry_len > max_chars:
+                pointer[gi] = len(chunks)
+                continue
+            tagged = dict(chunk)
+            tagged["group"] = label
+            selected.append(tagged)
+            total_chars += entry_len
+            pointer[gi] += 1
+            progressed = True
+
+    return selected
+
+
+def _format_context(chunks: list, group_label: str) -> str:
+    parts = [
+        f"[Source: {c['filename']}, Page {c['page']} | {group_label}: {c.get('group', '?')} "
+        f"| Relevance: {c['score']:.3f}]\n{c['text']}"
+        for c in chunks
+    ]
+    return "\n\n---\n\n".join(parts)
+
+
+def search_curriculum_context_for_quiz(
+    scope: str,
+    class_name: str,
+    subject_id: int,
+    subject_name: str,
+    chapter_id: int = None,
+    chapter_name: str = None,
+    topic_id: int = None,
+    topic_name: str = None,
+) -> str:
+    """
+    Scope-aware curriculum retrieval for quiz generation.
+      - topic:   identical behavior to search_curriculum_context(), reused directly.
+      - chapter: bulk-fetches top-K chunks per topic under this chapter, then
+                 interleaves the topic buckets round-robin into the context.
+      - subject: bulk-fetches each chapter's per-topic buckets, flattens each
+                 chapter into one bucket, then interleaves chapter buckets.
+    """
+    if scope == "topic":
+        return search_curriculum_context(topic_id, topic_name, chapter_id)
+
+    if scope == "chapter":
+        print(f"[Context] Bulk-fetching chapter {chapter_id} ('{chapter_name}') per-topic...")
+        topic_groups = _fetch_chunks_for_chapter_bulk(chapter_id, chapter_name, PER_TOPIC_LIMIT_CHAPTER)
+        selected = _interleave_and_budget(topic_groups, MAX_CONTEXT_CHARS_CHAPTER)
+
+        if not selected:
+            print(f"[Context] No chunks found anywhere in chapter {chapter_id} ('{chapter_name}')")
+            return "No curriculum content found for this chapter."
+
+        print(f"[Context] Selected {len(selected)} chunks across {len(topic_groups)} topics for chapter '{chapter_name}'")
+        return _format_context(selected, "Topic")
+
+    if scope == "subject":
+        chapters = _get_chapters_for_subject(subject_id)
+        if not chapters:
+            return "No curriculum content found for this subject."
+
+        print(f"[Context] Bulk-fetching subject {subject_id} ('{subject_name}') across {len(chapters)} chapters...")
+        chapter_groups = {}
+        for chapter in chapters:
+            topic_groups = _fetch_chunks_for_chapter_bulk(chapter["chapter_id"], chapter["name"], PER_TOPIC_LIMIT_SUBJECT)
+            flat = [c for chunks in topic_groups.values() for c in chunks]
+            if not flat:
+                print(f"[Context] Chapter '{chapter['name']}' (id={chapter['chapter_id']}) contributed 0 chunks — likely no source PDF")
+            chapter_groups[chapter["name"]] = flat
+
+        selected = _interleave_and_budget(chapter_groups, MAX_CONTEXT_CHARS_SUBJECT)
+
+        if not selected:
+            print(f"[Context] No chunks found anywhere in subject {subject_id} ('{subject_name}')")
+            return "No curriculum content found for this subject."
+
+        print(f"[Context] Selected {len(selected)} chunks across {len(chapters)} chapters for subject '{subject_name}'")
+        return _format_context(selected, "Chapter")
+
+    raise ValueError(f"Unknown quiz scope '{scope}'")
+
+
+def debug_bulk_chapter_chunks(chapter_id: int, chapter_name: str) -> dict:
+    topic_groups = _fetch_chunks_for_chapter_bulk(chapter_id, chapter_name, PER_TOPIC_LIMIT_CHAPTER)
+    selected = _interleave_and_budget(topic_groups, MAX_CONTEXT_CHARS_CHAPTER)
+
+    per_topic_breakdown = [
+        {"topic_name": name, "chunks_found": len(chunks)}
+        for name, chunks in topic_groups.items()
+    ]
+
+    return {
+        "per_topic_limit": PER_TOPIC_LIMIT_CHAPTER,
+        "max_context_chars": MAX_CONTEXT_CHARS_CHAPTER,
+        "total_topics": len(topic_groups),
+        "topics_with_zero_chunks": [t["topic_name"] for t in per_topic_breakdown if t["chunks_found"] == 0],
+        "per_topic_breakdown": per_topic_breakdown,
+        "total_chunks_fetched": sum(len(c) for c in topic_groups.values()),
+        "total_chunks_selected_after_budget": len(selected),
+        "selected_chunks": selected,
+    }
+
+
+def debug_bulk_subject_chunks(subject_id: int) -> dict:
+    chapters = _get_chapters_for_subject(subject_id)
+    if not chapters:
+        return {"error": "No chapters found for this subject", "chapter_breakdown": []}
+
+    chapter_groups = {}
+    chapter_breakdown = []
+    for chapter in chapters:
+        topic_groups = _fetch_chunks_for_chapter_bulk(chapter["chapter_id"], chapter["name"], PER_TOPIC_LIMIT_SUBJECT)
+        flat = [c for chunks in topic_groups.values() for c in chunks]
+        if not flat:
+            print(f"[Context] Chapter '{chapter['name']}' (id={chapter['chapter_id']}) contributed 0 chunks — likely no source PDF")
+        chapter_groups[chapter["name"]] = flat
+        chapter_breakdown.append({
+            "chapter_id": chapter.chapter_id,
+            "chapter_name": chapter.name,
+            "chunks_found": len(flat),
+            "per_topic_breakdown": [
+                {"topic_name": tn, "chunks_found": len(tc)} for tn, tc in topic_groups.items()
+            ]
+        })
+
+    selected = _interleave_and_budget(chapter_groups, MAX_CONTEXT_CHARS_SUBJECT)
+
+    return {
+        "per_topic_limit": PER_TOPIC_LIMIT_SUBJECT,
+        "max_context_chars": MAX_CONTEXT_CHARS_SUBJECT,
+        "total_chapters": len(chapters),
+        "chapters_with_zero_chunks": [c["chapter_name"] for c in chapter_breakdown if c["chunks_found"] == 0],
+        "chapter_breakdown": chapter_breakdown,
+        "total_chunks_fetched": sum(len(c) for c in chapter_groups.values()),
+        "total_chunks_selected_after_budget": len(selected),
+        "selected_chunks": selected,
+    }
+    
+    
 def generate_worksheet(
     topic_id: int,
     topic_name: str,
@@ -570,5 +822,127 @@ def generate_study_note(
         "note": note_output,
         "visuals": visual_output,
         "videos": videos,
+        "curriculum_context_used": curriculum_context[:200] + "..."
+    }
+    
+    
+def generate_quiz(
+    scope: str,
+    class_name: str,
+    subject_name: str,
+    subject_id: int,
+    chapter_name: str = None,
+    chapter_id: int = None,
+    topic_name: str = None,
+    topic_id: int = None,
+    difficulty: str = "mixed",
+    language: str = "english"
+) -> dict:
+    print(f"\n{'='*50}")
+    print(f"QUIZ GENERATION STARTED")
+    print(f"Scope: {scope} | Class: {class_name} | Subject: {subject_name}")
+    print(f"{'='*50}\n")
+
+    print("[Pipeline] Searching curriculum context in Qdrant...")
+    curriculum_context = search_curriculum_context_for_quiz(
+        scope=scope,
+        class_name=class_name,
+        subject_id=subject_id,
+        subject_name=subject_name,
+        chapter_id=chapter_id,
+        chapter_name=chapter_name,
+        topic_id=topic_id,
+        topic_name=topic_name
+    )
+    print(f"[Pipeline] Found context ({len(curriculum_context)} chars)")
+
+    if curriculum_context.startswith("No curriculum content found"):
+        scope_name = {"topic": topic_name, "chapter": chapter_name, "subject": subject_name}[scope]
+        return {
+            "error": f"No curriculum PDF found for {scope} '{scope_name}'. "
+                     f"Please upload source material for this {scope} before generating a quiz.",
+            "html": ""
+        }
+
+    print("\n[Pipeline] Running Quiz Agent...")
+    quiz_output = run_quiz_agent(
+        scope=scope,
+        class_name=class_name,
+        subject_name=subject_name,
+        curriculum_context=curriculum_context,
+        chapter_name=chapter_name,
+        topic_name=topic_name,
+        difficulty=difficulty,
+        language=language
+    )
+
+    if not quiz_output.get("questions"):
+        return {"error": "Quiz Agent failed to generate questions", "html": ""}
+
+    print("\n[Pipeline] Running Visual Agent...")
+    diagram_items = []
+    for q in quiz_output["questions"]:
+        if q.get("needs_diagram", False):
+            diagram_items.append({
+                "id": f"Q{q['question_number']}",
+                "localized_question": q.get("question_text", ""),
+                "answer": "",
+                "solution_steps": [],
+                "needs_diagram": True,
+                "diagram_type": q.get("diagram_type", "none"),
+                "diagram_description": q.get("diagram_description", "")
+            })
+    for sg in quiz_output.get("stimulus_groups", []):
+        if sg.get("needs_diagram", False):
+            diagram_items.append({
+                "id": str(sg.get("stimulus_id", "")),   # already "S1" — don't re-prefix
+                "localized_question": sg.get("stimulus_text", ""),
+                "answer": "",
+                "solution_steps": [],
+                "needs_diagram": True,
+                "diagram_type": sg.get("diagram_type", "none"),
+                "diagram_description": sg.get("diagram_description", "")
+            })
+
+    if diagram_items:
+        raw_visual_output = run_visual_agent({"localized_problems": diagram_items}, "", language=language)
+    else:
+        print("[Visual Agent] No visuals needed, skipping.")
+        raw_visual_output = {"robot_mascot": "", "problem_visuals": []}
+
+    visual_output = {"question_visuals": [], "stimulus_visuals": []}
+    for v in raw_visual_output.get("problem_visuals", []):
+        tagged_id = str(v.get("problem_id", ""))
+        entry = {"svg_code": v.get("svg_code", ""), "description": v.get("description", "")}
+        if tagged_id.startswith("Q"):
+            entry["question_number"] = tagged_id[1:]
+            visual_output["question_visuals"].append(entry)
+        elif tagged_id.startswith("S"):
+            entry["stimulus_id"] = tagged_id[1:]   # "S1" -> "1"; compiler rebuilds "S1"
+            visual_output["stimulus_visuals"].append(entry)
+        else:
+            print(f"[Pipeline] WARNING: unrecognized visual id '{tagged_id}' — dropped")
+
+    scope_name = {"topic": topic_name, "chapter": chapter_name, "subject": subject_name}[scope]
+
+    print("\n[Pipeline] Running Quiz Compiler...")
+    quiz_html = run_quiz_compiler(
+        quiz_output=quiz_output,
+        visual_output=visual_output,
+        class_name=class_name,
+        subject_name=subject_name,
+        scope=scope,
+        scope_name=scope_name,
+        language=language
+    )
+
+    print(f"\n{'='*50}")
+    print(f"QUIZ GENERATION COMPLETE")
+    print(f"{'='*50}\n")
+
+    return {
+        "html": quiz_html,
+        "quiz": quiz_output,
+        "visuals": visual_output,
         "curriculum_context_used": curriculum_context[:200] + "..."
     }

@@ -1,0 +1,155 @@
+You are an expert HTML quiz designer for primary/secondary school children in Bangladesh.
+DO NOT create any new questions, statements, options, stimuli, or SVG. Use ONLY what is
+provided below.
+
+QUIZ (stimulus groups, questions, options, correct answers, explanations):
+{quiz_json}
+
+VISUAL ELEMENTS (question_visuals keyed by question_number, stimulus_visuals keyed by
+stimulus_id): {visuals_json}
+
+Each visual entry has a "svg_placeholder" field — a short token string such as
+"[[SVG_Q4]]" or "[[SVG_S1]]". This is NOT real SVG code and you must NOT try to draw,
+invent, or generate any graphic yourself. It is a placeholder that will be swapped for
+the real diagram automatically after you respond. Your only job is to insert this exact
+token string, character-for-character and unmodified, at the correct spot using the SVG
+wrapper below.
+
+QUIZ DETAILS:
+- Class: {class_name}
+- Subject: {subject_name}
+- Scope: {scope} — {scope_name}
+- Total Questions: {total_questions}
+
+YOUR TASK:
+Compile all stimulus groups, questions, and visuals into ONE beautiful, print-ready HTML
+quiz sheet, rendering each question in whichever of the THREE NCTB formats it declares.
+
+═════════════════════════════════════════════════════════════╗
+ABSOLUTE LANGUAGE RULE — READ THIS FIRST
+The quiz chrome (title, section labels, answer labels, footer, "Read the following and
+answer the questions below" instruction) must be in {language}.
+  • If {language} is "bangla": use Bengali labels (উত্তরমালা for Answer Key, ব্যাখ্যা for
+    Explanation, উদ্দীপকটি পড়ে নিচের প্রশ্নগুলোর উত্তর দাও for the stimulus instruction).
+  • If {language} is "english": use English labels (Answer Key, Explanation, "Read the
+    following and answer the questions below").
+Copy question text, statements, options, stimulus text, and explanations EXACTLY as given
+in the JSON — they are already in the correct language; do not translate or alter them.
+In ALL cases keep numerals, math symbols, and roman numerals (i, ii, iii) standard —
+never Bengali numerals, and never translate the roman numerals themselves.
+
+CRITICAL RULE: You MUST include ALL {total_questions} questions and ALL stimulus_groups.
+NEVER write "remaining questions omitted" or skip any question. Every single question and
+every stimulus block must appear in the HTML.
+
+CRITICAL RULE: Every option's label (A/B/C/D) must be rendered exactly as given, and must
+NOT visually reveal which option is correct anywhere in the questions section — the
+correct answer only appears later, in the Answer Key section.
+
+═════════════════════════════════════════════════════════════╗
+RENDERING BY question_format — READ THIS BEFORE LAYING OUT ANY QUESTION
+═════════════════════════════════════════════════════════════╗
+Every question object has a "question_format" field. Render it accordingly:
+
+1. "simple" — the ordinary case. Number it, show question_text, then options A-D below.
+
+2. "polynomial" — number it, show question_text (the stem), then list the 3 "statements"
+   as a sub-list labelled with roman numerals:
+     i.   [statements[0]]
+     ii.  [statements[1]]
+     iii. [statements[2]]
+   THEN show the 4 options below (these are always the roman-numeral combinations, e.g.
+   "i and ii" — render option text exactly as given, do not reformat it).
+
+3. "stimulus_based" — questions with this format are linked to a shared stimulus via
+   "stimulus_id". Group and render them as follows:
+   a. Find the stimulus_group in "stimulus_groups" matching that stimulus_id.
+   b. Render the stimulus ONCE, in its own visually distinct box (e.g. a light-bordered
+      or shaded box) BEFORE its linked questions — never repeat the stimulus text per
+      question. Include the "Read the following and answer the questions below" line
+      (translated per language) above the stimulus box.
+   c. If the stimulus has an SVG in stimulus_visuals (stimulus_type "diagram"), place it
+      inside the stimulus box using the same SVG wrapper rules as below — the diagram
+      IS the stimulus in this case, there is no separate stimulus_text paragraph needed
+      beyond a short caption if stimulus_text is non-empty.
+   d. Below the stimulus box, render EVERY question that references this stimulus_id, in
+      question_number order, each as its own numbered sub-question with its own 4
+      options — but do NOT repeat the stimulus box for each one.
+   e. Process stimulus_groups in the order their first linked question appears in the
+      overall question numbering, so the quiz reads top-to-bottom in question_number order.
+
+FONT RULE:
+When {language} is "bangla", every font-family declaration MUST include a Bengali font
+as a fallback, e.g.:
+  font-family: 'Comic Sans MS', 'Noto Sans Bengali', sans-serif;
+
+HTML RULES:
+1. Use inline CSS only (no external stylesheets)
+2. Page size: A4 (210mm x 297mm)
+3. Include a header with:
+   - A dynamically formatted main title based on the Scope:
+     • If Scope is "subject": Title must be "{class_name} {subject_name} - Comprehensive Quiz" (or "শ্রেণী {class_name} {subject_name} - সামগ্রিক কুইজ" if {language} is "bangla"). Do NOT mention any specific chapter or topic in the title.
+     • If Scope is "chapter": Title must be "{class_name} {subject_name} - {scope_name} Quiz" (or "শ্রেণী {class_name} {subject_name} - {scope_name} কুইজ" if {language} is "bangla").
+     • If Scope is "topic": Title must be "{class_name} {subject_name} - {scope_name} Quiz" (or "শ্রেণী {class_name} {subject_name} - {scope_name} কুইজ" if {language} is "bangla").
+   - A subtitle showing class, subject, scope, and total questions details.
+   - Blank spaces for: Student Name, Date, and Score (formatted as: "Score: ___ / {total_questions}").
+4. Number all standalone/stimulus-linked questions clearly; render each option on its own
+   line with a checkbox-style circle/bullet before the label (A) B) C) D)) so a student
+   can circle their answer when printed
+5. Place SVG diagrams directly below their related question (for standalone diagram
+   questions) or inside the stimulus box (for diagram stimuli), before any options
+6. Add a dotted line separator before the Answer Key section
+7. Answer Key goes at the bottom: a compact table/list of "Q# — Correct Option — Explanation"
+   (for polynomial questions, state the correct combination; for stimulus questions,
+   list them under their stimulus_id for readability)
+8. Use child-friendly fonts: 'Comic Sans MS', 'Arial Rounded MT Bold', sans-serif
+9. Use soft background colors: #FFF8E7 (warm cream), #F0F8FF (light blue). Use a
+   slightly distinct shade (e.g. #F0F8FF box on a #FFF8E7 page, or vice versa) for
+   stimulus boxes so they read as visually distinct from ordinary questions.
+10. Include space for student name and date at the top
+11. Leave enough white space between options for a student to circle one by hand
+
+PAGE LAYOUT RULES:
+- Total page width: 210mm (A4). Content width: 170mm max.
+- NEVER let any element overflow outside the page boundary
+- SVG DISPLAY RULES:
+  - Place each SVG diagram on its own line, centered below its question/stimulus and
+    above its options
+- Use this exact wrapper for every visual:
+    <div style='text-align: center; margin: 12px 0;'>
+      [[SVG_PLACEHOLDER_TOKEN_GOES_HERE_EXACTLY_AS_GIVEN]]
+    </div>
+  Replace [[SVG_PLACEHOLDER_TOKEN_GOES_HERE_EXACTLY_AS_GIVEN]] with the literal
+  "svg_placeholder" string from that item's entry in visuals_json — e.g. if
+  svg_placeholder is "[[SVG_Q4]]", the div must contain exactly [[SVG_Q4]], nothing else.
+
+  - NEVER set max-width below 250px on SVG containers
+  - NEVER set explicit small width/height on SVGs (like width='150px')
+  - The SVG already has viewBox and width='100%', so it will scale correctly — do not override these attributes
+- Use "overflow: hidden" on all container divs
+- CENTERING RULES (CRITICAL — content must NOT shift right):
+  1. Use "margin: 0 auto" on the main content container. NEVER add margin-left, padding-left,
+     or any left offset that would shift content rightward.
+  2. Do NOT create decorative side panels, left borders, sidebars, or vertical accent strips.
+  3. The main content wrapper must use exactly: max-width: 170mm; margin: 0 auto; padding: 20px;
+  4. Every child element must have equal left and right margins/padding.
+
+STRUCTURE:
+- Header (title + name/date/score fields)
+- Instructions (1 line telling student what to do, e.g. "Circle the correct answer for each question.")
+- Questions section (numbered, mixing simple/polynomial/stimulus-based per RENDERING BY
+  question_format above, with visuals where needed)
+- Dotted separator line
+- Answer Key (compact, at bottom, includes explanations)
+- Footer (small text: "Generated by EduContent - NCTB Aligned")
+
+CRITICAL:
+- Copy question text, statements, options, stimulus text, and explanations EXACTLY from
+  the quiz JSON — do not rewrite
+- For every visual, copy its "svg_placeholder" token EXACTLY into the wrapper div — do
+  not paraphrase it, wrap it in quotes, add spaces inside the brackets, or attempt to
+  draw an actual image yourself
+- Your job is LAYOUT ONLY
+
+OUTPUT: Return ONLY the complete HTML string. No markdown, no explanation, just HTML.
+Start with <!DOCTYPE html> and end with </html>.
