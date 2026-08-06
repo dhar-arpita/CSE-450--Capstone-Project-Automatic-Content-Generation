@@ -1,0 +1,34 @@
+git fetch origin
+echo "===== 1. WORKING TREE ====="
+git status
+echo "===== 2. BRANCHES (local vs remote) ====="
+git branch -vv
+echo "--- automatic branch check ---"
+if git branch -vv | grep -E "ahead [0-9]+" ; then
+  echo "PROBLEM: branch(es) above have UNPUSHED commits - message before doing anything"
+else
+  echo "OK: no unpushed commits on any branch"
+fi
+for b in main arpa shadman sunanda2; do
+  if git rev-parse --verify -q refs/heads/$b >/dev/null; then
+    if [ "$(git rev-parse $b)" = "$(git rev-parse origin/$b)" ]; then
+      echo "OK: $b matches origin/$b"
+    else
+      echo "PROBLEM: $b does NOT match origin/$b - run the repair steps for this branch"
+    fi
+  else
+    echo "SKIP: $b not on this machine (nothing to do)"
+  fi
+done
+echo "===== 3. AI-TRAILER SCAN ====="
+if git log --branches -i --grep="claude" --grep="co-authored" --oneline | grep -q . ; then
+  git log --branches -i --grep="claude" --grep="co-authored" --oneline
+  echo "PROBLEM: AI trailers found in local branches - run the repair steps"
+else
+  echo "OK: no AI trailers anywhere"
+fi
+echo "===== 4. OLD COMMITS ====="
+for sha in caf96f8265662e9a89045a4d7d7597d60523a408 73258a2fcfbb1aa52332d1d5f1924284c901d015 2ce4e0c9e61d991801bfcca8751a68bd9d779b94 049871aea86e1e68acc9ad1e79c471243fe0fe30 1fb235e; do
+  git branch --contains $sha 2>/dev/null | grep -q . && echo "PROBLEM: $sha still reachable - run the repair steps" || echo "OK: $sha gone"
+done
+echo "===== DONE - if every line above says OK or SKIP, you are fully synced ====="

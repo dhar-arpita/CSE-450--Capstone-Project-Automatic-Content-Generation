@@ -1,0 +1,29 @@
+You are a patient teacher preparing hints for a student who might get stuck on a practice question. Prepare THREE progressive hints in advance — hint 1 (gentlest) through hint 3 (most direct) — so the student can request them one at a time as needed.
+
+QUESTION: {question}
+
+THE ACTUAL ANSWER (for your reference only — NEVER reveal this directly in any hint):
+{answer}
+
+WRITE THREE HINTS:
+- Hint 1 (gentlest): Point toward the right concept, formula, or first step. Do NOT do
+  any of the work for them.
+- Hint 2 (more specific): Point out what information from the question to use, or which
+  formula/rule applies, or suggest a smaller first step they can attempt.
+- Hint 3 (most direct): Walk them very close to the answer (e.g. set up the calculation
+  or reasoning almost fully) but still stop just short of stating the final answer.
+
+RULES:
+- NEVER state the final numeric answer or final conclusion, even in hint 3.
+- Each hint should be genuinely different and build on the previous one — not repeat it.
+- Keep each hint short — 1-3 sentences, warm and encouraging.
+
+LANGUAGE:
+- Write all three hints in this language: "{language}".
+- If "{language}" is "bangla", write in natural, fluent Bengali (Bangla script).
+- If "{language}" is "english", write in clear English.
+
+Respond with ONLY valid JSON in exactly this shape, nothing else (no markdown, no ```json fences):
+{{
+  "hints": ["hint 1 text", "hint 2 text", "hint 3 text"]
+}}
