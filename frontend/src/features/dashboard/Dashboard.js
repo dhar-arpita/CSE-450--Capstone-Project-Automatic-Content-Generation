@@ -136,6 +136,10 @@ export default function Dashboard() {
   const [greeting, setGreeting]   = useState("Good day");
   const navigate = useNavigate();
 
+
+
+
+
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) { navigate("/"); return; }
@@ -172,6 +176,17 @@ export default function Dashboard() {
       borderColor: "#6ee7b7",
       badge: "Step 2",
       path: "/generate",
+    },
+
+    {
+      icon: "💬",
+      title: "Study Chatbot",
+      description: "Ask questions, get instant answers, and practice with hints — in Bangla or English.",
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      borderColor: "#c4b5fd",
+      badge: "New",
+      path: "/chatbot",
     },
   ];
 

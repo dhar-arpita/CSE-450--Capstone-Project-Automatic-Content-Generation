@@ -38,6 +38,21 @@ export const uploadCurriculumFile = (file, chapterId, userId) => {
 };
 
 
+// --- Direct Q&A ---
+export const chatQaSamples = (body) => api.post("/chat/qa/samples", body);
+export const chatQaAsk     = (body) => api.post("/chat/qa/ask", body);
+export const chatExplainMore = (body) => api.post("/chat/qa/explain_more", body);
+
+// --- Practice: set mode ---
+export const chatPracticeGenerate = (body) => api.post("/chat/practice/generate", body);
+
+// --- Practice: one-by-one mode ---
+export const chatSessionStart  = (body) => api.post("/chat/practice/session/start", body);
+export const chatSessionHint   = (body) => api.post("/chat/practice/session/hint", body);
+export const chatSessionAnswer = (body) => api.post("/chat/practice/session/answer", body);
+export const chatSessionNext   = (body) => api.post("/chat/practice/session/next", body);
+export const chatSessionEnd    = (body) => api.patch("/chat/practice/session/end", body);
+
 
 
 // export const generateWorksheet = (topicId, userId, difficulty, numProblems) => {
@@ -71,9 +86,8 @@ export const generateWorksheet = (topicId, userId, difficulty, numProblems, samp
   return api.post("/generate/worksheet", formData, {
     headers: { "Content-Type": "multipart/form-data" }, // ফাইল পাঠানোর জন্য এটি জরুরি
   });
-  return api.post("/generate/worksheet", formData, {
-    headers: { "Content-Type": "multipart/form-data" }, // ফাইল পাঠানোর জন্য এটি জরুরি
-  });
+
+
 };
 
 
@@ -102,5 +116,11 @@ export const generateFlashcard = (topic) => {
 
 
 export const deleteFile = (filename) => api.delete(`/ingest/delete-file/${filename}`);
+
+export const chatHistory = (studentId, sessionId = null) =>
+  api.get(`/chat/history?student_id=${studentId}${sessionId ? `&session_id=${sessionId}` : ""}`);
+
+export const chatSessions = (studentId) =>
+  api.get(`/chat/sessions?student_id=${studentId}`);
 
 export default api;

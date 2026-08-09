@@ -9,6 +9,7 @@ import { Login, Signup } from "./shared/services/Auth";
 import Dashboard from "./features/dashboard/Dashboard";
 import UploadPage from "./features/upload/UploadPage";
 import GeneratePage from "./features/worksheet/GeneratePage";
+import ChatbotPage from "./features/chatbot/ChatbotPage";
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/upload" element={<UploadPage />} />
         <Route path="/generate" element={<GeneratePage />} />
+        <Route path="/chatbot" element={<ChatbotPage />} />
       </Routes>
     </Router>
   );

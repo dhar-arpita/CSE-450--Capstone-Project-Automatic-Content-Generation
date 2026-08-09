@@ -107,31 +107,42 @@ def _scope_context(s: dict) -> str:
 
 
 # ============================================================
-# helper — ei session e ekhon porjonto joto practice_question deya
-# hoyeche, shob question text ana (one-by-one mode e repeat thekano).
-# frontend er exclude er upor bharosa na kore DB thekei ana hoy — tai
-# session_id thakle guaranteed shob purono question exclude e jabe.
+# helper — ei session e ekhon porjonto joto practice question deya
+# hoyeche (set mode + one-by-one — DUITAI), shob question text ana।
+# set er display_body ekta JSON list, tai parse kore vitorer proti
+# question ber kori; one-by-one single text.
+# "arekta set" + one-by-one "next" — dutai eta diye repeat thekay.
 # ============================================================
 def _asked_questions(db: Session, session_id: Optional[int]) -> list:
     if not session_id:
         return []
     rows = db.query(GeneratedContent).filter(
         GeneratedContent.learning_session_id == session_id,
-        GeneratedContent.content_type == "practice_question",
+        GeneratedContent.content_type.in_(["practice_question", "practice_set"]),
     ).all()
-    return [r.display_body for r in rows if r.display_body]
+
+    asked = []
+    for r in rows:
+        if not r.display_body:
+            continue
+        if r.content_type == "practice_set":
+            try:
+                asked.extend(json.loads(r.display_body))   # JSON list of question texts
+            except Exception:
+                asked.append(r.display_body)
+        else:
+            asked.append(r.display_body)
+    return [q for q in dict.fromkeys(asked) if q]   # duplicate + khali baad
 
 
 # ============================================================
 # helper — session + interaction save kora
-# EVERY interaction type (QA, explain_more, practice set, practice
-# one-by-one) eikhan diye jai, tai shob jaygay consistent vabe save hoy.
 # ============================================================
 def _get_or_create_session(db: Session, student_id: int,
                             topic_id: Optional[int],
-                            session_id: Optional[int] = None) -> LearningSession:
-    """session_id deya thakle shei existing session reuse kore (continue kora
-    interaction, jemon explain_more), na thakle notun LearningSession banay."""
+                            session_id: Optional[int] = None,
+                            subject_id: Optional[int] = None,
+                            chapter_id: Optional[int] = None) -> LearningSession:
     if session_id:
         session = db.query(LearningSession).filter(
             LearningSession.session_id == session_id
@@ -141,12 +152,14 @@ def _get_or_create_session(db: Session, student_id: int,
 
     session = LearningSession(
         student_id=student_id,
-        current_topic_id=topic_id,   # None hole o thik ache
+        current_topic_id=topic_id,
+        scope_subject_id=subject_id,     # notun: session er scope save
+        scope_chapter_id=chapter_id,     # notun
         start_time=datetime.utcnow(),
         max_hints_allowed=3,
     )
     db.add(session)
-    db.flush()  # session_id pete
+    db.flush()
     return session
 
 
@@ -154,7 +167,7 @@ def _save_interaction(
     db: Session,
     session: LearningSession,
     topic_id: Optional[int],
-    content_type: str,          # "qa_answer" | "qa_explain_more" | "practice_set" | "practice_question"
+    content_type: str,
     display_body: str,
     answer_key: str = "",
     explanation: str = "",
@@ -165,7 +178,6 @@ def _save_interaction(
     student_answer: Optional[str] = None,
     time_spent: Optional[int] = None,
 ) -> GeneratedContent:
-    """GeneratedContent + StudentInteraction — dutai ekbare save kore."""
     content = GeneratedContent(
         learning_session_id=session.session_id,
         topic_id=topic_id,
@@ -177,7 +189,7 @@ def _save_interaction(
         language=language,
     )
     db.add(content)
-    db.flush()  # content.content_id pete
+    db.flush()
 
     interaction = StudentInteraction(
         session_id=session.session_id,
@@ -196,11 +208,6 @@ def _save_interaction(
 
 # ============================================================
 # Request models
-# language: student এর select করা ভাষা ("english" / "bangla")
-# student_id: TODO - normally auth theke ashe, ekhon simplicity er jonno
-#             request body diye pathaite hobe
-# session_id: optional - deya thakle age theke chola session e continue hoy
-#             (jemon: qa/ask er por explain_more shei-i session e jai)
 # ============================================================
 class ScopeRequest(BaseModel):
     subject_id: int
@@ -222,7 +229,7 @@ class PracticeRequest(ScopeRequest):
 
 
 class ExplainMoreRequest(BaseModel):
-    session_id: int             # qa/ask theke pawa session_id - required, continue korche
+    session_id: int
     student_id: int
     topic_id: Optional[int] = None
     question: str
@@ -256,13 +263,6 @@ class SessionEndRequest(BaseModel):
 
 # ============================================================
 # helper — ekta single practice question generate kora
-# ctx khali hole o চলবে - subject/chapter/topic name diye Gemini nijer
-# knowledge diye question banabe (Q&A er moto fallback)
-#
-# one-by-one mode e proti call e notun question chai, tai:
-#   - temperature beshi (0.9)
-#   - prompt er sheshe ekta joralo "must differ" instruction jog kora holo
-#     (template na bodleo kaj kore)
 # ============================================================
 def _generate_one_question(s: dict, ctx: str, difficulty: str, exclude: list, language: str) -> dict:
     exclude_text = "\n".join(f"- {q}" for q in (exclude or [])) or "(নাই)"
@@ -289,7 +289,7 @@ def _generate_one_question(s: dict, ctx: str, difficulty: str, exclude: list, la
 
 
 # ============================================================
-# 1) DIRECT Q&A — sample প্রশ্ন দেখাও (এইটা save হয় না, শুধু suggestion)
+# 1) DIRECT Q&A — sample প্রশ্ন
 # ============================================================
 @router.post("/qa/samples")
 def qa_samples(req: ScopeRequest, db: Session = Depends(get_db)):
@@ -310,7 +310,7 @@ def qa_samples(req: ScopeRequest, db: Session = Depends(get_db)):
 
 
 # ============================================================
-# 2) DIRECT Q&A — structured answer (বেশি example + formula), SAVE হয়
+# 2) DIRECT Q&A — structured answer
 # ============================================================
 @router.post("/qa/ask")
 def qa_ask(req: AskRequest, db: Session = Depends(get_db)):
@@ -332,7 +332,7 @@ def qa_ask(req: AskRequest, db: Session = Depends(get_db)):
         ctx = _scope_context(s)
 
     if _no_content(ctx):
-        ctx = ""  # curriculum e nai - Gemini nije general knowledge diye answer dibe
+        ctx = ""
 
     answer = run_qa_answer_agent(
         question=req.question,
@@ -344,23 +344,22 @@ def qa_ask(req: AskRequest, db: Session = Depends(get_db)):
         language=req.language,
     )
 
-    # --- SAVE: session + interaction, topic na thakleo (None) save hobe ---
-    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id)
+    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
     _save_interaction(
         db, session, s["topic_id"],
         content_type="qa_answer",
         display_body=req.question,
         answer_key=json.dumps(answer, ensure_ascii=False),
         language=req.language,
-        hints_used=0,          # Q&A te hint নাই
-        is_correct=None,       # Q&A te correctness track kora hoy na
+        hints_used=0,
+        is_correct=None,
     )
 
     return {"answer": answer, "context": ctx[:12000], "session_id": session.session_id}
 
 
 # ============================================================
-# 3) "আরও বুঝিয়ে বলো" — SAVE হয়, আগের session-এই continue করে
+# 3) "আরও বুঝিয়ে বলো"
 # ============================================================
 @router.post("/qa/explain_more")
 def qa_explain_more(req: ExplainMoreRequest, db: Session = Depends(get_db)):
@@ -386,16 +385,20 @@ def qa_explain_more(req: ExplainMoreRequest, db: Session = Depends(get_db)):
 
 
 # ============================================================
-# 4) PRACTICE (SET MODE) — একসাথে কয়েকটা প্রশ্ন, SAVE হয় (batch হিসেবে)
+# 4) PRACTICE (SET MODE) — "আরেকটা সেট দাও" e age deya prashno auto-exclude
 # ============================================================
 @router.post("/practice/generate")
 def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
-        ctx = ""  # curriculum e nai - Gemini nijer knowledge diye question banabe
+        ctx = ""
 
-    exclude_text = "\n".join(f"- {q}" for q in (req.exclude or [])) or "(নাই)"
+    # frontend er exclude + ei session e already deya shob prashno (set + one-by-one)
+    # DB theke ene milai — tai "arekta set" e ghure phire same prashno ashbe na.
+    asked = _asked_questions(db, req.session_id)
+    exclude = list({*(req.exclude or []), *asked})
+    exclude_text = "\n".join(f"- {q}" for q in exclude) or "(নাই)"
 
     prompt = load_prompt_template("practice_questions.txt").format(
         context=ctx[:12000] if ctx else "(কোনো curriculum material পাওয়া যায়নি — subject/chapter/topic এর নাম দেখে সাধারণ জ্ঞান থেকে প্রশ্ন বানাও)",
@@ -415,7 +418,7 @@ def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
         questions = []
 
     if questions:
-        session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id)
+        session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
         _save_interaction(
             db, session, s["topic_id"],
             content_type="practice_set",
@@ -428,7 +431,7 @@ def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
         )
         session_id = session.session_id
     else:
-        session_id = None
+        session_id = req.session_id
 
     return {
         "questions": questions,
@@ -441,23 +444,21 @@ def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
 
 
 # ============================================================
-# 5) PRACTICE (ONE-BY-ONE MODE) — hint সহ, প্রতি প্রশ্ন আলাদা SAVE হয়
+# 5) PRACTICE (ONE-BY-ONE MODE)
 # ============================================================
 @router.post("/practice/session/start")
 def practice_session_start(req: ScopeRequest, db: Session = Depends(get_db)):
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
-        ctx = ""  # curriculum e nai - Gemini nijer knowledge diye question banabe
+        ctx = ""
 
-    # existing session e abar start korle purono question gula exclude e jabe;
-    # notun session hole eta khali thakbe.
     asked = _asked_questions(db, req.session_id)
     q = _generate_one_question(s, ctx, "medium", asked, req.language)
     if not q.get("question"):
         return {"message": "প্রশ্ন তৈরি করা যায়নি, আবার চেষ্টা করো।"}
 
-    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id)
+    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
     content = _save_interaction(
         db, session, s["topic_id"],
         content_type="practice_question",
@@ -487,9 +488,6 @@ def practice_session_hint(req: SessionHintRequest, db: Session = Depends(get_db)
     if not content:
         return {"hint": None, "message": "Question not found."}
 
-    # content.explanation e 3ta hint cache kore rakhi (JSON list hisebe).
-    # Prothombar hint chaile -> 1 call e 3ta i generate kore save kori.
-    # Porerbar (2nd/3rd hint) -> DB theke porei dei, KONO notun API call na.
     if content.explanation:
         hints = json.loads(content.explanation)
     else:
@@ -515,7 +513,6 @@ def practice_session_answer(req: SessionAnswerRequest, db: Session = Depends(get
     if not content:
         return {"message": "Question not found."}
 
-    # existing StudentInteraction row ta update kori (hints_used + self_report)
     interaction = db.query(StudentInteraction).filter(
         StudentInteraction.content_id == req.content_id,
         StudentInteraction.session_id == req.session_id,
@@ -534,10 +531,8 @@ def practice_session_next(req: SessionNextRequest, db: Session = Depends(get_db)
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
-        ctx = ""  # curriculum e nai - Gemini nijer knowledge diye question banabe
+        ctx = ""
 
-    # frontend theke asha exclude + DB te ei session e already asked question —
-    # duitai milai (duplicate baad), jate ghure phire same question na ashe.
     asked = _asked_questions(db, req.session_id)
     exclude = list({*(req.exclude or []), *asked})
 
@@ -545,7 +540,7 @@ def practice_session_next(req: SessionNextRequest, db: Session = Depends(get_db)
     if not q.get("question"):
         return {"message": "Try again,please.Question generation failed."}
 
-    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id)
+    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
     content = _save_interaction(
         db, session, s["topic_id"],
         content_type="practice_question",
@@ -572,3 +567,177 @@ def practice_session_end(req: SessionEndRequest, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "ended", "session_id": session.session_id}
+
+
+
+
+
+
+# ============================================================
+# HISTORY — ei function ta chat_router.py te jog koro (jekono
+# endpoint er pashe, file er sheshe hole shobcheye shoja).
+# read-only: DB theke ekta session er shob block ana, kichu save kore na.
+#
+# frontend refresh/fire-e-ashle ei endpoint diye purono feed rebuild hobe.
+# ============================================================
+
+class HistoryOut(BaseModel):
+    session_id: Optional[int] = None
+    qa: List[dict] = []           # [{question, answer, context, explain}]
+    sets: List[dict] = []         # [{questions}]
+    oneByone: List[dict] = []     # [{content_id, question, answer, hints, hints_used, self_report}]
+
+
+def _latest_open_session(db: Session, student_id: int) -> Optional[LearningSession]:
+    """ei student er shobcheye recent session (end hoyni emon age, na thakle jekono recent)."""
+    q = db.query(LearningSession).filter(LearningSession.student_id == student_id)
+    # age open (end_time IS NULL) session, na thakle jekono shesh session
+    open_s = q.filter(LearningSession.end_time.is_(None)).order_by(
+        LearningSession.session_id.desc()).first()
+    if open_s:
+        return open_s
+    return q.order_by(LearningSession.session_id.desc()).first()
+
+
+@router.get("/history")
+def chat_history(student_id: int, session_id: Optional[int] = None,
+                 db: Session = Depends(get_db)):
+    """
+    session_id deya thakle shei session; na thakle ei student er last session.
+    Protita GeneratedContent row ke content_type onujayi frontend block e shajai.
+    """
+    # 1) kon session
+    if session_id:
+        session = db.query(LearningSession).filter(
+            LearningSession.session_id == session_id).first()
+    else:
+        session = _latest_open_session(db, student_id)
+
+    if not session:
+        return HistoryOut()   # kono session nai — khali
+
+    # 2) oi session er shob content, purono theke notun (content_id asc)
+    rows = db.query(GeneratedContent).filter(
+        GeneratedContent.learning_session_id == session.session_id
+    ).order_by(GeneratedContent.content_id.asc()).all()
+
+    # one-by-one er self_report ana: content_id -> is_correct
+    interactions = db.query(StudentInteraction).filter(
+        StudentInteraction.session_id == session.session_id
+    ).all()
+    correct_map = {i.content_id: i.is_correct for i in interactions}
+
+    qa, sets, oneByone = [], [], []
+
+    def _loads(s, fallback):
+        try:
+            return json.loads(s) if s else fallback
+        except Exception:
+            return fallback
+
+    for r in rows:
+        if r.content_type == "qa_answer":
+            qa.append({
+                "question": r.display_body or "",
+                "answer": _loads(r.answer_key, None),   # answer object
+                "context": "",                          # explain_more er jonno lage; refresh e na thakleo cholbe
+                "explain": None,
+            })
+        elif r.content_type == "qa_explain_more":
+            # ager qa_answer block er sathe explain jog kori (jodi thake)
+            if qa:
+                qa[-1]["explain"] = _loads(r.answer_key, None)
+        elif r.content_type == "practice_set":
+            sets.append({
+                "questions": _loads(r.answer_key, []),  # [{question, answer, type}]
+            })
+        elif r.content_type == "practice_question":
+            hints = _loads(r.explanation, [])
+            oneByone.append({
+                "content_id": r.content_id,
+                "question": r.display_body or "",
+                "answer": r.answer_key or "",
+                "hints": hints if isinstance(hints, list) else [],
+                "hints_used": len(hints) if isinstance(hints, list) else 0,
+                "self_report": correct_map.get(r.content_id, None),
+            })
+
+    # --- scope (frontend dropdown fill korte) ---
+    scope = {
+        "subject_id": session.scope_subject_id,
+        "chapter_id": session.scope_chapter_id,
+        "topic_id": session.current_topic_id,
+        "class_name": None, "subject_name": None,
+        "chapter_name": None, "topic_name": None,
+    }
+    if session.scope_subject_id:
+        subj = db.query(Subject).filter(Subject.subject_id == session.scope_subject_id).first()
+        if subj:
+            scope["subject_name"] = subj.name
+            scope["class_name"] = subj.class_name
+    if session.scope_chapter_id:
+        chap = db.query(Chapter).filter(Chapter.chapter_id == session.scope_chapter_id).first()
+        if chap:
+            scope["chapter_name"] = chap.name
+    if session.current_topic_id:
+        top = db.query(Topic).filter(Topic.topic_id == session.current_topic_id).first()
+        if top:
+            scope["topic_name"] = top.name
+
+    return {
+        "session_id": session.session_id,
+        "scope": scope,
+        "qa": qa,
+        "sets": sets,
+        "oneByone": oneByone,
+    }
+    
+    
+    
+    
+#for sidebar endpoints
+
+ 
+@router.get("/sessions")
+def chat_sessions(student_id: int, db: Session = Depends(get_db)):
+    """
+    Ei student er shob session, notun theke purono (session_id desc)।
+    Protita session er sathe: kototuku content ache (empty session baad),
+    ar subject name (session er prothom content er topic theke ana).
+    """
+    sessions = db.query(LearningSession).filter(
+        LearningSession.student_id == student_id
+    ).order_by(LearningSession.session_id.desc()).all()
+ 
+    out = []
+    for s in sessions:
+        # ei session e kono content ache kina (khali session sidebar e dekhabo na)
+        first = db.query(GeneratedContent).filter(
+            GeneratedContent.learning_session_id == s.session_id
+        ).order_by(GeneratedContent.content_id.asc()).first()
+        if not first:
+            continue   # khali session baad
+ 
+        # subject name: age session er scope theke (topic null holeo kaj kore),
+        # na thakle content er topic -> chapter -> subject theke.
+        subject_name = None
+        if s.scope_subject_id:
+            subj = db.query(Subject).filter(Subject.subject_id == s.scope_subject_id).first()
+            subject_name = subj.name if subj else None
+        elif first.topic_id:
+            topic = db.query(Topic).filter(Topic.topic_id == first.topic_id).first()
+            if topic:
+                chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
+                if chapter:
+                    subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+                    subject_name = subject.name if subject else None
+        
+ 
+        out.append({
+            "session_id": s.session_id,
+            "subject_name": subject_name,          # None hote pare
+            "start_time": s.start_time.isoformat() if s.start_time else None,
+            "ended": s.end_time is not None,
+        })
+ 
+    return {"sessions": out}

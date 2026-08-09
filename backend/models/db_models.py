@@ -206,6 +206,8 @@ class LearningSession(Base):
     session_id = Column(Integer,primary_key = True)
     student_id = Column(Integer,ForeignKey("student.student_id"))
     current_topic_id = Column(Integer,ForeignKey("topic.topic_id"))
+    scope_subject_id = Column(Integer, nullable=True)
+    scope_chapter_id = Column(Integer, nullable=True)
     start_time = Column(TIMESTAMP,server_default=func.now())
     end_time = Column(TIMESTAMP, nullable=True)
     max_hints_allowed = Column(Integer, default=3)

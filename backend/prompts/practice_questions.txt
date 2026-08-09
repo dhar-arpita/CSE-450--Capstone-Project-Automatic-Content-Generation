@@ -31,6 +31,22 @@ QUESTION TYPE BALANCE — read this carefully:
   empty (this is the first question), any type is fine, but lean toward "conceptual" or
   "numerical" rather than defaulting to plain recall.
 
+FORMATTING (IMPORTANT):
+- The output is shown as PLAIN TEXT with no math or markup renderer. So it must
+  be fully readable as-is.
+- Do NOT use LaTeX or markdown math markup: no "$...$", no backslash commands
+(\frac, \times, \text, \sqrt, etc.), no curly-brace exponent or subscript
+  syntax, no markdown  tables or "**bold**" syntax.
+- Instead, write everything in normal readable text, using ordinary Unicode
+  characters that display correctly on their own. Whatever the subject, express
+  its notation the way it would naturally be typed in plain text:
+    * exponents/powers  -> Unicode superscripts (x², 10⁻³) or "^" only if needed
+    * subscripts        -> Unicode subscripts (H₂O, CO₂, aₙ)
+    * fractions         -> "a/b" or words
+    * common symbols    -> use the real Unicode symbol (×, ÷, ±, ≈, ≤, ≥, →, √, π, °, etc.)
+- Keep it clean and simple. If a piece of notation can't be written clearly in
+  plain text, describe it in words instead.
+
 REQUIREMENTS:
 - Generate exactly {count} practice questions at "{difficulty}" difficulty overall (the
   difficulty affects how deep/multi-step each question is, independent of its type —

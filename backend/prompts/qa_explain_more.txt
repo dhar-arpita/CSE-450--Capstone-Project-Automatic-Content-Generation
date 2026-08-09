@@ -30,6 +30,22 @@ LANGUAGE:
   keep standard technical/English terms where students normally use them.
 - If "{language}" is "english", write in clear English.
 
+FORMATTING (IMPORTANT):
+- The output is shown as PLAIN TEXT with no math or markup renderer. So it must
+  be fully readable as-is.
+- Do NOT use LaTeX or markdown math markup: no "$...$", no backslash commands
+(\frac, \times, \text, \sqrt, etc.), no curly-brace exponent or subscript
+  syntax, no markdown  tables or "**bold**" syntax.
+- Instead, write everything in normal readable text, using ordinary Unicode
+  characters that display correctly on their own. Whatever the subject, express
+  its notation the way it would naturally be typed in plain text:
+    * exponents/powers  -> Unicode superscripts (x², 10⁻³) or "^" only if needed
+    * subscripts        -> Unicode subscripts (H₂O, CO₂, aₙ)
+    * fractions         -> "a/b" or words
+    * common symbols    -> use the real Unicode symbol (×, ÷, ±, ≈, ≤, ≥, →, √, π, °, etc.)
+- Keep it clean and simple. If a piece of notation can't be written clearly in
+  plain text, describe it in words instead.
+
 Respond with ONLY valid JSON in exactly this shape, and nothing else (no markdown, no ```json fences, no commentary):
 {{
   "detailed_explanation": "A longer, step-by-step walk-through that goes deeper than before — the 'why' and 'how', not just a repeat of the 'what'.",
