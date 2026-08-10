@@ -119,10 +119,10 @@ function FeatureCard({ icon, title, description, color, bg, borderColor, onClick
       }}>{description}</p>
 
       <div style={{
-        display: "inline-flex", alignItems: "center", gap: "6px",
+        display: "inline-flex", alignItems: "center", gap: hovered ? "10px" : "6px",
         color: color, fontSize: "13px", fontWeight: "600",
         transition: "gap 0.2s",
-        gap: hovered ? "10px" : "6px",
+        
       }}>
         Get started <span style={{ fontSize: "16px" }}>→</span>
       </div>

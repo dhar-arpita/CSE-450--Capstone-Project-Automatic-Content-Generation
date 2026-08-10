@@ -1,4 +1,3 @@
-
 // import React, { useState } from "react";
 // import { generateWorksheet } from "./api";
 
@@ -108,7 +107,7 @@
 
 import React, { useState } from "react";
 // import { generateWorksheet } from "./api";
-import { generateWorksheet } from "../../shared/services/api";
+import { generateWorksheet, downloadWorksheetPDF } from "../../shared/services/api";
 import RefineWorksheet from "./RefineWorksheet"; 
 
 export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }) {
@@ -151,9 +150,14 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
     setLoading(false);
   };
 
-  const handleDownloadPDF = () => {
+  const handleDownloadPDF = async () => {
     if (!contentId) return;
-    window.open(`http://127.0.0.1:8000/generate/download/${contentId}`, "_blank");
+    try {
+      await downloadWorksheetPDF(contentId);   // token soho (interceptor Authorization pathay)
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed. Please make sure you are logged in.");
+    }
   };
 
   const handleUpdateFromRefine = (newData) => {

@@ -9,6 +9,8 @@ from pydantic import BaseModel
 
 # Import the database session factory
 from core.config import get_db
+from core.security import get_current_user_from_header
+from models.db_models import User
 
 # Import all the ORM models needed for the curriculum hierarchy
 from models.db_models import Class, Subject, Chapter, Topic
@@ -65,7 +67,8 @@ class TopicResponse(BaseModel):
 # ── GET /curriculum/classes ───────────────────────────────────────────────────
 
 @router.get("/classes", response_model=List[ClassResponse])
-def get_all_classes(db: Session = Depends(get_db)):
+def get_all_classes(db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user_from_header)):
     """
     Returns all available classes.
     This is the FIRST dropdown the teacher sees on the upload form.
@@ -87,7 +90,8 @@ def get_all_classes(db: Session = Depends(get_db)):
 # ── GET /curriculum/subjects?class_name=... ───────────────────────────────────
 
 @router.get("/subjects", response_model=List[SubjectResponse])
-def get_subjects_by_class(class_name: str, db: Session = Depends(get_db)):
+def get_subjects_by_class(class_name: str, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user_from_header)):
     """
     Returns all subjects that belong to a specific class.
     Called when the teacher selects a class in the first dropdown.
@@ -123,7 +127,8 @@ def get_subjects_by_class(class_name: str, db: Session = Depends(get_db)):
 # ── GET /curriculum/chapters?subject_id=... ───────────────────────────────────
 
 @router.get("/chapters", response_model=List[ChapterResponse])
-def get_chapters_by_subject(subject_id: int, db: Session = Depends(get_db)):
+def get_chapters_by_subject(subject_id: int, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user_from_header)):
     """
     Returns all chapters that belong to a specific subject.
     Called when the teacher selects a subject in the second dropdown.
@@ -159,7 +164,8 @@ def get_chapters_by_subject(subject_id: int, db: Session = Depends(get_db)):
 # ── GET /curriculum/topics?chapter_id=... ────────────────────────────────────
 
 @router.get("/topics", response_model=List[TopicResponse])
-def get_topics_by_chapter(chapter_id: int, db: Session = Depends(get_db)):
+def get_topics_by_chapter(chapter_id: int, db: Session = Depends(get_db),
+                     current_user: User = Depends(get_current_user_from_header)):
     """
     Returns all topics that belong to a specific chapter.
     Called when the teacher selects a chapter in the third dropdown.

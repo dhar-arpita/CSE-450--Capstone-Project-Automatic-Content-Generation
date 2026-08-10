@@ -1,4 +1,3 @@
-
 import axios from "axios";
 
 const API_URL = "http://127.0.0.1:8000";
@@ -7,91 +6,102 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
+// ──── AXIOS INTERCEPTOR ────
+// Auto-inject JWT token from localStorage into every request header
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
 
+// Optional: Response interceptor to handle 401 (token expired)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid — clear storage and redirect to login
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("user");
+      window.location.href = "/";
+    }
+    return Promise.reject(error);
+  }
+);
+
+// ──── AUTH ENDPOINTS ────
 export const signup = (userData) => api.post("/users/", userData);
-export const login = (email, password) => 
-  api.post(`/login/?email=${encodeURIComponent(email)}&password=${encodeURIComponent(password)}`);
+export const login = (email, password) =>
+  api.post("/login/", { email, password });  // Changed to POST with body
+export const getCurrentUser = () => api.get("/users/me");
 export const getUsers = () => api.get("/users/");
 
 
+// ──── CURRICULUM ENDPOINTS ────
 export const getClasses = () => api.get("/curriculum/classes");
 
-export const getSubjects = (className) => 
+export const getSubjects = (className) =>
   api.get(`/curriculum/subjects?class_name=${encodeURIComponent(className)}`);
 
-export const getChapters = (subjectId) => 
+export const getChapters = (subjectId) =>
   api.get(`/curriculum/chapters?subject_id=${subjectId}`);
 
-export const getTopics = (chapterId) => 
+export const getTopics = (chapterId) =>
   api.get(`/curriculum/topics?chapter_id=${chapterId}`);
 
 
+// ──── FILE UPLOAD ────
 export const uploadCurriculumFile = (file, chapterId, userId) => {
   const formData = new FormData();
   formData.append("file", file);
   formData.append("chapter_id", chapterId);
   formData.append("user_id", userId);
-  
+
   return api.post("/ingest/upload", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
 };
 
 
-// --- Direct Q&A ---
+// ──── CHATBOT ENDPOINTS ────
+// NOTE: student_id should no longer be sent in body — it's extracted from JWT token on backend
 export const chatQaSamples = (body) => api.post("/chat/qa/samples", body);
-export const chatQaAsk     = (body) => api.post("/chat/qa/ask", body);
+export const chatQaAsk = (body) => api.post("/chat/qa/ask", body);
 export const chatExplainMore = (body) => api.post("/chat/qa/explain_more", body);
 
 // --- Practice: set mode ---
 export const chatPracticeGenerate = (body) => api.post("/chat/practice/generate", body);
 
 // --- Practice: one-by-one mode ---
-export const chatSessionStart  = (body) => api.post("/chat/practice/session/start", body);
-export const chatSessionHint   = (body) => api.post("/chat/practice/session/hint", body);
+export const chatSessionStart = (body) => api.post("/chat/practice/session/start", body);
+export const chatSessionHint = (body) => api.post("/chat/practice/session/hint", body);
 export const chatSessionAnswer = (body) => api.post("/chat/practice/session/answer", body);
-export const chatSessionNext   = (body) => api.post("/chat/practice/session/next", body);
-export const chatSessionEnd    = (body) => api.patch("/chat/practice/session/end", body);
+export const chatSessionNext = (body) => api.post("/chat/practice/session/next", body);
+export const chatSessionEnd = (body) => api.patch("/chat/practice/session/end", body);
 
 
-
-// export const generateWorksheet = (topicId, userId, difficulty, numProblems) => {
-//   const formData = new FormData();
-//   formData.append("chapter_id", chapterId);
-//   formData.append("user_id", userId);
-//   formData.append("difficulty", difficulty);
-//   formData.append("num_problems", numProblems); // নিশ্চিত করো এটি 'num_problems'
-
-//   return api.post("/generate/worksheet", formData);
-// };
-
+// ──── WORKSHEET GENERATION ────
 export const generateWorksheet = (topicId, userId, difficulty, numProblems, sampleFile = null) => {
   const formData = new FormData();
   formData.append("topic_id", topicId);
   formData.append("user_id", userId);
   formData.append("difficulty", difficulty);
-  formData.append("num_problems", numProblems); // আপনার ব্যাকএন্ডে 'num_problems' আছে, এটা ঠিক আছে
+  formData.append("num_problems", numProblems);
 
-  // যদি ইউজার স্যাম্পল ফাইল দেয়, তবে ব্যাকএন্ডের প্রত্যাশিত 'sample_worksheet' কি-তে পাঠাতে হবে
   if (sampleFile) {
-    formData.append("sample_worksheet", sampleFile); 
-  }
-  formData.append("num_problems", numProblems); // আপনার ব্যাকএন্ডে 'num_problems' আছে, এটা ঠিক আছে
-
-  // যদি ইউজার স্যাম্পল ফাইল দেয়, তবে ব্যাকএন্ডের প্রত্যাশিত 'sample_worksheet' কি-তে পাঠাতে হবে
-  if (sampleFile) {
-    formData.append("sample_worksheet", sampleFile); 
+    formData.append("sample_worksheet", sampleFile);
   }
 
   return api.post("/generate/worksheet", formData, {
-    headers: { "Content-Type": "multipart/form-data" }, // ফাইল পাঠানোর জন্য এটি জরুরি
+    headers: { "Content-Type": "multipart/form-data" },
   });
-
-
 };
 
-
-// src/api.js এ এটি নিশ্চিত করুন
 export const refineWorksheet = (contentId, currentProblems, refinements) => {
   const formData = new FormData();
   formData.append("content_id", contentId);
@@ -106,8 +116,9 @@ export const getWorksheetDetails = (contentId) => api.get(`/generate/worksheet/$
 export const getIngestionStatus = (jobId) => api.get(`/ingest/status/${jobId}`);
 
 
+// ──── Q&A & FLASHCARDS ────
 export const askQuestion = (question) => {
-    return api.get(`/ask/?question=${encodeURIComponent(question)}`);
+  return api.get(`/ask/?question=${encodeURIComponent(question)}`);
 };
 
 export const generateFlashcard = (topic) => {
@@ -115,12 +126,30 @@ export const generateFlashcard = (topic) => {
 };
 
 
+// ──── FILE MANAGEMENT ────
 export const deleteFile = (filename) => api.delete(`/ingest/delete-file/${filename}`);
 
-export const chatHistory = (studentId, sessionId = null) =>
-  api.get(`/chat/history?student_id=${studentId}${sessionId ? `&session_id=${sessionId}` : ""}`);
 
-export const chatSessions = (studentId) =>
-  api.get(`/chat/sessions?student_id=${studentId}`);
+// ──── CHAT HISTORY & SESSIONS ────
+// NOTE: student_id now extracted from JWT token on backend
+export const chatHistory = (sessionId = null) =>
+  api.get(`/chat/history${sessionId ? `?session_id=${sessionId}` : ""}`);
 
+export const chatSessions = () =>
+  api.get(`/chat/sessions`);
+
+
+
+export const downloadWorksheetPDF = async (contentId) => {
+  const res = await api.get(`/generate/download/${contentId}`, { responseType: "blob" });
+  // blob theke file save
+  const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `worksheet_${contentId}.pdf`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+};
 export default api;

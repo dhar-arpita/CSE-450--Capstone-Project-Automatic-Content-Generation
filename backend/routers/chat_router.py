@@ -1,16 +1,14 @@
-# routers/chat_router.py
-# Study chatbot — Direct Q&A + Practice (set mode + one-by-one mode with hints)
-# সব ধরনের interaction (QA ask, explain_more, practice set, practice one-by-one)
-# LearningSession + StudentInteraction এ save হয় — topic select না করলেও (None যাবে, সমস্যা নাই)।
+
 
 import json
 from datetime import datetime
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException  
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from google.genai import types
 
+from core.security import get_current_user_from_header  
 from core.config import (
     qdrant_client, COLLECTION_NAME, get_db,
     generate_with_backoff, FAST_MODEL,
@@ -18,7 +16,7 @@ from core.config import (
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from models.db_models import (
-    Subject, Chapter, Topic,
+    Subject, Chapter, Topic, User,  
     LearningSession, StudentInteraction, GeneratedContent,
 )
 from services.rag_service import get_embedding, load_prompt_template
@@ -30,10 +28,10 @@ router = APIRouter(prefix="/chat", tags=["chatbot"])
 
 
 # ============================================================
-# ছোট helper — Gemini call
+# Helper functions (NO CHANGES)
 # ============================================================
 def _gen_json(prompt: str, temperature: float = 0.5) -> dict:
-    """FAST_MODEL দিয়ে JSON generate + repair + parse (samples / practice এর জন্য)।"""
+    """FAST_MODEL দিয়ে JSON generate + repair + parse"""
     resp = generate_with_backoff(
         model=FAST_MODEL,
         contents=prompt,
@@ -49,10 +47,6 @@ def _no_content(ctx: str) -> bool:
     return (not ctx) or ctx.startswith("No curriculum content found")
 
 
-# ============================================================
-# selection (id) থেকে scope + নাম বের করা
-# topic দিলে কিন্তু chapter না দিলে -> topic row থেকে chapter_id derive
-# ============================================================
 def _resolve_scope(db: Session, subject_id: int,
                    chapter_id: Optional[int], topic_id: Optional[int]) -> dict:
     subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
@@ -87,13 +81,13 @@ def _resolve_scope(db: Session, subject_id: int,
         "subject_name": subject_name,
         "chapter_id": chapter_id,
         "chapter_name": chapter_name,
-        "topic_id": topic_id,      # None hote pare - eta thik ache, DB te nullable
+        "topic_id": topic_id,
         "topic_name": topic_name,
     }
 
 
 def _scope_context(s: dict) -> str:
-    """scope অনুযায়ী curriculum context — তোমার existing quiz retrieval reuse।"""
+    """scope অনুযায়ী curriculum context"""
     return search_curriculum_context_for_quiz(
         scope=s["scope"],
         class_name=s["class_name"],
@@ -106,13 +100,6 @@ def _scope_context(s: dict) -> str:
     )
 
 
-# ============================================================
-# helper — ei session e ekhon porjonto joto practice question deya
-# hoyeche (set mode + one-by-one — DUITAI), shob question text ana।
-# set er display_body ekta JSON list, tai parse kore vitorer proti
-# question ber kori; one-by-one single text.
-# "arekta set" + one-by-one "next" — dutai eta diye repeat thekay.
-# ============================================================
 def _asked_questions(db: Session, session_id: Optional[int]) -> list:
     if not session_id:
         return []
@@ -127,17 +114,14 @@ def _asked_questions(db: Session, session_id: Optional[int]) -> list:
             continue
         if r.content_type == "practice_set":
             try:
-                asked.extend(json.loads(r.display_body))   # JSON list of question texts
+                asked.extend(json.loads(r.display_body))
             except Exception:
                 asked.append(r.display_body)
         else:
             asked.append(r.display_body)
-    return [q for q in dict.fromkeys(asked) if q]   # duplicate + khali baad
+    return [q for q in dict.fromkeys(asked) if q]
 
 
-# ============================================================
-# helper — session + interaction save kora
-# ============================================================
 def _get_or_create_session(db: Session, student_id: int,
                             topic_id: Optional[int],
                             session_id: Optional[int] = None,
@@ -153,8 +137,8 @@ def _get_or_create_session(db: Session, student_id: int,
     session = LearningSession(
         student_id=student_id,
         current_topic_id=topic_id,
-        scope_subject_id=subject_id,     # notun: session er scope save
-        scope_chapter_id=chapter_id,     # notun
+        scope_subject_id=subject_id,
+        scope_chapter_id=chapter_id,
         start_time=datetime.utcnow(),
         max_hints_allowed=3,
     )
@@ -206,15 +190,14 @@ def _save_interaction(
     return content
 
 
-# ============================================================
-# Request models
-# ============================================================
+
+# Request models (student_id removed)
+
 class ScopeRequest(BaseModel):
     subject_id: int
     chapter_id: Optional[int] = None
     topic_id: Optional[int] = None
     language: Optional[str] = "english"
-    student_id: int
     session_id: Optional[int] = None
 
 
@@ -230,7 +213,6 @@ class PracticeRequest(ScopeRequest):
 
 class ExplainMoreRequest(BaseModel):
     session_id: int
-    student_id: int
     topic_id: Optional[int] = None
     question: str
     previous_answer: dict
@@ -261,13 +243,13 @@ class SessionEndRequest(BaseModel):
     session_id: int
 
 
-# ============================================================
-# helper — ekta single practice question generate kora
-# ============================================================
+
+# Helper for generating one question
+
 def _generate_one_question(s: dict, ctx: str, difficulty: str, exclude: list, language: str) -> dict:
-    exclude_text = "\n".join(f"- {q}" for q in (exclude or [])) or "(নাই)"
+    exclude_text = "\n".join(f"- {q}" for q in (exclude or [])) or "(No)"
     prompt = load_prompt_template("practice_questions.txt").format(
-        context=ctx[:12000] if ctx else "(কোনো curriculum material পাওয়া যায়নি — subject/chapter/topic এর নাম দেখে সাধারণ জ্ঞান থেকে প্রশ্ন বানাও)",
+        context=ctx[:12000] if ctx else "(No curriculum material found — check the subject/chapter/topic name and generate a question from general knowledge)",
         count=1,
         difficulty=difficulty,
         exclude=exclude_text,
@@ -288,15 +270,24 @@ def _generate_one_question(s: dict, ctx: str, difficulty: str, exclude: list, la
     return questions[0] if questions else {"question": "", "answer": ""}
 
 
-# ============================================================
-# 1) DIRECT Q&A — sample প্রশ্ন
-# ============================================================
+
+# ENDPOINTS 
+
+
 @router.post("/qa/samples")
-def qa_samples(req: ScopeRequest, db: Session = Depends(get_db)):
+def qa_samples(
+    req: ScopeRequest,
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+    
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
-        return {"samples": [], "message": "এই অংশে এখনো কোনো content আপলোড করা নেই।"}
+        return {"samples": [], "message": "no content for this scope"}
 
     prompt = load_prompt_template("qa_sample_questions.txt").format(
         context=ctx[:6000], language=req.language,
@@ -309,18 +300,25 @@ def qa_samples(req: ScopeRequest, db: Session = Depends(get_db)):
     return {"samples": samples}
 
 
-# ============================================================
-# 2) DIRECT Q&A — structured answer
-# ============================================================
 @router.post("/qa/ask")
-def qa_ask(req: AskRequest, db: Session = Depends(get_db)):
+def qa_ask(
+    req: AskRequest,
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+    
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
+    student_id = current_user.user_id 
+    
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
 
     if s["chapter_id"]:
         qvec = get_embedding(req.question, is_query=True)
         if not qvec:
             return {"answer": None,
-                    "message": "প্রশ্নটা এই মুহূর্তে process করা যাচ্ছে না, একটু পরে চেষ্টা করো।"}
+                    "message": "Try later, embedding generation failed."}
         flt = Filter(must=[FieldCondition(key="chapter_id",
                                           match=MatchValue(value=s["chapter_id"]))])
         pts = qdrant_client.query_points(
@@ -344,7 +342,7 @@ def qa_ask(req: AskRequest, db: Session = Depends(get_db)):
         language=req.language,
     )
 
-    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
+    session = _get_or_create_session(db, student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])  
     _save_interaction(
         db, session, s["topic_id"],
         content_type="qa_answer",
@@ -355,14 +353,27 @@ def qa_ask(req: AskRequest, db: Session = Depends(get_db)):
         is_correct=None,
     )
 
-    return {"answer": answer, "context": ctx[:12000], "session_id": session.session_id}
+    return {
+        "student_id": student_id,
+        "message": "Process ask question",
+        "answer": answer,
+        "context": ctx[:12000],
+        "session_id": session.session_id
+    }
 
 
-# ============================================================
-# 3) "আরও বুঝিয়ে বলো"
-# ============================================================
 @router.post("/qa/explain_more")
-def qa_explain_more(req: ExplainMoreRequest, db: Session = Depends(get_db)):
+def qa_explain_more(
+    req: ExplainMoreRequest,
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+   
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
+    student_id = current_user.user_id
+    
     result = run_explain_more_agent(
         question=req.question,
         previous_answer=req.previous_answer,
@@ -370,7 +381,7 @@ def qa_explain_more(req: ExplainMoreRequest, db: Session = Depends(get_db)):
         language=req.language,
     )
 
-    session = _get_or_create_session(db, req.student_id, req.topic_id, req.session_id)
+    session = _get_or_create_session(db, student_id, req.topic_id, req.session_id)
     _save_interaction(
         db, session, req.topic_id,
         content_type="qa_explain_more",
@@ -384,18 +395,22 @@ def qa_explain_more(req: ExplainMoreRequest, db: Session = Depends(get_db)):
     return {"detail": result, "session_id": session.session_id}
 
 
-# ============================================================
-# 4) PRACTICE (SET MODE) — "আরেকটা সেট দাও" e age deya prashno auto-exclude
-# ============================================================
 @router.post("/practice/generate")
-def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
+def practice_generate(
+    req: PracticeRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db)
+):
+ 
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
+    student_id = current_user.user_id 
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
         ctx = ""
 
-    # frontend er exclude + ei session e already deya shob prashno (set + one-by-one)
-    # DB theke ene milai — tai "arekta set" e ghure phire same prashno ashbe na.
     asked = _asked_questions(db, req.session_id)
     exclude = list({*(req.exclude or []), *asked})
     exclude_text = "\n".join(f"- {q}" for q in exclude) or "(নাই)"
@@ -418,7 +433,7 @@ def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
         questions = []
 
     if questions:
-        session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
+        session = _get_or_create_session(db, student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])  
         _save_interaction(
             db, session, s["topic_id"],
             content_type="practice_set",
@@ -438,16 +453,23 @@ def practice_generate(req: PracticeRequest, db: Session = Depends(get_db)):
         "session_id": session_id,
         "actions": [
             {"label": "আরেকটা সেট দাও", "action": "another_set"},
-            {"label": "উত্তর দেখাও",     "action": "show_answers"},
+            {"label": "উত্তর দেখাও", "action": "show_answers"},
         ],
     }
 
 
-# ============================================================
-# 5) PRACTICE (ONE-BY-ONE MODE)
-# ============================================================
 @router.post("/practice/session/start")
-def practice_session_start(req: ScopeRequest, db: Session = Depends(get_db)):
+def practice_session_start(
+    req: ScopeRequest,
+    current_user: User = Depends(get_current_user_from_header), 
+    db: Session = Depends(get_db)
+):
+    
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
+    student_id = current_user.user_id  
+    
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
@@ -456,9 +478,9 @@ def practice_session_start(req: ScopeRequest, db: Session = Depends(get_db)):
     asked = _asked_questions(db, req.session_id)
     q = _generate_one_question(s, ctx, "medium", asked, req.language)
     if not q.get("question"):
-        return {"message": "প্রশ্ন তৈরি করা যায়নি, আবার চেষ্টা করো।"}
+        return {"message": "Try again, please. Question generation failed."}
 
-    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
+    session = _get_or_create_session(db, student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])  
     content = _save_interaction(
         db, session, s["topic_id"],
         content_type="practice_question",
@@ -478,9 +500,17 @@ def practice_session_start(req: ScopeRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/practice/session/hint")
-def practice_session_hint(req: SessionHintRequest, db: Session = Depends(get_db)):
+def practice_session_hint(
+    req: SessionHintRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db)
+):
+  
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
     if req.hints_used >= 3:
-        return {"hint": None, "message": "সব hint শেষ, এখন answer দেখতে পারো।"}
+        return {"hint": None, "message": "You have already used the maximum number of hints (3) for this question."}
 
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == req.content_id
@@ -506,7 +536,15 @@ def practice_session_hint(req: SessionHintRequest, db: Session = Depends(get_db)
 
 
 @router.post("/practice/session/answer")
-def practice_session_answer(req: SessionAnswerRequest, db: Session = Depends(get_db)):
+def practice_session_answer(
+    req: SessionAnswerRequest,
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+   
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == req.content_id
     ).first()
@@ -527,7 +565,17 @@ def practice_session_answer(req: SessionAnswerRequest, db: Session = Depends(get
 
 
 @router.post("/practice/session/next")
-def practice_session_next(req: SessionNextRequest, db: Session = Depends(get_db)):
+def practice_session_next(
+    req: SessionNextRequest,
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
+    student_id = current_user.user_id 
+    
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
     ctx = _scope_context(s)
     if _no_content(ctx):
@@ -538,9 +586,9 @@ def practice_session_next(req: SessionNextRequest, db: Session = Depends(get_db)
 
     q = _generate_one_question(s, ctx, req.difficulty, exclude, req.language)
     if not q.get("question"):
-        return {"message": "Try again,please.Question generation failed."}
+        return {"message": "Try again, please. Question generation failed."}
 
-    session = _get_or_create_session(db, req.student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])
+    session = _get_or_create_session(db, student_id, s["topic_id"], req.session_id, subject_id=s["subject_id"], chapter_id=s["chapter_id"])  
     content = _save_interaction(
         db, session, s["topic_id"],
         content_type="practice_question",
@@ -556,9 +604,18 @@ def practice_session_next(req: SessionNextRequest, db: Session = Depends(get_db)
 
 
 @router.patch("/practice/session/end")
-def practice_session_end(req: SessionEndRequest, db: Session = Depends(get_db)):
+def practice_session_end(
+    req: SessionEndRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db)
+):
+
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+    
     session = db.query(LearningSession).filter(
-        LearningSession.session_id == req.session_id
+        LearningSession.session_id == req.session_id,
+        LearningSession.student_id == current_user.user_id  
     ).first()
     if not session:
         return {"message": "Session not found"}
@@ -570,28 +627,19 @@ def practice_session_end(req: SessionEndRequest, db: Session = Depends(get_db)):
 
 
 
+# HISTORY ENDPOINTS
 
-
-
-# ============================================================
-# HISTORY — ei function ta chat_router.py te jog koro (jekono
-# endpoint er pashe, file er sheshe hole shobcheye shoja).
-# read-only: DB theke ekta session er shob block ana, kichu save kore na.
-#
-# frontend refresh/fire-e-ashle ei endpoint diye purono feed rebuild hobe.
-# ============================================================
 
 class HistoryOut(BaseModel):
     session_id: Optional[int] = None
-    qa: List[dict] = []           # [{question, answer, context, explain}]
-    sets: List[dict] = []         # [{questions}]
-    oneByone: List[dict] = []     # [{content_id, question, answer, hints, hints_used, self_report}]
+    qa: List[dict] = []
+    sets: List[dict] = []
+    oneByone: List[dict] = []
 
 
 def _latest_open_session(db: Session, student_id: int) -> Optional[LearningSession]:
-    """ei student er shobcheye recent session (end hoyni emon age, na thakle jekono recent)."""
+    """ei student er shobcheye recent session"""
     q = db.query(LearningSession).filter(LearningSession.student_id == student_id)
-    # age open (end_time IS NULL) session, na thakle jekono shesh session
     open_s = q.filter(LearningSession.end_time.is_(None)).order_by(
         LearningSession.session_id.desc()).first()
     if open_s:
@@ -600,28 +648,32 @@ def _latest_open_session(db: Session, student_id: int) -> Optional[LearningSessi
 
 
 @router.get("/history")
-def chat_history(student_id: int, session_id: Optional[int] = None,
-                 db: Session = Depends(get_db)):
-    """
-    session_id deya thakle shei session; na thakle ei student er last session.
-    Protita GeneratedContent row ke content_type onujayi frontend block e shajai.
-    """
-    # 1) kon session
+def chat_history(
+    session_id: Optional[int] = None,  
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+    
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view history")
+    
+    student_id = current_user.user_id  
+    
     if session_id:
         session = db.query(LearningSession).filter(
-            LearningSession.session_id == session_id).first()
+            LearningSession.session_id == session_id,
+            LearningSession.student_id == student_id  
+        ).first()
     else:
         session = _latest_open_session(db, student_id)
 
     if not session:
-        return HistoryOut()   # kono session nai — khali
+        return HistoryOut()
 
-    # 2) oi session er shob content, purono theke notun (content_id asc)
     rows = db.query(GeneratedContent).filter(
         GeneratedContent.learning_session_id == session.session_id
     ).order_by(GeneratedContent.content_id.asc()).all()
 
-    # one-by-one er self_report ana: content_id -> is_correct
     interactions = db.query(StudentInteraction).filter(
         StudentInteraction.session_id == session.session_id
     ).all()
@@ -639,17 +691,16 @@ def chat_history(student_id: int, session_id: Optional[int] = None,
         if r.content_type == "qa_answer":
             qa.append({
                 "question": r.display_body or "",
-                "answer": _loads(r.answer_key, None),   # answer object
-                "context": "",                          # explain_more er jonno lage; refresh e na thakleo cholbe
+                "answer": _loads(r.answer_key, None),
+                "context": "",
                 "explain": None,
             })
         elif r.content_type == "qa_explain_more":
-            # ager qa_answer block er sathe explain jog kori (jodi thake)
             if qa:
                 qa[-1]["explain"] = _loads(r.answer_key, None)
         elif r.content_type == "practice_set":
             sets.append({
-                "questions": _loads(r.answer_key, []),  # [{question, answer, type}]
+                "questions": _loads(r.answer_key, []),
             })
         elif r.content_type == "practice_question":
             hints = _loads(r.explanation, [])
@@ -662,7 +713,6 @@ def chat_history(student_id: int, session_id: Optional[int] = None,
                 "self_report": correct_map.get(r.content_id, None),
             })
 
-    # --- scope (frontend dropdown fill korte) ---
     scope = {
         "subject_id": session.scope_subject_id,
         "chapter_id": session.scope_chapter_id,
@@ -691,35 +741,31 @@ def chat_history(student_id: int, session_id: Optional[int] = None,
         "sets": sets,
         "oneByone": oneByone,
     }
-    
-    
-    
-    
-#for sidebar endpoints
 
- 
+
 @router.get("/sessions")
-def chat_sessions(student_id: int, db: Session = Depends(get_db)):
-    """
-    Ei student er shob session, notun theke purono (session_id desc)।
-    Protita session er sathe: kototuku content ache (empty session baad),
-    ar subject name (session er prothom content er topic theke ana).
-    """
+def chat_sessions(
+    current_user: User = Depends(get_current_user_from_header),  
+    db: Session = Depends(get_db)
+):
+    
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view sessions")
+    
+    student_id = current_user.user_id 
+    
     sessions = db.query(LearningSession).filter(
         LearningSession.student_id == student_id
     ).order_by(LearningSession.session_id.desc()).all()
- 
+
     out = []
     for s in sessions:
-        # ei session e kono content ache kina (khali session sidebar e dekhabo na)
         first = db.query(GeneratedContent).filter(
             GeneratedContent.learning_session_id == s.session_id
         ).order_by(GeneratedContent.content_id.asc()).first()
         if not first:
-            continue   # khali session baad
- 
-        # subject name: age session er scope theke (topic null holeo kaj kore),
-        # na thakle content er topic -> chapter -> subject theke.
+            continue
+
         subject_name = None
         if s.scope_subject_id:
             subj = db.query(Subject).filter(Subject.subject_id == s.scope_subject_id).first()
@@ -731,13 +777,12 @@ def chat_sessions(student_id: int, db: Session = Depends(get_db)):
                 if chapter:
                     subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
                     subject_name = subject.name if subject else None
-        
- 
+
         out.append({
             "session_id": s.session_id,
-            "subject_name": subject_name,          # None hote pare
+            "subject_name": subject_name,
             "start_time": s.start_time.isoformat() if s.start_time else None,
             "ended": s.end_time is not None,
         })
- 
+
     return {"sessions": out}
