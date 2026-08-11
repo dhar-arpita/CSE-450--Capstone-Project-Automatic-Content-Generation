@@ -4,7 +4,7 @@ import {
   chatQaSamples, chatQaAsk, chatExplainMore,
   chatPracticeGenerate,
   chatSessionStart, chatSessionHint, chatSessionAnswer,
-  chatSessionNext, chatSessionEnd,
+  chatSessionNext, chatSessionEnd,chatQuizGenerate,
 } from "./api";
  
 const LS_KEY = "chatbot_session_id";
@@ -56,6 +56,12 @@ export function useChatSession({ studentId, subjectId, chapterId = null, topicId
     return remember(data);
   }, [scope]);
  
+  const quizSet = useCallback(async (difficulty = "medium", count = 5) => {
+    const { data } = await chatQuizGenerate({ ...scope(), difficulty, count, exclude: [] });
+    return remember(data);
+  }, [scope]);
+
+
   const startSession = useCallback(async () => {
     const { data } = await chatSessionStart(scope());
     return remember(data);
@@ -104,7 +110,7 @@ export function useChatSession({ studentId, subjectId, chapterId = null, topicId
  
   return {
     askSamples, ask, explainMore,
-    practiceSet,
+    practiceSet,quizSet,
     startSession, nextQuestion, getHint, showAnswer,
     endSession, resetSession, setSessionId, getSessionId,
   };

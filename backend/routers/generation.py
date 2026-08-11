@@ -6,7 +6,12 @@ import weasyprint
 from google.genai import errors as genai_errors
 from core.config import get_db
 from core.security import get_current_user_from_header
-from models.db_models import Topic, Chapter, Subject, Class, TeacherSession, TeacherSessionTopic, GeneratedContent, User
+from models.db_models import (
+    Topic, Chapter, Subject, Class,
+    TeacherSession, TeacherSessionTopic,
+    LearningSession, LearningSessionTopic,
+    GeneratedContent, User,
+)
 from services.generation_service import (
     generate_worksheet,
     generate_study_note,
@@ -31,6 +36,59 @@ import json
 import ast
 
 router = APIRouter(prefix="/generate", tags=["Worksheet Generation"])
+
+
+def _save_generated_content(db, current_user, topic_id, content_type,
+                            difficulty_level, display_body, answer_key,
+                            explanation, language=None):
+    """
+    Role onujayi thik session e save kore:
+      - teacher/admin -> teacher_session + generated_content.teacher_session_id
+      - student        -> learning_session + generated_content.learning_session_id
+    Returns (content_id, session_id).
+    """
+    uid = current_user.user_id
+    role = current_user.role
+
+    if role == "student":
+        session = LearningSession(student_id=uid, current_topic_id=topic_id)
+        db.add(session)
+        db.flush()
+        if topic_id:
+            db.add(LearningSessionTopic(session_id=session.session_id, topic_id=topic_id))
+        gc_kwargs = dict(learning_session_id=session.session_id)
+    else:
+        session = TeacherSession(teacher_id=uid, started_at=datetime.utcnow())
+        db.add(session)
+        db.flush()
+        if topic_id:
+            db.add(TeacherSessionTopic(session_id=session.session_id, topic_id=topic_id))
+        gc_kwargs = dict(teacher_session_id=session.session_id)
+
+    generated = GeneratedContent(
+        topic_id=topic_id,
+        content_type=content_type,
+        difficulty_level=difficulty_level,
+        display_body=display_body,
+        answer_key=answer_key,
+        explanation=explanation,
+        generated_at=datetime.utcnow(),
+        **gc_kwargs,
+    )
+    if language is not None:
+        generated.language = language
+    db.add(generated)
+    db.flush()
+
+    if role == "student":
+        session.end_time = datetime.utcnow()
+    else:
+        session.ended_at = datetime.utcnow()
+    db.commit()
+
+    return generated.content_id, session.session_id
+
+
 
 
 @router.post("/worksheet")
@@ -97,35 +155,14 @@ async def create_worksheet(
 
     # ── STEP 4: Re-establish DB connection AFTER pipeline finishes ────────────
     try:
-        teacher_session = TeacherSession(
-            teacher_id=user_id,
-            started_at=datetime.utcnow()
-        )
-        db.add(teacher_session)
-        db.flush()
-
-        session_topic = TeacherSessionTopic(
-            session_id=teacher_session.session_id,
-            topic_id=topic_id
-        )
-        db.add(session_topic)
-
-        generated = GeneratedContent(
-            teacher_session_id=teacher_session.session_id,
-            topic_id=topic_id,
+        content_id, session_id = _save_generated_content(
+            db, current_user, topic_id,
             content_type="worksheet",
             difficulty_level=difficulty,
             display_body=result["html"],
             answer_key=str(result.get("problems", "")),
             explanation=str(result.get("visuals", "")),
-            generated_at=datetime.utcnow()
         )
-        db.add(generated)
-        db.flush()
-
-        teacher_session.ended_at = datetime.utcnow()
-        db.commit()
-
     except Exception as db_error:
         print(f"[DB Error] Failed to save worksheet to DB: {db_error}")
         return {
@@ -138,8 +175,8 @@ async def create_worksheet(
         }
 
     return {
-        "content_id": generated.content_id,
-        "session_id": teacher_session.session_id,
+        "content_id": content_id,
+        "session_id": session_id,
         "html": result["html"],
         "problems_count": len(result.get("problems", {}).get("localized_problems", [])),
         "style_used": result.get("style_used", False)
@@ -197,35 +234,15 @@ async def create_study_note(
         raise HTTPException(status_code=500, detail=result["error"])
 
     try:
-        teacher_session = TeacherSession(
-            teacher_id=user_id,
-            started_at=datetime.utcnow()
-        )
-        db.add(teacher_session)
-        db.flush()
-
-        session_topic = TeacherSessionTopic(
-            session_id=teacher_session.session_id,
-            topic_id=topic_id
-        )
-        db.add(session_topic)
-
-        generated = GeneratedContent(
-            teacher_session_id=teacher_session.session_id,
-            topic_id=topic_id,
+        content_id, session_id = _save_generated_content(
+            db, current_user, topic_id,
             content_type="study_note",
             difficulty_level="standard",
             display_body=result["html"],
             answer_key=str(result.get("note", "")),
             explanation=str(result.get("visuals", "")),
             language=language,
-            generated_at=datetime.utcnow()
         )
-        db.add(generated)
-        db.flush()
-
-        teacher_session.ended_at = datetime.utcnow()
-        db.commit()
 
     except Exception as db_error:
         print(f"[DB Error] Failed to save study note to DB: {db_error}")
@@ -238,8 +255,8 @@ async def create_study_note(
         }
 
     return {
-        "content_id": generated.content_id,
-        "session_id": teacher_session.session_id,
+        "content_id": content_id,
+        "session_id": session_id,
         "html": result["html"],
         "concept_blocks_count": len(result.get("note", {}).get("concept_blocks", []))
     }
@@ -511,6 +528,7 @@ async def create_quiz(
     chapter_id: Optional[int] = Form(None),
     subject_id: Optional[int] = Form(None),
     language: str = Form("english"),
+    num_questions: Optional[int] = Form(None),   # optional: dile eta, na dile scope map (10/20/30)
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
@@ -578,7 +596,8 @@ async def create_quiz(
             chapter_id=curr_chapter_id,
             topic_name=topic_name,
             topic_id=target_topic_id,
-            language=language
+            language=language,
+            num_questions=num_questions      # optional override
         )
     except genai_errors.ClientError as e:
         if e.code == 429:
@@ -592,37 +611,15 @@ async def create_quiz(
         raise HTTPException(status_code=500, detail=result["error"])
 
     try:
-        teacher_session = TeacherSession(
-            teacher_id=user_id,
-            started_at=datetime.utcnow()
-        )
-        db.add(teacher_session)
-        db.flush()
-
-        if target_topic_id:
-            session_topic = TeacherSessionTopic(
-                session_id=teacher_session.session_id,
-                topic_id=target_topic_id
-            )
-            db.add(session_topic)
-
-        generated = GeneratedContent(
-            teacher_session_id=teacher_session.session_id,
-            topic_id=target_topic_id,
+        content_id, session_id = _save_generated_content(
+            db, current_user, target_topic_id,
             content_type=f"quiz_{scope}",
             difficulty_level="mixed",
             display_body=result["html"],
             answer_key=str(result.get("quiz", "")),
             explanation=str(result.get("visuals", "")),
             language=language,
-            generated_at=datetime.utcnow()
         )
-        db.add(generated)
-        db.flush()
-
-        teacher_session.ended_at = datetime.utcnow()
-        db.commit()
-
     except Exception as db_error:
         print(f"[DB Error] Failed to save quiz to DB: {db_error}")
         return {
@@ -634,8 +631,8 @@ async def create_quiz(
         }
 
     return {
-        "content_id": generated.content_id,
-        "session_id": teacher_session.session_id,
+        "content_id": content_id,
+        "session_id": session_id,
         "html": result["html"],
         "quiz": result.get("quiz")
     }

@@ -58,8 +58,16 @@ FORMATTING (IMPORTANT):
     * subscripts        -> Unicode subscripts (H₂O, CO₂, aₙ)
     * fractions         -> "a/b" or words
     * common symbols    -> use the real Unicode symbol (×, ÷, ±, ≈, ≤, ≥, →, √, π, °, etc.)
+    * Use Unicode superscripts/subscripts where they exist (m/s², cm³, v₀, x₁); only if none
+      exists use plain ^ notation (2^10) — never with braces.
+-NEGATIVE EXAMPLE — never output:  $$a=\frac{{v-u}}{{t}}$$ with unit $[LT^{{-2}}]$
+   CORRECT:  a = (v - u) / t, unit: m/s² (dimensions [LT⁻²]) 
+-NEVER emit LaTeX delimiters or commands: no $ or $$, no \frac, \text, \times, \sqrt,
+   no ^{{...}} or _{{...}} braces.      
 - Keep it clean and simple. If a piece of notation can't be written clearly in
   plain text, describe it in words instead.
+
+
 
 Respond with ONLY valid JSON in exactly this shape, and nothing else (no markdown, no ```json fences, no commentary):
 {{

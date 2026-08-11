@@ -130,22 +130,26 @@ export default function ChatbotPage() {
   const [obFeed, setObFeed] = useState([]);
   const [busy, setBusy] = useState(false);
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [sessionLoading, setSessionLoading] = useState(false);   // session/history load hocche kina
+  const [dropdownLoading, setDropdownLoading] = useState(false);  // subject/chapter/topic load
   const [sessions, setSessions] = useState([]);
   const [activeSid, setActiveSid] = useState(null);
   const feedEndRef = useRef(null);
   const prevCount = useRef(0);
+  const [quizFeed, setQuizFeed] = useState([]);
 
   /* ---- clear only feeds ---- */
   const clearFeeds = () => {
     setSamples([]); setQuestion("");
-    setQaFeed([]); setSetFeed([]); setObFeed([]); setMode(null);
+    setQaFeed([]); setSetFeed([]); setObFeed([]); setQuizFeed([]); setMode(null);
   };
 
   /* ---- ekta session er history load kore feed sajai ---- */
   const loadHistory = useCallback(async (uid, sid) => {
+    setSessionLoading(true);
     clearFeeds();
     try {
-      const { data } = await chatHistory(uid, sid);
+      const { data } = await chatHistory(sid);   // FIX: api ekta-i arg (session_id) ney
       if (data && data.session_id) {
         setActiveSid(data.session_id);
 
@@ -172,8 +176,10 @@ export default function ChatbotPage() {
         if ((data.qa || []).length) setMode("qa");
         else if ((data.sets || []).length) setMode("set");
         else if ((data.oneByone || []).length) setMode("oneByone");
+        else if ((data.quiz || []).length) setMode("quiz");
       }
     } catch { }
+    finally { setSessionLoading(false); }
   }, []);
   /* ---- sidebar session list refresh ---- */
   const refreshSessions = useCallback(async (uid) => {
@@ -191,15 +197,18 @@ export default function ChatbotPage() {
     refreshSessions(u.user_id);
   }, [navigate, refreshSessions]);
 
-  /* ---- refresh e last session fere (localStorage e session thakle) ---- */
+  /* ---- refresh e last session fere (SHUDHU EKBAR) ---- */
+  const didInitialLoad = useRef(false);
   useEffect(() => {
-    if (!user || historyLoaded) return;
+    if (!user || didInitialLoad.current) return;
+    didInitialLoad.current = true;
     (async () => {
       const sid = chat.getSessionId();
-      if (sid) await loadHistory(user.user_id, sid);   // sid nai (logout->login) hole landing
+      if (sid) await loadHistory(user.user_id, sid);
       setHistoryLoaded(true);
     })();
-  }, [user, historyLoaded, chat, loadHistory]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   /* ---- auto-scroll SHUDHU notun block jog hole ---- */
   useEffect(() => {
@@ -232,19 +241,19 @@ export default function ChatbotPage() {
     setSubjectList([]); setChapterList([]); setTopicList([]);
     setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
     resetOnSelectionChange();
-    if (v) { try { const { data } = await getSubjects(v); setSubjectList(data || []); } catch { } }
+    if (v) { setDropdownLoading(true); try { const { data } = await getSubjects(v); setSubjectList(data || []); } catch { } finally { setDropdownLoading(false); } }
   };
   const onSubject = async (v) => {
     setSelectedSubject(v);
     setChapterList([]); setTopicList([]); setSelectedChapter(""); setSelectedTopicId("");
     resetOnSelectionChange();
-    if (v) { try { const { data } = await getChapters(v); setChapterList(data || []); } catch { } }
+    if (v) { setDropdownLoading(true); try { const { data } = await getChapters(v); setChapterList(data || []); } catch { } finally { setDropdownLoading(false); } }
   };
   const onChapter = async (v) => {
     setSelectedChapter(v);
     setTopicList([]); setSelectedTopicId("");
     resetOnSelectionChange();
-    if (v) { try { const { data } = await getTopics(v); setTopicList(data || []); } catch { } }
+    if (v) { setDropdownLoading(true); try { const { data } = await getTopics(v); setTopicList(data || []); } catch { } finally { setDropdownLoading(false); } }
   };
   const onTopic = (v) => { setSelectedTopicId(v); resetOnSelectionChange(); };
   const onLanguage = (v) => { if (!langLocked) setLanguage(v); };   // locked hole bodlabe na
@@ -284,15 +293,20 @@ export default function ChatbotPage() {
   };
 
   /* ================= PRACTICE SET ================= */
+ const SET_DIFFICULTY = ["medium", "hard", "hard", "harder", "very hard"];
   const openSet = () => { setMode("set"); if (setFeed.length === 0) addSet(); };
   const addSet = async () => {
     if (busy) return;
     setBusy(true);
     const id = newId();
     const wasNew = chat.getSessionId() == null;
+    // eta koto number set (age koyta ache tar upor) — sei onujayi difficulty
+    let setIndex = setFeed.length;   // 0 = prothom set
+    if (setIndex >= SET_DIFFICULTY.length) { setIndex = SET_DIFFICULTY.length - 1; }
+    const difficulty = SET_DIFFICULTY[setIndex];
     setSetFeed((f) => [...f.map((b) => ({ ...b, isLatest: false })), { id, questions: [], showAnswers: false, isLatest: true, loading: true }]);
     try {
-      const d = await chat.practiceSet("medium", 5);
+      const d = await chat.practiceSet(difficulty, 5);
       setSetFeed((f) => f.map((b) => b.id === id ? { ...b, questions: d.questions || [], loading: false } : b));
       setActiveSid(chat.getSessionId());
       if (wasNew) afterFirstContent();
@@ -300,7 +314,7 @@ export default function ChatbotPage() {
     setBusy(false);
   };
   const toggleSetAnswers = (id) => setSetFeed((f) => f.map((b) => b.id === id ? { ...b, showAnswers: !b.showAnswers } : b));
-
+ 
   /* ================= ONE-BY-ONE ================= */
   const openOneByOne = () => { setMode("oneByone"); if (obFeed.length === 0) startOB(); };
   const startOB = async () => {
@@ -351,7 +365,52 @@ export default function ChatbotPage() {
     try { await chat.showAnswer(block.contentId, block.hintsUsed, didSolve, null); } catch { }
   };
 
+
+  /* ================= QUIZ (MCQ) ================= */
+  const openQuiz = () => { setMode("quiz"); if (quizFeed.length === 0) addQuiz(); };
+
+  const addQuiz = async () => {
+    if (busy) return;
+    setBusy(true);
+    const id = newId();
+    const wasNew = chat.getSessionId() == null;
+    setQuizFeed((f) => [...f.map((b) => ({ ...b, isLatest: false })),
+    { id, questions: [], answers: {}, hints: {}, hintsUsed: {}, isLatest: true, loading: true }]);
+    try {
+      const d = await chat.quizSet("mixed");
+      setQuizFeed((f) => f.map((b) => b.id === id ? { ...b, questions: d.questions || [], loading: false } : b));
+      setActiveSid(chat.getSessionId());
+      if (wasNew) afterFirstContent();
+    } catch {
+      setQuizFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b));
+    }
+    setBusy(false);
+  };
+
+  // option এ click করলেই সাথে সাথে সঠিক/ভুল — batch check নাই
+  const selectQuizOption = (blockId, qnum, label) =>
+    setQuizFeed((f) => f.map((b) => {
+      if (b.id !== blockId || b.answers[qnum] != null) return b; // একবার answer দিলে বদলাবে না
+      return { ...b, answers: { ...b.answers, [qnum]: label } };
+    }));
+
+  const quizHint = async (blockId, qnum, contentId) => {
+    const block = quizFeed.find((b) => b.id === blockId);
+    const used = block?.hintsUsed[qnum] || 0;
+    if (used >= 2) return;
+    try {
+      const d = await chat.getHint(contentId, used);
+      if (d.hint) {
+        setQuizFeed((f) => f.map((b) => b.id !== blockId ? b : {
+          ...b,
+          hints: { ...b.hints, [qnum]: [...(b.hints[qnum] || []), d.hint] },
+          hintsUsed: { ...b.hintsUsed, [qnum]: d.hints_used },
+        }));
+      }
+    } catch { }
+  };
   /* ======================= RENDER ======================= */
+
   return (
     <div style={pageStyle}>
       <div style={ambientOrbA} /><div style={ambientOrbB} />
@@ -408,16 +467,124 @@ export default function ChatbotPage() {
             </div>
             <div style={hintBoxStyle}>
               <span style={{ fontSize: "16px" }}>💡</span>
-              <span style={hintTextStyle}>{canStart ? t.hintReady : t.hintPick}</span>
+              <span style={hintTextStyle}>{dropdownLoading ? (language === "bangla" ? "⌛ লোড হচ্ছে..." : "⌛ Loading...") : (canStart ? t.hintReady : t.hintPick)}</span>
             </div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "8px" }}>
               <button onClick={openQA} disabled={!canStart} style={tabBtn("#4f46e5", mode === "qa", !canStart)}>{t.tabQA}</button>
               <button onClick={openSet} disabled={!canStart} style={tabBtn("#0ea5e9", mode === "set", !canStart)}>{t.tabSet}</button>
               <button onClick={openOneByOne} disabled={!canStart} style={tabBtn("#16a34a", mode === "oneByone", !canStart)}>{t.tabOne}</button>
+              <button onClick={openQuiz} disabled={!canStart} style={tabBtn("#f59e0b", mode === "quiz", !canStart)}>📋 Quiz</button>
             </div>
           </main>
 
+          {/* session/history load hocche — visual indicator */}
+          {sessionLoading && (
+            <div style={loadingBannerStyle}>
+              <span style={{ fontSize: "22px" }}>⌛</span>
+              <span>{language === "bangla" ? "সেশন লোড হচ্ছে..." : "Loading session..."}</span>
+            </div>
+          )}
+
+          {mode === "quiz" && (
+            <section style={mainCardStyle}>
+              <h3 style={sectionTitleStyle}>📋 Quiz</h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+                {quizFeed.map((b, idx) => {
+                  const answeredCount = Object.keys(b.answers).length;
+                  const correctCount = b.questions.filter(
+                    (q) => b.answers[q.question_number] === q.correct_option
+                  ).length;
+                  return (
+                    <div key={b.id} style={feedBlock}>
+                      <div style={{ fontSize: "12px", fontWeight: 700, color: "#64748b", marginBottom: "6px" }}>
+                        Quiz {idx + 1}
+                      </div>
+                      {b.loading && <p style={mutedLabel}>⌛ Quiz তৈরি হচ্ছে...</p>}
+
+                      {b.questions.map((q) => {
+                        const sel = b.answers[q.question_number];
+                        const answered = sel != null;
+                        const hintsUsed = b.hintsUsed[q.question_number] || 0;
+                        const hints = b.hints[q.question_number] || [];
+                        return (
+                          <div key={q.question_number} style={qCard}>
+                            <div style={{ fontWeight: 700, color: "#0f172a", fontSize: "14px", marginBottom: "8px" }}>
+                              {q.question_number}. {q.question_text}
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                              {q.options.map((opt) => {
+                                const isSelected = sel === opt.label;
+                                const isCorrect = opt.label === q.correct_option;
+                                let bg = "#fff", border = "1px solid #e2e8f0", color = "#334155";
+                                if (answered) {
+                                  if (isCorrect) { bg = "#ecfdf5"; border = "1.5px solid #16a34a"; color = "#065f46"; }
+                                  else if (isSelected) { bg = "#fef2f2"; border = "1.5px solid #dc2626"; color = "#991b1b"; }
+                                }
+                                return (
+                                  <button
+                                    key={opt.label}
+                                    onClick={() => selectQuizOption(b.id, q.question_number, opt.label)}
+                                    disabled={answered}
+                                    style={{
+                                      textAlign: "left", padding: "9px 12px", borderRadius: "8px",
+                                      background: bg, border, color, fontSize: "13px", fontWeight: 600,
+                                      cursor: answered ? "default" : "pointer",
+                                    }}
+                                  >
+                                    {opt.label}. {opt.text}
+                                    {answered && isCorrect && " ✅"}
+                                    {answered && isSelected && !isCorrect && " ❌"}
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {answered && (
+                              <div style={{
+                                marginTop: "6px", fontSize: "12px", fontWeight: 700,
+                                color: sel === q.correct_option ? "#16a34a" : "#dc2626",
+                              }}>
+                                {sel === q.correct_option ? "✅ সঠিক!" : `❌ ভুল — সঠিক উত্তর: ${q.correct_option}`}
+                              </div>
+                            )}
+
+                            {hints.length > 0 && (
+                              <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                                {hints.map((h, i) => <div key={i} style={hintReveal}>💡 Hint {i + 1}: {h}</div>)}
+                              </div>
+                            )}
+
+                            {!answered && hintsUsed < 2 && (
+                              <button
+                                onClick={() => quizHint(b.id, q.question_number, q.content_id)}
+                                style={{ ...bigBtn("#f59e0b", false), marginTop: "8px", padding: "6px 12px", fontSize: "12px" }}
+                              >
+                                💡 Hint দাও ({hintsUsed}/2)
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {b.questions.length > 0 && (
+                        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "12px", alignItems: "center" }}>
+                          <span style={{ fontWeight: 800, color: "#0f172a", fontSize: "14px" }}>
+                            স্কোর: {correctCount} / {b.questions.length} ({answeredCount} এ উত্তর দিয়েছ)
+                          </span>
+                          <button onClick={addQuiz} disabled={!b.isLatest || busy} style={bigBtn("#0ea5e9", !b.isLatest || busy)}>
+                            📋 আরও Quiz দাও
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
           {/* Q&A */}
+
+
           {mode === "qa" && (
             <section style={mainCardStyle}>
               <h3 style={sectionTitleStyle}>{t.qaTitle}</h3>
@@ -572,6 +739,7 @@ const pageStyle = { minHeight: "100vh", padding: "24px 20px 56px", background: "
 const ambientOrbA = { position: "absolute", top: "-130px", right: "-120px", width: "340px", height: "340px", borderRadius: "50%", background: "radial-gradient(circle, rgba(99,102,241,0.24) 0%, rgba(99,102,241,0) 72%)" };
 const ambientOrbB = { position: "absolute", bottom: "-140px", left: "-120px", width: "360px", height: "360px", borderRadius: "50%", background: "radial-gradient(circle, rgba(16,185,129,0.18) 0%, rgba(16,185,129,0) 74%)" };
 const layoutStyle = { maxWidth: "1200px", margin: "0 auto", position: "relative", zIndex: 1, display: "grid", gridTemplateColumns: "240px 1fr", gap: "18px", alignItems: "start", minHeight: "calc(100vh - 80px)" };
+const loadingBannerStyle = { display: "flex", alignItems: "center", gap: "12px", justifyContent: "center", padding: "20px", borderRadius: "16px", border: "1px solid #e2e8f0", background: "rgba(255,255,255,0.93)", boxShadow: "0 12px 28px rgba(15,23,42,0.08)", fontSize: "15px", fontWeight: 700, color: "#4f46e5" };
 const sidebarStyle = { position: "sticky", top: "24px", maxHeight: "calc(100vh - 48px)", display: "flex", flexDirection: "column", overflow: "hidden", borderRadius: "16px", border: "1px solid #e2e8f0", background: "rgba(255,255,255,0.9)", backdropFilter: "blur(10px)", boxShadow: "0 12px 28px rgba(15,23,42,0.08)", padding: "14px" };
 const containerStyle = { position: "relative", zIndex: 1, display: "flex", flexDirection: "column", gap: "18px", minWidth: 0 };
 const topBarStyle = { display: "grid", gridTemplateColumns: "auto 1fr auto", alignItems: "center", gap: "16px", borderRadius: "16px", border: "1px solid #e2e8f0", background: "rgba(255,255,255,0.82)", backdropFilter: "blur(10px)", boxShadow: "0 12px 28px rgba(15,23,42,0.08)", padding: "14px 16px" };

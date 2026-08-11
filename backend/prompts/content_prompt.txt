@@ -57,6 +57,18 @@ RULES:
 7. Do NOT include the answer inside the question text — the student must solve it.
 8. Generate EXACTLY {num_problems} problems — count them before returning.
 
+MATH NOTATION RULES (CRITICAL — the PDF renderer CANNOT typeset LaTeX):
+1. Write ALL math as readable plain text / Unicode:
+   a = (v - u) / t,  m/s²,  [LT⁻²],  Δv,  v² = u² + 2as,  ½mv²,  √(2gh),  ×, ÷, ≈, °, θ, π.
+2. NEVER emit LaTeX delimiters or commands: no $ or $$, no \frac, \text, \times, \sqrt,
+   no ^{{...}} or _{{...}} braces.
+3. Use Unicode superscripts/subscripts where they exist (m/s², cm³, v₀, x₁); only if none
+   exists use plain ^ notation (2^10) — never with braces.
+4. NEGATIVE EXAMPLE — never output:  $$a=\frac{{v-u}}{{t}}$$ with unit $[LT^{{-2}}]$
+   CORRECT:  a = (v - u) / t, unit: m/s² (dimensions [LT⁻²])
+   This applies to EVERY field: formulas, steps, answers, symbols, self-check.
+
+
 SELF-CHECK:
 Before returning your response, verify:
 1. You have exactly {num_problems} problems in the array.

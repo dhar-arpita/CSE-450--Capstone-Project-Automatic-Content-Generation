@@ -83,6 +83,7 @@ export const chatSessionHint = (body) => api.post("/chat/practice/session/hint",
 export const chatSessionAnswer = (body) => api.post("/chat/practice/session/answer", body);
 export const chatSessionNext = (body) => api.post("/chat/practice/session/next", body);
 export const chatSessionEnd = (body) => api.patch("/chat/practice/session/end", body);
+export const chatQuizGenerate = (body) => api.post("/chat/quiz/generate", body);
 
 
 // ──── WORKSHEET GENERATION ────
@@ -152,4 +153,6 @@ export const downloadWorksheetPDF = async (contentId) => {
   a.remove();
   window.URL.revokeObjectURL(url);
 };
+
+
 export default api;

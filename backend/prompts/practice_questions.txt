@@ -8,14 +8,22 @@ CONTEXT ABOUT THE LESSON (may be partially empty):
 
 QUESTION TYPES (very important — do not default to only one type):
 - "recall": direct factual/definitional recall — "what is X", "state the law of Y".
-- "conceptual": explains a relationship, a "why" or "how", comparing two ideas, or
-  reasoning about a scenario — without necessarily requiring a numeric calculation.
-- "numerical": a computation/problem-solving question that requires applying a formula
-  from the material with actual numbers to reach a numeric answer. ONLY use this type
-  if the STUDY MATERIAL actually contains a formula or quantitative relationship (math,
-  physics, chemistry, etc.). If the subject/topic is purely descriptive (e.g. history,
-  literature, biology definitions) with no formula, do not force numerical questions —
-  use recall and conceptual instead.
+- "conceptual": explains a relationship, a "why" or "how", compares two ideas, or
+  reasons about a scenario. Make these GENUINELY THOUGHT-PROVOKING, not plain recall in
+  disguise. Prefer application-based and analytical questions: give a short real-world
+  or hypothetical scenario and ask the student to explain, predict, compare, or justify
+  what happens and WHY. A good conceptual question cannot be answered by quoting one line
+  from the material — it forces the student to connect ideas or apply a principle to a
+  new situation. Avoid shallow "define X" phrasing here (that is "recall").
+- "numerical": a computation/problem-solving question that applies a formula from the
+  material with actual numbers to reach a numeric answer. ONLY use this type if the
+  STUDY MATERIAL actually contains a formula or quantitative relationship (math, physics,
+  chemistry, etc.). If the subject/topic is purely descriptive (history, literature,
+  biology definitions) with no formula, do not force numerical questions — use recall and
+  conceptual instead. When you DO use numerical: prefer MULTI-STEP problems that need
+  2-3 reasoning/calculation steps (for example: find an intermediate quantity first, then
+  use it to get the final answer, or combine two relationships), rather than a trivial
+  one-step plug-in. The student should have to actually work through it.
 
 QUESTION TYPE BALANCE — read this carefully:
 - If {count} is greater than 1: produce a well-balanced MIX across all the questions —
@@ -31,6 +39,14 @@ QUESTION TYPE BALANCE — read this carefully:
   empty (this is the first question), any type is fine, but lean toward "conceptual" or
   "numerical" rather than defaulting to plain recall.
 
+-If the STUDY MATERIAL actually contains a formula or quantitative relationship (math, physics,
+  chemistry, etc.),then increase the number of numerical problems as difficulty level increases
+  and make the question in different angle to validate student knowledge
+
+
+
+
+
 FORMATTING (IMPORTANT):
 - The output is shown as PLAIN TEXT with no math or markup renderer. So it must
   be fully readable as-is.
@@ -44,14 +60,33 @@ FORMATTING (IMPORTANT):
     * subscripts        -> Unicode subscripts (H₂O, CO₂, aₙ)
     * fractions         -> "a/b" or words
     * common symbols    -> use the real Unicode symbol (×, ÷, ±, ≈, ≤, ≥, →, √, π, °, etc.)
+    * Use Unicode superscripts/subscripts where they exist (m/s², cm³, v₀, x₁); only if none
+      exists use plain ^ notation (2^10) — never with braces.
+-NEGATIVE EXAMPLE — never output:  $$a=\frac{{v-u}}{{t}}$$ with unit $[LT^{{-2}}]$
+   CORRECT:  a = (v - u) / t, unit: m/s² (dimensions [LT⁻²]) 
+-NEVER emit LaTeX delimiters or commands: no $ or $$, no \frac, \text, \times, \sqrt,
+   no ^{{...}} or _{{...}} braces.      
 - Keep it clean and simple. If a piece of notation can't be written clearly in
   plain text, describe it in words instead.
 
+
+
 REQUIREMENTS:
-- Generate exactly {count} practice questions at "{difficulty}" difficulty overall (the
-  difficulty affects how deep/multi-step each question is, independent of its type —
-  e.g. an easy numerical question is a one-step calculation, a hard one combines
-  multiple steps or concepts).
+- Generate exactly {count} practice questions at "{difficulty}" difficulty overall.
+  The difficulty controls how deep and multi-step each question is (independent of type).
+  Scale it like this:
+    * "easy": single-step, direct. One idea or one short calculation.
+    * "medium": needs 2 steps or connecting two ideas. A conceptual question here asks
+      "why/how" about a familiar scenario; a numerical one has single or double intermediate step.
+    * "hard": needs 2-3 steps, combines multiple concepts, or applies a principle to a
+      NEW/unfamiliar scenario. Conceptual questions require real analysis; numerical
+      questions chain several steps or mix two relationships.Give numerical problems more.
+    * "harder" / "very hard" / "challenging": push further — multi-part reasoning,
+      subtle traps, less obvious application, or combining ideas from different parts of
+      the material. Still fair and answerable from the material, just demanding.Give numerical problems more
+  Whatever the exact difficulty word passed in, interpret it on this increasing scale and
+  make the questions genuinely match that level — do not produce easy recall questions
+  when a higher difficulty is requested.
 - If the STUDY MATERIAL below contains real content, every question MUST be answerable
   strictly from it — do not introduce facts, formulas, or examples that are not
   supported by the material.

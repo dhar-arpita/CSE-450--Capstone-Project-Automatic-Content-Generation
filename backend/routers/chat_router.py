@@ -1,5 +1,3 @@
-
-
 import json
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException  
@@ -7,6 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from google.genai import types
+from services.generation_service import generate_quiz
 
 from core.security import get_current_user_from_header  
 from core.config import (
@@ -509,8 +508,13 @@ def practice_session_hint(
     if current_user.role != "student":
         raise HTTPException(status_code=403, detail="Only students can use chatbot")
     
-    if req.hints_used >= 3:
-        return {"hint": None, "message": "You have already used the maximum number of hints (3) for this question."}
+    # hint limit content onujayi: quiz_question -> 2, one-by-one (practice_question) -> 3
+    _content_for_limit = db.query(GeneratedContent).filter(
+        GeneratedContent.content_id == req.content_id
+    ).first()
+    _max_hints = 2 if (_content_for_limit and _content_for_limit.content_type == "quiz_question") else 3
+    if req.hints_used >= _max_hints:
+        return {"hint": None, "message": f"You have already used the maximum number of hints ({_max_hints}) for this question."}
 
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == req.content_id
@@ -521,9 +525,20 @@ def practice_session_hint(
     if content.explanation:
         hints = json.loads(content.explanation)
     else:
+        # quiz_question hole answer_key ekta JSON object (question_number/options/
+        # correct_option/correct_text) — hint prompt e sudhu plain answer text lagbe
+        if content.content_type == "quiz_question":
+            try:
+                qdata = json.loads(content.answer_key)
+                answer_text = qdata.get("correct_text", "")
+            except Exception:
+                answer_text = content.answer_key
+        else:
+            answer_text = content.answer_key
+
         prompt = load_prompt_template("practice_hint.txt").format(
             question=content.display_body,
-            answer=content.answer_key,
+            answer=answer_text,
             language=req.language,
         )
         result = _gen_json(prompt, temperature=0.4)
@@ -635,6 +650,7 @@ class HistoryOut(BaseModel):
     qa: List[dict] = []
     sets: List[dict] = []
     oneByone: List[dict] = []
+    quiz: List[dict] = []
 
 
 def _latest_open_session(db: Session, student_id: int) -> Optional[LearningSession]:
@@ -679,7 +695,7 @@ def chat_history(
     ).all()
     correct_map = {i.content_id: i.is_correct for i in interactions}
 
-    qa, sets, oneByone = [], [], []
+    qa, sets, oneByone, quiz = [], [], [], []
 
     def _loads(s, fallback):
         try:
@@ -712,6 +728,23 @@ def chat_history(
                 "hints_used": len(hints) if isinstance(hints, list) else 0,
                 "self_report": correct_map.get(r.content_id, None),
             })
+        elif r.content_type == "quiz_question":
+            # প্রতিটা quiz question আলাদা row — answer_key তে JSON হিসেবে
+            # question_number/options/correct_option save করা আছে (chat_quiz_generate দেখো)।
+            # question_number == 1 মানে নতুন quiz set শুরু হয়েছে, তাই নতুন block বানাই।
+            qdata = _loads(r.answer_key, {})
+            qnum = qdata.get("question_number")
+            entry = {
+                "content_id": r.content_id,
+                "question_number": qnum,
+                "question_text": r.display_body or "",
+                "options": qdata.get("options", []),
+                "correct_option": qdata.get("correct_option"),
+            }
+            if qnum == 1 or not quiz:
+                quiz.append({"questions": [entry]})
+            else:
+                quiz[-1]["questions"].append(entry)
 
     scope = {
         "subject_id": session.scope_subject_id,
@@ -740,6 +773,7 @@ def chat_history(
         "qa": qa,
         "sets": sets,
         "oneByone": oneByone,
+        "quiz": quiz,
     }
 
 
@@ -786,3 +820,89 @@ def chat_sessions(
         })
 
     return {"sessions": out}
+
+
+class QuizRequest(ScopeRequest):
+    difficulty: Optional[str] = "mixed"
+
+
+@router.post("/quiz/generate")
+def chat_quiz_generate(
+    req: QuizRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "student":
+        return {"questions": [], "message": "Quiz is for students only."}
+
+    student_id = current_user.user_id
+    s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+
+    result = generate_quiz(
+        scope=s["scope"],
+        class_name=s["class_name"],
+        subject_name=s["subject_name"],
+        subject_id=s["subject_id"],
+        chapter_name=s["chapter_name"],
+        chapter_id=s["chapter_id"],
+        topic_name=s["topic_name"],
+        topic_id=s["topic_id"],
+        difficulty=req.difficulty,
+        language=req.language,
+        num_questions=5,       # chatbot quiz = 5 ta (static e 10/20/30 thakbe)
+        text_only=True,        # shudhu text proshno — tai 5 ta-i thakbe, kichu baad jabe na
+    )
+
+    if result.get("error"):
+        return {"questions": [], "session_id": req.session_id, "message": result["error"]}
+
+    quiz = result.get("quiz", {})
+    questions = quiz.get("questions", [])
+
+    session = _get_or_create_session(
+        db, student_id, s["topic_id"], req.session_id,
+        subject_id=s["subject_id"], chapter_id=s["chapter_id"],
+    )
+
+    # প্রতিটা প্রশ্ন আলাদা row হিসেবে save করছি, যাতে content_id দিয়ে
+    # existing hint endpoint (/practice/session/hint) reuse করা যায়।
+    # answer_key তে পুরো data (question_number/options/correct_option/correct_text)
+    # JSON হিসেবে রাখছি, যাতে /history থেকে quiz reconstruct করা যায়।
+    clean_questions = []
+    for q in questions:
+        # #1: chobi-wala proshno baad (chatbot e chobi dekhai na, tai "chobi dekho" lekha
+        #     proshno confusing) — needs_diagram true hole skip
+        if q.get("needs_diagram", False) or q.get("question_format") == "stimulus_based":
+            continue
+        options = q.get("options", [])
+        correct_label = q.get("correct_option")
+        correct_text = next((o["text"] for o in options if o.get("label") == correct_label), "")
+
+        answer_data = {
+            "question_number": q.get("question_number"),
+            "options": options,
+            "correct_option": correct_label,
+            "correct_text": correct_text,
+        }
+
+        content = _save_interaction(
+            db, session, s["topic_id"],
+            content_type="quiz_question",
+            display_body=q.get("question_text", ""),
+            answer_key=json.dumps(answer_data, ensure_ascii=False),
+            difficulty_level=req.difficulty,
+            language=req.language,
+        )
+
+        clean_questions.append({
+            "content_id": content.content_id,   # hint চাইতে লাগবে
+            "question_number": q.get("question_number"),
+            "question_text": q.get("question_text", ""),
+            "options": options,
+            "correct_option": correct_label,
+        })
+
+    return {
+        "questions": clean_questions,
+        "session_id": session.session_id,
+    }
