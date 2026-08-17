@@ -26,6 +26,7 @@ QUESTION TYPES (very important — do not default to only one type):
   one-step plug-in. The student should have to actually work through it.
 
 QUESTION TYPE BALANCE — read this carefully:
+-If the {subject_name} is Math or related to mathematics then give numerical question more.[IMPORTANT]
 - If {count} is greater than 1: produce a well-balanced MIX across all the questions —
   roughly equal parts recall, conceptual, and numerical (numerical only where the
   material supports it). Do NOT make most or all questions recall-only — that is the
