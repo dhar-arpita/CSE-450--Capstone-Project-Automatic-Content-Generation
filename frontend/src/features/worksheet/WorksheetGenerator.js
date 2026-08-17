@@ -1,119 +1,30 @@
-// import React, { useState } from "react";
-// import { generateWorksheet } from "./api";
-
-// export default function WorksheetGenerator({ selectedTopicId, user }) {
-//   const [loading, setLoading] = useState(false);
-//   const [worksheetHTML, setWorksheetHTML] = useState("");
-//   const [contentId, setContentId] = useState(null); 
-//   const [difficulty, setDifficulty] = useState("Medium");
-//   const [numQuestions, setNumQuestions] = useState(5);
-
-//   const onGenerate = async () => {
-//     if (!selectedTopicId) {
-//       alert("Please select a Topic from the dropdowns above first!");
-//       return;
-//     }
-
-//     const userId = user?.user_id || 1; 
-
-//     setLoading(true);
-//     setWorksheetHTML(""); 
-//     try {
-//       // API call
-//       const { data } = await generateWorksheet(
-//         selectedTopicId, 
-//         userId, 
-//         difficulty.toLowerCase(), 
-//         numQuestions
-//       );
-
-//       if (data && data.html) {
-//         setWorksheetHTML(data.html);
-//         setContentId(data.content_id); 
-//       } else {
-//         alert("Worksheet generated but content is empty.");
-//       }
-//     } catch (err) {
-//       console.error("Error response:", err.response?.data);
-//       alert("Failed to generate worksheet. Please check if curriculum file is uploaded.");
-//     }
-//     setLoading(false);
-//   };
-
-//   const handleDownloadPDF = () => {
-//     if (!contentId) return;
-//     window.open(`http://127.0.0.1:8000/generate/download/${contentId}`, "_blank");
-//   };
-
-//   return (
-//     <div style={{ marginTop: "20px" }}>
-//       {/* Config & Button Row */}
-//       <div style={{ display: "flex", gap: "15px", alignItems: "center", marginBottom: "15px", flexWrap: "wrap", backgroundColor: "#fff", padding: "15px", borderRadius: "8px", border: "1px solid #ddd" }}>
-        
-//         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-//           <label style={{ fontWeight: "bold" }}>Difficulty:</label>
-//           <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} style={{ padding: "5px", borderRadius: "4px" }}>
-//             <option value="Easy">Easy</option>
-//             <option value="Medium">Medium</option>
-//             <option value="Hard">Hard</option>
-//           </select>
-//         </div>
-
-//         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-//           <label style={{ fontWeight: "bold" }}>Questions:</label>
-//           <input 
-//             type="number" 
-//             value={numQuestions} 
-//             onChange={(e) => setNumQuestions(e.target.value)} 
-//             style={{ width: "60px", padding: "5px", borderRadius: "4px", border: "1px solid #ccc" }} 
-//           />
-//         </div>
-
-//         <button 
-//           onClick={onGenerate} 
-//           disabled={loading || !selectedTopicId} 
-//           style={{ 
-//             backgroundColor: "#52c41a", color: "white", padding: "10px 20px", 
-//             cursor: "pointer", border: "none", borderRadius: "6px", fontWeight: "bold",
-//             opacity: (!selectedTopicId || loading) ? 0.6 : 1
-//           }}
-//         >
-//           {loading ? "⌛ Generating..." : "✨ Generate Worksheet"}
-//         </button>
-//       </div>
-
-//       {/* Preview Section */}
-//       {worksheetHTML && (
-//         <div style={{ marginTop: "20px", backgroundColor: "white", padding: "30px", border: "1px solid #d9d9d9", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" }}>
-//           <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "15px" }}>
-//             <button 
-//               onClick={handleDownloadPDF} 
-//               style={{ backgroundColor: "#1890ff", color: "white", padding: "8px 16px", border: "none", borderRadius: "4px", cursor: "pointer", fontWeight: "bold" }}
-//             >
-//               📥 Download as PDF
-//             </button>
-//           </div>
-          
-//           <div 
-//             className="worksheet-render-area"
-//             style={{ fontFamily: "serif", lineHeight: "1.6" }}
-//             dangerouslySetInnerHTML={{ __html: worksheetHTML }} 
-//           />
-//         </div>
-//       )}
-//     </div>
-//   );
-// }
-
+// features/worksheet/WorksheetGenerator.js — Redesigned to match Emerald Green (#059669) Theme
 import React, { useState } from "react";
-// import { generateWorksheet } from "./api";
 import { generateWorksheet, downloadWorksheetPDF } from "../../shared/services/api";
-import RefineWorksheet from "./RefineWorksheet"; 
+import RefineWorksheet from "./RefineWorksheet";
 
-export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }) {
+const TXT = {
+  bangla: {
+    difficulty: "কঠিনতা", questions: "প্রশ্ন সংখ্যা",
+    easy: "সহজ", medium: "মাঝারি", hard: "কঠিন",
+    generate: "✨ Worksheet তৈরি করো", generating: "⌛ তৈরি হচ্ছে...",
+    ready: "✨ Worksheet তৈরি। ডাউনলোডের আগে নির্দিষ্ট অংশ refine করতে পারো।",
+    refine: "🛠 Refine করো", download: "📥 PDF ডাউনলোড করো",
+  },
+  english: {
+    difficulty: "Difficulty", questions: "Questions",
+    easy: "Easy", medium: "Medium", hard: "Hard",
+    generate: "✨ Generate Worksheet", generating: "⌛ Generating...",
+    ready: "✨ Worksheet ready. You can refine specific parts before downloading.",
+    refine: "🛠 Refine Worksheet", download: "📥 Download as PDF",
+  },
+};
+
+export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, language = "bangla" }) {
+  const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
   const [worksheetHTML, setWorksheetHTML] = useState("");
-  const [contentId, setContentId] = useState(null); 
+  const [contentId, setContentId] = useState(null);
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
   const [showRefine, setShowRefine] = useState(false);
@@ -124,21 +35,21 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
       return;
     }
 
-    const userId = user?.user_id || 1; 
+    const userId = user?.user_id || 1;
 
     setLoading(true);
-    setWorksheetHTML(""); 
+    setWorksheetHTML("");
     try {
       const { data } = await generateWorksheet(
-        selectedTopicId, 
-        userId, 
-        difficulty.toLowerCase(), 
+        selectedTopicId,
+        userId,
+        difficulty.toLowerCase(),
         numQuestions,
         sampleFile
       );
       if (data && data.html) {
         setWorksheetHTML(data.html);
-        setContentId(data.content_id); 
+        setContentId(data.content_id);
         setShowRefine(false);
       } else {
         alert("Worksheet generated but content is empty.");
@@ -153,7 +64,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
   const handleDownloadPDF = async () => {
     if (!contentId) return;
     try {
-      await downloadWorksheetPDF(contentId);   // token soho (interceptor Authorization pathay)
+      await downloadWorksheetPDF(contentId);
     } catch (err) {
       console.error("Download failed:", err);
       alert("Download failed. Please make sure you are logged in.");
@@ -166,139 +77,131 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile }
   };
 
   return (
-    <div style={{ marginTop: "20px" }}>
+    <div>
       {/* Config & Button Row */}
-      <div style={{ 
-        display: "flex", 
-        gap: "15px", 
-        alignItems: "center", 
-        marginBottom: "15px", 
-        flexWrap: "wrap", 
-        backgroundColor: "#fff", 
-        padding: "15px", 
-        borderRadius: "8px", 
-        border: "1px solid #ddd" 
-      }}>
-        
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <label style={{ fontWeight: "bold", fontSize: "14px" }}>Difficulty:</label>
-          <select 
-            value={difficulty} 
-            onChange={(e) => setDifficulty(e.target.value)} 
-            style={{ padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }}
-          >
-            <option value="Easy">Easy</option>
-            <option value="Medium">Medium</option>
-            <option value="Hard">Hard</option>
-          </select>
+      <div style={configRow}>
+        <div style={configField}>
+          <label style={configLabel}>{t.difficulty}</label>
+          <div style={pillWrap}>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value)}
+              style={pillSelect}
+            >
+              <option value="Easy">{t.easy}</option>
+              <option value="Medium">{t.medium}</option>
+              <option value="Hard">{t.hard}</option>
+            </select>
+            <span style={pillCaret}>▾</span>
+          </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <label style={{ fontWeight: "bold", fontSize: "14px" }}>Questions:</label>
-          <input 
-            type="number" 
-            value={numQuestions} 
-            onChange={(e) => setNumQuestions(e.target.value)} 
-            style={{ width: "60px", padding: "6px", borderRadius: "4px", border: "1px solid #ccc" }} 
+        <div style={configField}>
+          <label style={configLabel}>{t.questions}</label>
+          <input
+            type="number"
+            value={numQuestions}
+            onChange={(e) => setNumQuestions(e.target.value)}
+            style={numberInput}
             min="1"
           />
         </div>
 
-        <button 
-          onClick={onGenerate} 
-          disabled={loading || !selectedTopicId} 
-          style={{ 
-            backgroundColor: "#52c41a", 
-            color: "white", 
-            padding: "10px 25px", 
-            cursor: "pointer", 
-            border: "none", 
-            borderRadius: "6px", 
-            fontWeight: "bold",
-            fontSize: "15px",
-            transition: "0.3s",
-            opacity: (!selectedTopicId || loading) ? 0.6 : 1
-          }}
+        <button
+          onClick={onGenerate}
+          disabled={loading || !selectedTopicId}
+          style={generateBtn(loading || !selectedTopicId)}
         >
-          {loading ? "⌛ Generating..." : "✨ Generate Worksheet"}
+          {loading ? t.generating : t.generate}
         </button>
       </div>
 
       {/* Preview & Action Buttons Section */}
       {worksheetHTML && (
-        <div style={{ 
-          marginTop: "20px", 
-          backgroundColor: "white", 
-          padding: "40px", 
-          border: "1px solid #d9d9d9", 
-          borderRadius: "8px", 
-          boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-          maxWidth: "100%",
-          overflowX: "auto"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "10px" }}>
-            <div style={{ fontSize: "12px", color: "#64748b", fontWeight: "600" }}>
-              ✨ Worksheet ready. You can refine specific parts before downloading.
-            </div>
+        <div style={previewCard}>
+          <div style={previewHeaderRow}>
+            <div style={previewHint}>{t.ready}</div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button
-                onClick={() => setShowRefine(true)}
-                style={{
-                  backgroundColor: "#eef2ff",
-                  color: "#4338ca",
-                  padding: "10px 16px",
-                  border: "1px solid #c7d2fe",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: "700",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                🛠 Refine Worksheet
+              <button onClick={() => setShowRefine(true)} style={refineBtn}>
+                {t.refine}
               </button>
-
-              <button 
-                onClick={handleDownloadPDF} 
-                style={{ 
-                  backgroundColor: "#1890ff", 
-                  color: "white", 
-                  padding: "10px 20px", 
-                  border: "none", 
-                  borderRadius: "8px", 
-                  cursor: "pointer", 
-                  fontWeight: "bold",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "8px"
-                }}
-              >
-                📥 Download as PDF
+              <button onClick={handleDownloadPDF} style={downloadBtn}>
+                {t.download}
               </button>
             </div>
           </div>
-          
-          <div 
+
+          <div
             className="worksheet-render-area"
-            style={{ 
-              fontFamily: "'Times New Roman', serif", 
-              lineHeight: "1.6",
-              color: "#000" 
-            }}
-            dangerouslySetInnerHTML={{ __html: worksheetHTML }} 
+            style={worksheetRenderStyle}
+            dangerouslySetInnerHTML={{ __html: worksheetHTML }}
           />
         </div>
       )}
 
       {/* Refinement Interface */}
       {showRefine && (
-        <RefineWorksheet 
-          contentId={contentId} 
-          onClose={() => setShowRefine(false)} 
-          onUpdate={handleUpdateFromRefine} 
+        <RefineWorksheet
+          contentId={contentId}
+          onClose={() => setShowRefine(false)}
+          onUpdate={handleUpdateFromRefine}
         />
       )}
     </div>
   );
 }
+
+/* ===== STYLES ===== */
+const configRow = {
+  display: "flex",
+  gap: "16px",
+  alignItems: "flex-end",
+  flexWrap: "wrap",
+  backgroundColor: "#f8fafc",
+  padding: "18px",
+  borderRadius: "16px",
+  border: "1px solid #e2e8f0",
+};
+
+const configField = { display: "flex", flexDirection: "column", gap: "8px" };
+const configLabel = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" };
+
+const pillWrap = { display: "flex", alignItems: "center", gap: "8px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: "12px", padding: "10px 14px", minWidth: "140px" };
+const pillSelect = { flex: 1, border: "none", outline: "none", background: "transparent", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", appearance: "none", fontFamily: "inherit", cursor: "pointer" };
+const pillCaret = { color: "#94a3b8", fontSize: "12px", flexShrink: 0 };
+
+const numberInput = { width: "80px", padding: "10px 14px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "#fff", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", outline: "none" };
+
+/* Updated to Emerald Green (#059669 & #10b981) */
+const generateBtn = (disabled) => ({
+  padding: "12px 24px",
+  borderRadius: "12px",
+  border: "none",
+  background: disabled ? "#a7f3d0" : "linear-gradient(135deg, #059669, #10b981)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: "13.5px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(5,150,105,0.35)",
+  transition: "all 0.15s",
+});
+
+const previewCard = {
+  marginTop: "20px",
+  backgroundColor: "#fff",
+  padding: "28px",
+  border: "1px solid #e2e8f0",
+  borderRadius: "18px",
+  boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
+  maxWidth: "100%",
+  overflowX: "auto",
+};
+
+const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
+const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
+
+/* Updated Refine & Download Buttons to match Green theme */
+const refineBtn = { backgroundColor: "#ecfdf5", color: "#059669", padding: "10px 16px", border: "1.5px solid #a7f3d0", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
+const downloadBtn = { backgroundColor: "#059669", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" };
+
+const worksheetRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.6", color: "#000" };
