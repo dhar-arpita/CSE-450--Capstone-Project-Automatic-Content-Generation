@@ -117,35 +117,6 @@ export const getWorksheetDetails = (contentId) => api.get(`/generate/worksheet/$
 export const getIngestionStatus = (jobId) => api.get(`/ingest/status/${jobId}`);
 
 
-// ──── STUDY NOTE GENERATION ────
-export const generateStudyNote = (topicId, language = "bangla") => {
-  const formData = new URLSearchParams();
-  formData.append("topic_id", topicId);
-  formData.append("language", language);
-
-  return api.post("/generate/study-note", formData, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
-};
-
-
-// ──── QUIZ GENERATION ────
-export const generateQuiz = (params) => {
-  const formData = new URLSearchParams();
-  
-  if (params.scope) formData.append("scope", params.scope);
-  if (params.topic_id) formData.append("topic_id", params.topic_id);
-  if (params.chapter_id) formData.append("chapter_id", params.chapter_id);
-  if (params.subject_id) formData.append("subject_id", params.subject_id);
-  if (params.language) formData.append("language", params.language);
-  if (params.num_questions) formData.append("num_questions", params.num_questions);
-
-  return api.post("/generate/quiz", formData, {
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
-};
-
-
 // ──── Q&A & FLASHCARDS ────
 export const askQuestion = (question) => {
   return api.get(`/ask/?question=${encodeURIComponent(question)}`);

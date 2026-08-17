@@ -1,93 +1,27 @@
-// features/generate/GeneratePage.js — Updated to Emerald Green (#059669) Theme
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+// import { getClasses, getSubjects, getChapters, getTopics } from "./api";
+// import WorksheetGenerator from "./WorksheetGenerator";
 
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
 import WorksheetGenerator from "../worksheet/WorksheetGenerator";
 
-/* ---------- bilingual UI text ---------- */
-const TXT = {
-  bangla: {
-    breadcrumb: "Worksheet Studio",
-    pageTitle: "AI Worksheet স্টুডিও",
-    pageSub: "তোমার ক্লাসের জন্য মুহূর্তেই পোলিশড worksheet তৈরি করো।",
-    setupLabel: "সেটআপ",
-    step1Title: "কারিকুলাম সিলেকশন",
-    step1Sub: "কোন টপিকের জন্য worksheet বানাতে চাও তা নির্দিষ্ট করো।",
-    classL: "ক্লাস", subjectL: "বিষয়", chapterL: "অধ্যায়", topicL: "টপিক",
-    selectClass: "ক্লাস বেছে নাও", selectSubject: "বিষয় বেছে নাও",
-    selectChapter: "অধ্যায় বেছে নাও", selectTopic: "টপিক বেছে নাও",
-    hintDone: "চমৎকার। তোমার context লক করা হয়েছে। নিচে generation settings-এ যাও।",
-    hintPending: "টার্গেটেড worksheet generation আনলক করতে চারটা ড্রপডাউনই পূরণ করো।",
-    step2Title: "কনফিগারেশন ও রেফারেন্স স্টাইল",
-    addSample: "+ রেফারেন্স স্যাম্পল worksheet যোগ করো (ঐচ্ছিক)",
-    uploadRef: "রেফারেন্স ফাইল আপলোড করো", cancel: "বাতিল",
-    refHelper: "শুধু স্টাইল/টোন গাইডেন্সের জন্য ব্যবহৃত হবে। কনটেন্ট এখনও নির্বাচিত টপিক অনুযায়ী থাকবে।",
-    selected: "✅ নির্বাচিত:",
-  },
-  english: {
-    breadcrumb: "Worksheet Studio",
-    pageTitle: "AI Worksheet Studio",
-    pageSub: "Create classroom-ready worksheets for your students in a click.",
-    setupLabel: "Setup",
-    step1Title: "Curriculum Selection",
-    step1Sub: "Pinpoint exactly which topic this worksheet should target.",
-    classL: "Class", subjectL: "Subject", chapterL: "Chapter", topicL: "Topic",
-    selectClass: "Select class", selectSubject: "Select subject",
-    selectChapter: "Select chapter", selectTopic: "Select topic",
-    hintDone: "Perfect. Your context is locked in. Move to generation settings below.",
-    hintPending: "Complete all four dropdowns to unlock targeted worksheet generation.",
-    step2Title: "Configuration & Reference Style",
-    addSample: "+ Add a reference sample worksheet (optional)",
-    uploadRef: "Upload Reference File", cancel: "Cancel",
-    refHelper: "Used only for style/tone guidance. Content still follows selected topic knowledge.",
-    selected: "✅ Selected:",
-  },
-};
-
-/* ---------- top navbar ---------- */
-function Navbar({ user, onBack, breadcrumb, language, onLanguage }) {
-  return (
-    <nav style={navStyle}>
-      <div style={navInner}>
-        <div style={navLogo} onClick={onBack}>
-          <div style={logoIcon}>🎓</div>
-          <span style={logoText}>EduAI <span style={{ color: "#059669" }}>Hub</span></span>
-        </div>
-
-        <div style={navCenter}>
-          <span style={navBreadcrumb}>
-            🏠 Dashboard / <span style={{ color: "#059669", fontWeight: 700, marginLeft: "4px" }}>{breadcrumb}</span>
-          </span>
-        </div>
-
-        <div style={navRight}>
-          <div style={langToggle}>
-            {[["bangla", "BN"], ["english", "EN"]].map(([v, l]) => (
-              <button key={v} onClick={() => onLanguage(v)} style={langBtn(language === v)}>{l}</button>
-            ))}
-          </div>
-          <div style={userBadge}>
-            <div style={userAvatar}>{(user?.name || "S")[0].toUpperCase()}</div>
-            <span style={userName}>{user?.name || "Test Student"}</span>
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
-}
-
-/* ---------- styled select field ---------- */
 function SelectField({ label, icon, value, onChange, disabled, options, placeholder }) {
   return (
-    <div>
-      <label style={fieldLabel}><span style={{ fontSize: "14px" }}>{icon}</span><span>{label}</span></label>
-      <div style={{ ...pillWrap, ...(disabled ? pillWrapDisabled : {}) }}>
+    <div style={fieldCardStyle}>
+      <label style={labelStyle}>
+        <span>{icon}</span>
+        <span>{label}</span>
+      </label>
+      <div style={{ position: "relative" }}>
         <select
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
-          style={pillSelect}
+          style={{
+            ...selectStyle,
+            ...(disabled ? disabledSelectStyle : {}),
+          }}
         >
           <option value="">{placeholder}</option>
           {options.map((option) => (
@@ -96,7 +30,7 @@ function SelectField({ label, icon, value, onChange, disabled, options, placehol
             </option>
           ))}
         </select>
-        <span style={pillCaret}>▾</span>
+        <span style={caretStyle}>▾</span>
       </div>
     </div>
   );
@@ -105,8 +39,6 @@ function SelectField({ label, icon, value, onChange, disabled, options, placehol
 export default function GeneratePage() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
-  const [language, setLanguage] = useState("bangla");
-  const t = TXT[language] || TXT.bangla;
 
   const [classList, setClassList] = useState([]);
   const [subjectList, setSubjectList] = useState([]);
@@ -186,113 +118,113 @@ export default function GeneratePage() {
 
   return (
     <div style={pageStyle}>
-      <Navbar user={user} onBack={() => navigate(-1)} breadcrumb={t.breadcrumb} language={language} onLanguage={setLanguage} />
+      <div style={ambientOrbA} />
+      <div style={ambientOrbB} />
+      <div style={ambientOrbC} />
 
-      <main style={mainWrap}>
+      <div style={containerStyle}>
+        <header style={topBarStyle}>
+          <button onClick={() => navigate(-1)} style={backButtonStyle}>← Dashboard</button>
 
-        {/* ── PAGE TITLE ── */}
-        <div style={pageTitleRow}>
-          <div style={pageTitleIcon}>📝</div>
+          <div style={{ textAlign: "center" }}>
+            <h1 style={titleStyle}>📝 AI Worksheet Studio</h1>
+            <p style={subtitleStyle}>Sophisticated worksheet generation workflow for your capstone demo</p>
+          </div>
+
+          <div style={userPillStyle}>👋 {user?.name?.split(" ")[0] || "Teacher"}</div>
+        </header>
+
+        <section style={heroCardStyle}>
           <div>
-            <h1 style={pageTitleStyle}>{t.pageTitle}</h1>
-            <p style={pageSub}>{t.pageSub}</p>
+            
+            <h2 style={heroTitleStyle}>Create classroom-ready worksheets at a click!</h2>
+            <p style={heroDescStyle}>
+              Select curriculum context precisely, add optional style reference, then generate polished outputs with AI.
+            </p>
           </div>
-        </div>
 
-        {/* ── SETUP PROGRESS CARD ── */}
-        <div style={setupCard}>
-          <span style={setupLabel}>{t.setupLabel}</span>
-          <strong style={setupValue}>{setupProgress}/4</strong>
-          <div style={setupTrack}>
-            <div style={{ ...setupFill, width: `${(setupProgress / 4) * 100}%` }} />
-          </div>
-        </div>
-
-        {/* ── MAIN CARD ── */}
-        <div style={card}>
-
-          {/* STEP 1 */}
-          <div style={stepHeaderRow}>
-            <div style={stepCircle(setupProgress === 4)}>{setupProgress === 4 ? "✓" : "1"}</div>
-            <div style={{ flex: 1 }}>
-              <h3 style={stepTitle}>{t.step1Title}</h3>
-              <p style={stepSub}>{t.step1Sub}</p>
-            </div>
-            <div style={progressDots}>
-              {[selectedClass, selectedSubject, selectedChapter, selectedTopicId].map((done, i) => (
-                <div key={i} style={progressDot(!!done)} />
-              ))}
+          <div style={heroMeterStyle}>
+            <span style={heroMeterLabelStyle}>Setup</span>
+            <strong style={heroMeterValueStyle}>{setupProgress}/4</strong>
+            <div style={heroTrackStyle}>
+              <div style={{ ...heroFillStyle, width: `${(setupProgress / 4) * 100}%` }} />
             </div>
           </div>
+        </section>
 
-          <div style={fieldGrid}>
+        <main style={mainCardStyle}>
+          <div style={sectionHeaderStyle}>
+            <span style={stepBadgeStyle}>STEP 1</span>
+            <h3 style={sectionTitleStyle}>Curriculum Selection</h3>
+          </div>
+
+          <div style={gridStyle}>
             <SelectField
-              label={t.classL}
+              label="Class"
               icon="🏫"
               value={selectedClass}
               onChange={handleClassChange}
-              placeholder={t.selectClass}
+              placeholder="Select class"
               options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
             />
 
             <SelectField
-              label={t.subjectL}
+              label="Subject"
               icon="📚"
               value={selectedSubject}
               onChange={handleSubjectChange}
               disabled={!selectedClass}
-              placeholder={t.selectSubject}
+              placeholder="Select subject"
               options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
             />
 
             <SelectField
-              label={t.chapterL}
+              label="Chapter"
               icon="🧩"
               value={selectedChapter}
               onChange={handleChapterChange}
               disabled={!selectedSubject}
-              placeholder={t.selectChapter}
+              placeholder="Select chapter"
               options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
             />
 
             <SelectField
-              label={t.topicL}
+              label="Topic"
               icon="🎯"
               value={selectedTopicId}
               onChange={setSelectedTopicId}
               disabled={!selectedChapter}
-              placeholder={t.selectTopic}
-              options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
+              placeholder="Select topic"
+              options={topicList.map((t) => ({ value: t.topic_id, label: t.name }))}
             />
           </div>
 
-          <div style={hintBox}>
+          <div style={hintBoxStyle}>
             <span style={{ fontSize: "16px" }}>💡</span>
-            <span style={hintText}>
-              {selectedTopicId ? t.hintDone : t.hintPending}
+            <span style={hintTextStyle}>
+              {selectedTopicId
+                ? "Perfect. Your context is locked in. Move to generation settings below."
+                : "Complete all four dropdowns to unlock targeted worksheet generation."}
             </span>
           </div>
 
-          <div style={divider} />
+          <hr style={hrStyle} />
 
-          {/* STEP 2 */}
-          <div style={stepHeaderRow}>
-            <div style={stepCircle(false)}>2</div>
-            <div style={{ flex: 1 }}>
-              <h3 style={stepTitle}>{t.step2Title}</h3>
-            </div>
+          <div style={sectionHeaderStyle}>
+            <span style={{ ...stepBadgeStyle, background: "#eff6ff", borderColor: "#bfdbfe", color: "#1d4ed8" }}>STEP 2</span>
+            <h3 style={sectionTitleStyle}>Configuration & Reference Style</h3>
           </div>
 
-          <div style={{ marginBottom: "8px" }}>
+          <div style={sampleSectionStyle}>
             {!showSampleInput ? (
               <button onClick={() => setShowSampleInput(true)} style={sampleButtonStyle}>
-                {t.addSample}
+                + Add a reference sample worksheet (optional)
               </button>
             ) : (
               <div style={uploadPanelStyle}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <span style={{ fontSize: "13.5px", fontWeight: 800, color: "#0f172a" }}>{t.uploadRef}</span>
-                  <button onClick={() => { setShowSampleInput(false); setSampleFile(null); }} style={cancelButtonStyle}>{t.cancel}</button>
+                  <span style={{ fontSize: "14px", fontWeight: "800", color: "#0f172a" }}>Upload Reference File</span>
+                  <button onClick={() => { setShowSampleInput(false); setSampleFile(null); }} style={cancelButtonStyle}>Cancel</button>
                 </div>
                 <input
                   type="file"
@@ -300,82 +232,345 @@ export default function GeneratePage() {
                   onChange={(e) => setSampleFile(e.target.files[0])}
                   style={{ fontSize: "13px" }}
                 />
-                <p style={helperTextStyle}>{t.refHelper}</p>
-                {sampleFile && <p style={selectedFileStyle}>{t.selected} {sampleFile.name}</p>}
+                <p style={helperTextStyle}>Used only for style/tone guidance. Content still follows selected topic knowledge.</p>
+                {sampleFile && <p style={selectedFileStyle}>✅ Selected: {sampleFile.name}</p>}
               </div>
             )}
           </div>
 
           <div style={{ marginTop: "20px" }}>
-            <WorksheetGenerator selectedTopicId={selectedTopicId} user={user} sampleFile={sampleFile} language={language} />
+            <WorksheetGenerator selectedTopicId={selectedTopicId} user={user} sampleFile={sampleFile} />
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
 
-/* ===== STYLES ===== */
-const pageStyle = { minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Segoe UI', system-ui, sans-serif" };
+const pageStyle = {
+  minHeight: "100vh",
+  padding: "36px 20px 56px",
+  background: "linear-gradient(180deg, #f8fafc 0%, #eef2ff 52%, #ecfeff 100%)",
+  position: "relative",
+  overflow: "hidden",
+};
 
-/* NAV */
-const navStyle = { background: "#fff", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.08)", borderBottom: "1px solid #e2e8f0" };
-const navInner = { maxWidth: "1100px", margin: "0 auto", padding: "0 24px", height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" };
-const navLogo = { display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, cursor: "pointer" };
-const logoIcon = { width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #059669, #10b981)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" };
-const logoText = { fontSize: "18px", fontWeight: 800, color: "#0f172a", fontFamily: "'Poppins', sans-serif" };
-const navCenter = { flex: 1, display: "flex", justifyContent: "center" };
-const navBreadcrumb = { fontSize: "13px", fontWeight: 600, color: "#94a3b8" };
-const navRight = { display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 };
-const langToggle = { display: "flex", background: "#f1f5f9", borderRadius: "999px", padding: "3px" };
-const langBtn = (active) => ({ padding: "5px 12px", borderRadius: "999px", border: "none", background: active ? "#059669" : "transparent", color: active ? "#fff" : "#64748b", fontSize: "12px", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" });
-const userBadge = { display: "flex", alignItems: "center", gap: "8px" };
-const userAvatar = { width: "34px", height: "34px", borderRadius: "50%", background: "#059669", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "14px" };
-const userName = { fontSize: "14px", fontWeight: 600, color: "#0f172a" };
+const ambientOrbA = {
+  position: "absolute",
+  top: "-130px",
+  right: "-120px",
+  width: "340px",
+  height: "340px",
+  borderRadius: "50%",
+  background: "radial-gradient(circle, rgba(99,102,241,0.24) 0%, rgba(99,102,241,0) 72%)",
+};
 
-/* MAIN */
-const mainWrap = { maxWidth: "1000px", margin: "0 auto", padding: "32px 20px 60px", display: "flex", flexDirection: "column", gap: "18px" };
+const ambientOrbB = {
+  position: "absolute",
+  bottom: "-140px",
+  left: "-120px",
+  width: "360px",
+  height: "360px",
+  borderRadius: "50%",
+  background: "radial-gradient(circle, rgba(16,185,129,0.18) 0%, rgba(16,185,129,0) 74%)",
+};
 
-const pageTitleRow = { display: "flex", alignItems: "center", gap: "14px" };
-const pageTitleIcon = { width: "48px", height: "48px", borderRadius: "14px", background: "linear-gradient(135deg, #059669, #10b981)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", flexShrink: 0, boxShadow: "0 4px 14px rgba(5,150,105,0.3)" };
-const pageTitleStyle = { margin: 0, fontFamily: "'Poppins', sans-serif", fontSize: "24px", fontWeight: 800, color: "#0f172a" };
-const pageSub = { margin: "4px 0 0", color: "#64748b", fontSize: "13.5px", fontWeight: 500 };
+const ambientOrbC = {
+  position: "absolute",
+  top: "38%",
+  left: "50%",
+  transform: "translateX(-50%)",
+  width: "280px",
+  height: "280px",
+  borderRadius: "50%",
+  background: "radial-gradient(circle, rgba(14,165,233,0.12) 0%, rgba(14,165,233,0) 76%)",
+};
 
-/* SETUP CARD */
-const setupCard = { background: "#fff", borderRadius: "18px", border: "1px solid #d1fae5", boxShadow: "0 4px 16px rgba(5,150,105,0.06)", padding: "16px 22px", display: "flex", alignItems: "center", gap: "14px" };
-const setupLabel = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" };
-const setupValue = { fontSize: "18px", fontWeight: 800, color: "#059669" };
-const setupTrack = { flex: 1, height: "7px", borderRadius: "999px", background: "#e2e8f0", overflow: "hidden" };
-const setupFill = { height: "100%", borderRadius: "999px", background: "linear-gradient(90deg, #059669, #10b981)", transition: "width 0.35s ease" };
+const containerStyle = {
+  maxWidth: "1080px",
+  margin: "0 auto",
+  position: "relative",
+  zIndex: 1,
+  display: "flex",
+  flexDirection: "column",
+  gap: "18px",
+};
 
-/* CARD */
-const card = { background: "#fff", borderRadius: "20px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", border: "1px solid #e2e8f0", padding: "28px" };
+const topBarStyle = {
+  display: "grid",
+  gridTemplateColumns: "auto 1fr auto",
+  alignItems: "center",
+  gap: "16px",
+  borderRadius: "16px",
+  border: "1px solid #e2e8f0",
+  background: "rgba(255,255,255,0.82)",
+  backdropFilter: "blur(10px)",
+  boxShadow: "0 12px 28px rgba(15,23,42,0.08)",
+  padding: "14px 16px",
+};
 
-const stepHeaderRow = { display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" };
-const stepCircle = (done) => ({ width: "30px", height: "30px", borderRadius: "50%", background: done ? "#22c55e" : "#ecfdf5", color: done ? "#fff" : "#059669", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "13px", flexShrink: 0 });
-const stepTitle = { margin: 0, fontSize: "15px", fontWeight: 800, color: "#0f172a" };
-const stepSub = { margin: "2px 0 0", fontSize: "12px", color: "#94a3b8", fontWeight: 600 };
-const progressDots = { display: "flex", gap: "5px", flexShrink: 0 };
-const progressDot = (done) => ({ width: "26px", height: "5px", borderRadius: "4px", background: done ? "#059669" : "#e2e8f0", transition: "background 0.3s" });
+const backButtonStyle = {
+  padding: "9px 14px",
+  borderRadius: "10px",
+  border: "1px solid #cbd5e1",
+  background: "#fff",
+  color: "#334155",
+  fontSize: "13px",
+  fontWeight: "700",
+  cursor: "pointer",
+};
 
-const fieldGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", marginBottom: "18px" };
-const fieldLabel = { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" };
+const titleStyle = {
+  margin: 0,
+  fontSize: "26px",
+  fontWeight: "900",
+  letterSpacing: "-0.02em",
+  color: "#0f172a",
+};
 
-const divider = { height: "1px", background: "#e2e8f0", margin: "24px 0" };
+const subtitleStyle = {
+  margin: "4px 0 0",
+  fontSize: "12px",
+  color: "#64748b",
+  fontWeight: "500",
+};
 
-/* PILL SELECT */
-const pillWrap = { display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: "12px", padding: "11px 14px" };
-const pillWrapDisabled = { background: "#f1f5f9", opacity: 0.6 };
-const pillSelect = { flex: 1, border: "none", outline: "none", background: "transparent", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", appearance: "none", fontFamily: "inherit", cursor: "pointer", minWidth: 0 };
-const pillCaret = { color: "#94a3b8", fontSize: "12px", flexShrink: 0 };
+const userPillStyle = {
+  justifySelf: "end",
+  borderRadius: "999px",
+  border: "1px solid #bfdbfe",
+  background: "#eff6ff",
+  color: "#1d4ed8",
+  fontSize: "12px",
+  fontWeight: "700",
+  padding: "8px 12px",
+};
 
-/* HINT BOX */
-const hintBox = { display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px" };
-const hintText = { fontSize: "12.5px", color: "#475569", fontWeight: 600 };
+const heroCardStyle = {
+  borderRadius: "20px",
+  padding: "24px 26px",
+  background: "linear-gradient(135deg, #0f172a 0%, #1e293b 65%, #334155 100%)",
+  color: "#fff",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "18px",
+  boxShadow: "0 20px 44px rgba(15,23,42,0.28)",
+};
 
-/* SAMPLE UPLOAD */
-const sampleButtonStyle = { background: "#ecfdf5", border: "1.5px dashed #a7f3d0", color: "#059669", borderRadius: "12px", fontSize: "13px", fontWeight: 700, padding: "11px 16px", cursor: "pointer" };
-const uploadPanelStyle = { padding: "16px", border: "1.5px dashed #cbd5e1", borderRadius: "12px", backgroundColor: "#f8fafc" };
-const cancelButtonStyle = { border: "1px solid #fecaca", color: "#dc2626", background: "#fff", borderRadius: "8px", fontSize: "12px", fontWeight: 700, padding: "5px 12px", cursor: "pointer" };
-const helperTextStyle = { fontSize: "11.5px", color: "#64748b", marginTop: "9px", marginBottom: 0, fontWeight: 500 };
-const selectedFileStyle = { marginTop: "8px", marginBottom: 0, fontSize: "12px", color: "#059669", fontWeight: 700 };
+const heroTagStyle = {
+  margin: 0,
+  fontSize: "11px",
+  color: "#93c5fd",
+  fontWeight: "700",
+  letterSpacing: "0.11em",
+  textTransform: "uppercase",
+};
+
+const heroTitleStyle = {
+  margin: "8px 0 10px",
+  fontSize: "29px",
+  lineHeight: 1.17,
+  letterSpacing: "-0.02em",
+  maxWidth: "720px",
+};
+
+const heroDescStyle = {
+  margin: 0,
+  color: "#cbd5e1",
+  fontSize: "14px",
+  lineHeight: 1.6,
+  maxWidth: "700px",
+};
+
+const heroMeterStyle = {
+  minWidth: "150px",
+  textAlign: "right",
+};
+
+const heroMeterLabelStyle = {
+  fontSize: "11px",
+  color: "#a5b4fc",
+  letterSpacing: "0.09em",
+  textTransform: "uppercase",
+};
+
+const heroMeterValueStyle = {
+  display: "block",
+  marginTop: "4px",
+  fontSize: "30px",
+  lineHeight: 1,
+};
+
+const heroTrackStyle = {
+  marginTop: "10px",
+  height: "7px",
+  borderRadius: "999px",
+  background: "rgba(148,163,184,0.35)",
+  overflow: "hidden",
+};
+
+const heroFillStyle = {
+  height: "100%",
+  borderRadius: "999px",
+  background: "linear-gradient(90deg, #22c55e 0%, #60a5fa 100%)",
+  transition: "width 0.35s ease",
+};
+
+const mainCardStyle = {
+  borderRadius: "18px",
+  border: "1px solid #e2e8f0",
+  background: "rgba(255,255,255,0.93)",
+  backdropFilter: "blur(8px)",
+  boxShadow: "0 16px 40px rgba(15,23,42,0.10)",
+  padding: "28px",
+};
+
+const sectionHeaderStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  marginBottom: "14px",
+};
+
+const stepBadgeStyle = {
+  fontSize: "11px",
+  fontWeight: "800",
+  letterSpacing: "0.08em",
+  textTransform: "uppercase",
+  color: "#15803d",
+  background: "#f0fdf4",
+  border: "1px solid #bbf7d0",
+  borderRadius: "999px",
+  padding: "5px 10px",
+};
+
+const sectionTitleStyle = {
+  margin: 0,
+  fontSize: "20px",
+  color: "#0f172a",
+  fontWeight: "800",
+  letterSpacing: "-0.01em",
+};
+
+const gridStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+  gap: "14px",
+};
+
+const fieldCardStyle = {
+  border: "1px solid #e2e8f0",
+  borderRadius: "12px",
+  padding: "12px",
+  background: "#fff",
+  boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+};
+
+const labelStyle = {
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  fontSize: "12px",
+  fontWeight: "700",
+  color: "#475569",
+  marginBottom: "8px",
+  letterSpacing: "0.03em",
+  textTransform: "uppercase",
+};
+
+const selectStyle = {
+  width: "100%",
+  padding: "10px 32px 10px 11px",
+  borderRadius: "10px",
+  border: "1px solid #cbd5e1",
+  fontSize: "14px",
+  color: "#0f172a",
+  outline: "none",
+  background: "#fff",
+  appearance: "none",
+};
+
+const disabledSelectStyle = {
+  background: "#f8fafc",
+  color: "#94a3b8",
+};
+
+const caretStyle = {
+  position: "absolute",
+  right: "11px",
+  top: "50%",
+  transform: "translateY(-50%)",
+  color: "#64748b",
+  pointerEvents: "none",
+  fontSize: "12px",
+};
+
+const hintBoxStyle = {
+  marginTop: "14px",
+  display: "flex",
+  alignItems: "center",
+  gap: "8px",
+  padding: "10px 12px",
+  borderRadius: "10px",
+  background: "#f8fafc",
+  border: "1px solid #e2e8f0",
+};
+
+const hintTextStyle = {
+  fontSize: "12px",
+  color: "#475569",
+  fontWeight: "600",
+};
+
+const hrStyle = {
+  border: 0,
+  borderTop: "1px solid #e2e8f0",
+  margin: "24px 0",
+};
+
+const sampleSectionStyle = { marginBottom: "8px" };
+
+const sampleButtonStyle = {
+  background: "#eff6ff",
+  border: "1px dashed #93c5fd",
+  color: "#1d4ed8",
+  borderRadius: "10px",
+  fontSize: "13px",
+  fontWeight: "700",
+  padding: "10px 14px",
+  cursor: "pointer",
+};
+
+const uploadPanelStyle = {
+  padding: "14px",
+  border: "1px dashed #94a3b8",
+  borderRadius: "10px",
+  backgroundColor: "#f8fafc",
+};
+
+const cancelButtonStyle = {
+  border: "1px solid #fecaca",
+  color: "#dc2626",
+  background: "#fff",
+  borderRadius: "8px",
+  fontSize: "12px",
+  fontWeight: "700",
+  padding: "4px 10px",
+  cursor: "pointer",
+};
+
+const helperTextStyle = {
+  fontSize: "11px",
+  color: "#64748b",
+  marginTop: "9px",
+  marginBottom: 0,
+};
+
+const selectedFileStyle = {
+  marginTop: "8px",
+  marginBottom: 0,
+  fontSize: "12px",
+  color: "#15803d",
+  fontWeight: "700",
+};
