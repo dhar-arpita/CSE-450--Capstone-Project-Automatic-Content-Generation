@@ -24,6 +24,65 @@ from core.config import gemini_client
 
 # Add this NEW function in ingestion_controller.py (BEFORE extract_topics_from_text)
 
+# def generate_topic_descriptions(topic_names: list, chapter_name: str, full_text: str) -> dict:
+#     """
+#     Uses Gemini to generate a short semantic description for each topic.
+#     These descriptions are stored in DB and used as embedding queries at
+#     worksheet generation time — gives much better semantic search than
+#     using topic names alone.
+
+#     Returns: { "topic_name": "description", ... }
+#     """
+#     topics_list = "\n".join([f"- {name}" for name in topic_names])
+
+#     prompt = f"""You are analyzing a chapter from a Bangladeshi NCTB textbook.
+
+# Chapter: {chapter_name}
+
+# Topics in this chapter:
+# {topics_list}
+
+# For each topic, write a 2-3 sentence description that:
+# - Explains what the topic covers conceptually
+# - Mentions key terms, formulas, or sub-concepts that belong to this topic
+# - Does NOT include things that belong to other topics in the same chapter
+
+# This description will be used for semantic search to find relevant content.
+# Match the language of the topic names (English topics = English descriptions, Bengali topics = Bengali descriptions).
+
+# Return ONLY a valid JSON object mapping topic name to description. No markdown, no extra text.
+
+# Example:
+# {{
+#   "Acceleration": "Acceleration is the rate of change of velocity with respect to time. It includes positive acceleration, negative acceleration (deceleration), and the formula a = (v-u)/t. Acceleration is a vector quantity measured in m/s².",
+#   "Equations of Motion": "The three kinematic equations relating displacement, velocity, acceleration, and time: v = u + at, s = ut + (1/2)at², and v² = u² + 2as. These equations apply to uniformly accelerated motion in a straight line."
+# }}
+
+# Chapter text (for context):
+# {full_text[:30000]}
+# """
+
+#     response = gemini_client.models.generate_content(
+#         model="gemini-2.5-flash",
+#         contents=prompt
+#     )
+#     raw = response.text.strip()
+
+#     if raw.startswith("```"):
+#         raw = raw.split("```")[1]
+#         if raw.startswith("json"):
+#             raw = raw[4:]
+#     raw = raw.strip()
+    
+#     import re
+#     # Replace \X where X is not a valid JSON escape character
+#     raw = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+
+
+#     descriptions = json.loads(raw)
+#     print(f"[Topic Description] Generated descriptions for {len(descriptions)} topics")
+#     return descriptions
+
 def generate_topic_descriptions(topic_names: list, chapter_name: str, full_text: str) -> dict:
     """
     Uses Gemini to generate a short semantic description for each topic.
@@ -50,12 +109,16 @@ For each topic, write a 2-3 sentence description that:
 This description will be used for semantic search to find relevant content.
 Match the language of the topic names (English topics = English descriptions, Bengali topics = Bengali descriptions).
 
-Return ONLY a valid JSON object mapping topic name to description. No markdown, no extra text.
+CRITICAL JSON RULES: 
+1. Return ONLY a valid JSON object mapping topic name to description. No markdown, no extra text.
+2. Do NOT use single backslashes for math formulas (like \\cup or \\union). If you must use math, write it in plain English (like 'A union B') or strictly double-escape it (like \\\\cup). Single backslashes will crash our system.
 
-Example:
+Examples:
 {{
   "Acceleration": "Acceleration is the rate of change of velocity with respect to time. It includes positive acceleration, negative acceleration (deceleration), and the formula a = (v-u)/t. Acceleration is a vector quantity measured in m/s².",
-  "Equations of Motion": "The three kinematic equations relating displacement, velocity, acceleration, and time: v = u + at, s = ut + (1/2)at², and v² = u² + 2as. These equations apply to uniformly accelerated motion in a straight line."
+  "Equations of Motion": "The three kinematic equations relating displacement, velocity, acceleration, and time: v = u + at, s = ut + (1/2)at², and v² = u² + 2as. These equations apply to uniformly accelerated motion in a straight line.",
+  "Set": "A set is a well-defined collection of objects. It includes concepts like subsets, universal sets, and proper subsets.",
+  "Venn Diagram": "A visual representation of sets using shapes. It shows relationships like A union B and A intersection B."
 }}
 
 Chapter text (for context):
@@ -68,21 +131,26 @@ Chapter text (for context):
     )
     raw = response.text.strip()
 
+    # Clean markdown formatting if Gemini includes it
     if raw.startswith("```"):
         raw = raw.split("```")[1]
         if raw.startswith("json"):
             raw = raw[4:]
     raw = raw.strip()
     
-    import re
-    # Replace \X where X is not a valid JSON escape character
-    raw = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', raw)
+    # Safely handle any rogue backslashes before JSON parsing
+    raw = raw.replace("\\", "\\\\")      # 1. Double-escape ALL backslashes
+    raw = raw.replace("\\\\n", "\\n")    # 2. Restore actual newlines if Gemini used them
+    raw = raw.replace('\\\\"', '\\"')    # 3. Restore actual escaped quotes inside strings
 
-
-    descriptions = json.loads(raw)
-    print(f"[Topic Description] Generated descriptions for {len(descriptions)} topics")
-    return descriptions
-
+    try:
+        descriptions = json.loads(raw)
+        print(f"[Topic Description] Generated descriptions for {len(descriptions)} topics")
+        return descriptions
+    except json.JSONDecodeError as e:
+        print(f"[Topic Description Error] Failed to parse JSON: {e}")
+        # Fallback: if it still fails, just map the topic names to themselves so the pipeline doesn't crash
+        return {name: name for name in topic_names}
 
 # ── TOPIC EXTRACTION ──────────────────────────────────────────────────────────
 
