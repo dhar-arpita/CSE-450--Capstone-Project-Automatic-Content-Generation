@@ -9,7 +9,9 @@ const TXT = {
     easy: "সহজ", medium: "মাঝারি", hard: "কঠিন",
     generate: "✨ Worksheet তৈরি করো", generating: "⌛ তৈরি হচ্ছে...",
     ready: "✨ Worksheet তৈরি। ডাউনলোডের আগে নির্দিষ্ট অংশ refine করতে পারো।",
-    refine: "🛠 Refine করো", download: "📥 PDF ডাউনলোড করো",
+    refine: "🛠 Refine করো", 
+    download: "📥 PDF ডাউনলোড করো",
+    downloading: "⌛ ডাউনলোড হচ্ছে...",
     errorMsg: "⚠️ কনটেন্ট জেনারেট হতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
     retry: "🔄 আবার চেষ্টা করুন",
   },
@@ -18,7 +20,9 @@ const TXT = {
     easy: "Easy", medium: "Medium", hard: "Hard",
     generate: "✨ Generate Worksheet", generating: "⌛ Generating...",
     ready: "✨ Worksheet ready. You can refine specific parts before downloading.",
-    refine: "🛠 Refine Worksheet", download: "📥 Download as PDF",
+    refine: "🛠 Refine Worksheet", 
+    download: "📥 Download as PDF",
+    downloading: "⌛ Downloading...",
     errorMsg: "⚠️ Failed to generate worksheet. Please try again.",
     retry: "🔄 Try Again",
   },
@@ -27,7 +31,8 @@ const TXT = {
 export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false); // 💡 নতুন Error State
+  const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [error, setError] = useState(false);
   const [worksheetHTML, setWorksheetHTML] = useState("");
   const [contentId, setContentId] = useState(null);
   const [difficulty, setDifficulty] = useState("Medium");
@@ -43,7 +48,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     const userId = user?.user_id || 1;
 
     setLoading(true);
-    setError(false); // 💡 নতুন রিকোয়েস্টের শুরুতে আগের এরর ক্লিয়ার করা হচ্ছে
+    setError(false);
     setWorksheetHTML("");
     
     try {
@@ -64,7 +69,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
       }
     } catch (err) {
       console.error("Error:", err);
-      setError(true); // 💡 alert() তুলে দিয়ে setError(true) দেওয়া হলো
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -72,6 +77,8 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
 
   const handleDownloadPDF = async () => {
     if (!contentId) return;
+
+    setDownloading(true); // 💡 ডাউনলোড শুরু
     try {
       const response = await downloadWorksheetPDF(contentId);
       
@@ -87,6 +94,8 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     } catch (err) {
       console.error("Download failed:", err);
       alert("Download failed. Please make sure you are logged in.");
+    } finally {
+      setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
     }
   };
 
@@ -135,7 +144,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
         </button>
       </div>
 
-      {/* 💡 Error UI with Try Again Button */}
+      {/* Error UI with Try Again Button */}
       {error && (
         <div style={errorCard}>
           <span style={errorText}>{t.errorMsg}</span>
@@ -154,8 +163,12 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
               <button onClick={() => setShowRefine(true)} style={refineBtn}>
                 {t.refine}
               </button>
-              <button onClick={handleDownloadPDF} style={downloadBtn}>
-                {t.download}
+              <button
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                style={downloadBtn(downloading)}
+              >
+                {downloading ? t.downloading : t.download}
               </button>
             </div>
           </div>
@@ -256,6 +269,19 @@ const previewHeaderRow = { display: "flex", justifyContent: "space-between", ali
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
 const refineBtn = { backgroundColor: "#ecfdf5", color: "#059669", padding: "10px 16px", border: "1.5px solid #a7f3d0", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-const downloadBtn = { backgroundColor: "#059669", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" };
+
+const downloadBtn = (disabled) => ({
+  backgroundColor: disabled ? "#6ee7b7" : "#059669",
+  color: "#fff",
+  padding: "10px 20px",
+  border: "none",
+  borderRadius: "10px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: 700,
+  fontSize: "13px",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(5,150,105,0.3)",
+  opacity: disabled ? 0.8 : 1,
+  transition: "all 0.2s",
+});
 
 const worksheetRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.6", color: "#000" };

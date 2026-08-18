@@ -9,6 +9,7 @@ const TXT = {
     ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা ডাউনলোড করতে পারো।",
     print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
+    downloading: "⌛ ডাউনলোড হচ্ছে...",
     selectFirst: "প্রথমে উপরের ড্রপডাউন থেকে একটা Topic বেছে নাও!",
     empty: "Study note তৈরি হয়েছে কিন্তু কোনো কনটেন্ট পাওয়া যায়নি।",
     errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
@@ -20,6 +21,7 @@ const TXT = {
     ready: "📒 Study note ready. Review below — print or download as PDF.",
     print: "🖨️ Print",
     download: "📥 Download PDF",
+    downloading: "⌛ Downloading...",
     selectFirst: "Please select a Topic from the dropdowns above first!",
     empty: "Study note generated but content is empty.",
     errorMsg: "⚠️ Failed to generate study note.",
@@ -30,7 +32,8 @@ const TXT = {
 export default function StudyNoteGenerator({ selectedTopicId, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false); // 💡 Error State
+  const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [error, setError] = useState(false);
   const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
 
@@ -41,7 +44,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     }
 
     setLoading(true);
-    setError(false); // 💡 নতুন চেষ্টার শুরুতে আগের এরর রিমুভ করা হচ্ছে
+    setError(false);
     setNoteHTML("");
     setContentId(null);
 
@@ -56,7 +59,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       }
     } catch (err) {
       console.error("Error:", err);
-      setError(true); // 💡 alert() তুলে দেওয়া হলো
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -67,6 +70,8 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       alert("Content ID not found to download PDF.");
       return;
     }
+
+    setDownloading(true); // 💡 ডাউনলোড শুরু
     try {
       const response = await downloadWorksheetPDF(contentId);
 
@@ -82,6 +87,8 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     } catch (err) {
       console.error("Download failed:", err);
       alert("Download failed. Please try again.");
+    } finally {
+      setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
     }
   };
 
@@ -108,7 +115,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
         </button>
       </div>
 
-      {/* 💡 Error UI with Dynamic Try Again Button */}
+      {/* Error UI with Dynamic Try Again Button */}
       {error && (
         <div style={errorCard}>
           <span style={errorText}>{t.errorMsg}</span>
@@ -127,8 +134,12 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
               <button onClick={handlePrint} style={outlineBtn}>
                 {t.print}
               </button>
-              <button onClick={handleDownloadPDF} style={downloadBtn}>
-                {t.download}
+              <button
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                style={downloadBtn(downloading)}
+              >
+                {downloading ? t.downloading : t.download}
               </button>
             </div>
           </div>
@@ -211,6 +222,19 @@ const previewHeaderRow = { display: "flex", justifyContent: "space-between", ali
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
 const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-const downloadBtn = { backgroundColor: "#0891b2", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(8,145,178,0.3)" };
+
+const downloadBtn = (disabled) => ({
+  backgroundColor: disabled ? "#a5f3fc" : "#0891b2",
+  color: "#fff",
+  padding: "10px 20px",
+  border: "none",
+  borderRadius: "10px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: 700,
+  fontSize: "13px",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)",
+  opacity: disabled ? 0.8 : 1,
+  transition: "all 0.2s",
+});
 
 const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

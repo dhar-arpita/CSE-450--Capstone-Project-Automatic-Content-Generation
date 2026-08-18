@@ -11,12 +11,13 @@ const TXT = {
     ready: "🎯 Quiz তৈরি শেষ। নিচে প্রশ্নগুলো দেখুন এবং প্র্যাকটিস করুন।",
     print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
+    downloading: "⌛ ডাউনলোড হচ্ছে...",
     selectFirst: "প্রথমে অন্তত একটি Scope (Topic/Chapter/Subject) সিলেক্ট করুন!",
     empty: "Quiz তৈরি হয়েছে কিন্তু কোনো কন্টেন্ট পাওয়া যায়নি।",
     topicScope: "Topic Scope",
     chapterScope: "Chapter Scope",
     subjectScope: "Subject Scope",
-    errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
+    errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
   },
   english: {
@@ -27,6 +28,7 @@ const TXT = {
     ready: "🎯 Quiz is ready. Review and practice below.",
     print: "🖨️ Print",
     download: "📥 Download PDF",
+    downloading: "⌛ Downloading...",
     selectFirst: "Please select at least a Topic, Chapter or Subject first!",
     empty: "Quiz generated but content is empty.",
     topicScope: "Topic Scope",
@@ -51,7 +53,8 @@ export default function QuizGenerator({
   const [scope, setScope] = useState("topic");
   const [numQuestions, setNumQuestions] = useState(SCOPE_DEFAULT_QUESTIONS.topic);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(false); // 💡 Error State
+  const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [error, setError] = useState(false);
   const [quizHTML, setQuizHTML] = useState("");
   const [contentId, setContentId] = useState(null);
 
@@ -90,7 +93,7 @@ export default function QuizGenerator({
     }
 
     setLoading(true);
-    setError(false); // 💡 নতুন চেষ্টার আগে এরর ক্লিয়ার করা হচ্ছে
+    setError(false);
     setQuizHTML("");
     setContentId(null);
     try {
@@ -111,7 +114,7 @@ export default function QuizGenerator({
       }
     } catch (err) {
       console.error("Error generating quiz:", err);
-      setError(true); // 💡 alert() তুলে দিয়ে setError(true) দেওয়া হলো
+      setError(true);
     } finally {
       setLoading(false);
     }
@@ -122,6 +125,8 @@ export default function QuizGenerator({
       alert("Content ID not found to download PDF.");
       return;
     }
+
+    setDownloading(true); // 💡 ডাউনলোড শুরু
     try {
       const response = await downloadWorksheetPDF(contentId);
       
@@ -137,6 +142,8 @@ export default function QuizGenerator({
     } catch (err) {
       console.error("Download failed:", err);
       alert("Download failed. Please try again.");
+    } finally {
+      setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
     }
   };
 
@@ -201,7 +208,7 @@ export default function QuizGenerator({
         </button>
       </div>
 
-      {/* 💡 Error UI with Dynamic Try Again Button */}
+      {/* Error UI with Dynamic Try Again Button */}
       {error && (
         <div style={errorCard}>
           <span style={errorText}>{t.errorMsg}</span>
@@ -220,8 +227,12 @@ export default function QuizGenerator({
               <button onClick={handlePrint} style={outlineBtn}>
                 {t.print}
               </button>
-              <button onClick={handleDownloadPDF} style={downloadBtn}>
-                {t.download}
+              <button
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                style={downloadBtn(downloading)}
+              >
+                {downloading ? t.downloading : t.download}
               </button>
             </div>
           </div>
@@ -318,6 +329,18 @@ const previewHeaderRow = { display: "flex", justifyContent: "space-between", ali
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
 const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-const downloadBtn = { backgroundColor: "#db2777", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(219,39,119,0.3)" };
 
+const downloadBtn = (disabled) => ({
+  backgroundColor: disabled ? "#f472b6" : "#db2777",
+  color: "#fff",
+  padding: "10px 20px",
+  border: "none",
+  borderRadius: "10px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: 700,
+  fontSize: "13px",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.3)",
+  opacity: disabled ? 0.8 : 1,
+  transition: "all 0.2s",
+});
 const quizRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };
