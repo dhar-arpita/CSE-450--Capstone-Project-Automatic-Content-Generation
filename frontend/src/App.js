@@ -22,7 +22,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/upload" element={<ProtectedRoute><UploadPage /></ProtectedRoute>} />
         <Route path="/generate" element={<ProtectedRoute><GeneratePage /></ProtectedRoute>} />
-        <Route path="/chatbot" element={<ProtectedRoute><ChatbotPage /></ProtectedRoute>} />
+        <Route path="/chatbot" element={<ProtectedRoute allowedRoles={["student"]}><ChatbotPage /></ProtectedRoute>} />
         <Route path="/study-notes" element={<ProtectedRoute><StudyNotePage /></ProtectedRoute>} />
         <Route path="/quiz" element={<ProtectedRoute><QuizPage /></ProtectedRoute>} />
       </Routes>

@@ -1,5 +1,6 @@
+// features/quiz/QuizGenerator.js
 import React, { useState } from "react";
-import { generateQuiz } from "../../shared/services/api";
+import { generateQuiz, downloadWorksheetPDF } from "../../shared/services/api";
 
 const TXT = {
   bangla: {
@@ -8,9 +9,8 @@ const TXT = {
     generate: "🎯 Quiz তৈরি করো",
     generating: "⌛ তৈরি হচ্ছে...",
     ready: "🎯 Quiz তৈরি শেষ। নিচে প্রশ্নগুলো দেখুন এবং প্র্যাকটিস করুন।",
-    print: "🖨️ Print / Save PDF",
-    copy: "📋 টেক্সট কপি করো",
-    copied: "✅ কপি হয়েছে!",
+    print: "🖨️ Print",
+    download: "📥 PDF ডাউনলোড করো",
     selectFirst: "প্রথমে অন্তত একটি Scope (Topic/Chapter/Subject) সিলেক্ট করুন!",
     empty: "Quiz তৈরি হয়েছে কিন্তু কোনো কন্টেন্ট পাওয়া যায়নি।",
     failed: "Quiz তৈরি করা যায়নি। আবার চেষ্টা করুন।",
@@ -24,9 +24,8 @@ const TXT = {
     generate: "🎯 Generate Quiz",
     generating: "⌛ Generating...",
     ready: "🎯 Quiz is ready. Review and practice below.",
-    print: "🖨️ Print / Save PDF",
-    copy: "📋 Copy Text",
-    copied: "✅ Copied!",
+    print: "🖨️ Print",
+    download: "📥 Download PDF",
     selectFirst: "Please select at least a Topic, Chapter or Subject first!",
     empty: "Quiz generated but content is empty.",
     failed: "Failed to generate quiz. Please try again.",
@@ -36,6 +35,10 @@ const TXT = {
   },
 };
 
+// Backend-er agents/quiz_agent.py-r QUESTION_COUNT_MAP-er sathe match kora —
+// scope change hole eta default hisebe boshe, user chaile pore manually change korte parbe.
+const SCOPE_DEFAULT_QUESTIONS = { topic: 10, chapter: 20, subject: 30 };
+
 export default function QuizGenerator({
   selectedClass,
   selectedSubject,
@@ -44,45 +47,70 @@ export default function QuizGenerator({
   language = "bangla",
 }) {
   const t = TXT[language] || TXT.bangla;
+
+  const [scope, setScope] = useState("topic");
+  const [numQuestions, setNumQuestions] = useState(SCOPE_DEFAULT_QUESTIONS.topic);
   const [loading, setLoading] = useState(false);
   const [quizHTML, setQuizHTML] = useState("");
-  const [numQuestions, setNumQuestions] = useState(5);
-  const [copied, setCopied] = useState(false);
+  const [contentId, setContentId] = useState(null);
 
-  // Determine active scope automatically
-  const activeScope = selectedTopicId
-    ? "topic"
-    : selectedChapter
-    ? "chapter"
-    : selectedSubject
-    ? "subject"
-    : "";
+  // Jokhon user notun kore select kore (topic/chapter/subject), tokhon
+  // sobcheye specific (deepest) available scope-e auto-switch kori, jate
+  // user-ke abar manually dropdown theke scope change korte na hoy.
+  React.useEffect(() => {
+    if (selectedTopicId) setScope("topic");
+    else if (selectedChapter) setScope("chapter");
+    else if (selectedSubject) setScope("subject");
+  }, [selectedTopicId, selectedChapter, selectedSubject]);
+
+  // Scope jokhoni change hoy (auto-detect theke ba user-er manual dropdown
+  // theke), oi scope-er default question count-e reset kori. User erpor
+  // "প্রশ্ন সংখ্যা" dropdown theke chaile nijer moto change korte parbe —
+  // eta shudhu scope change howar shomoy-i notun default boshaay.
+  React.useEffect(() => {
+    setNumQuestions(SCOPE_DEFAULT_QUESTIONS[scope] || 10);
+  }, [scope]);
+
+  const determineTarget = () => {
+    if (scope === "topic" && selectedTopicId) {
+      return { topic_id: selectedTopicId };
+    }
+    if (scope === "chapter" && selectedChapter) {
+      return { chapter_id: selectedChapter };
+    }
+    if (scope === "subject" && selectedSubject) {
+      return { subject_id: selectedSubject };
+    }
+    if (selectedTopicId) return { topic_id: selectedTopicId };
+    if (selectedChapter) return { chapter_id: selectedChapter };
+    if (selectedSubject) return { subject_id: selectedSubject };
+    return null;
+  };
+
+  const target = determineTarget();
 
   const onGenerate = async () => {
-    if (!activeScope) {
+    if (!target) {
       alert(t.selectFirst);
       return;
     }
 
     setLoading(true);
     setQuizHTML("");
-    setCopied(false);
-
+    setContentId(null);
     try {
       const payload = {
-        scope: activeScope,
-        topic_id: selectedTopicId || null,
-        chapter_id: selectedChapter || null,
-        subject_id: selectedSubject || null,
-        language: language,
-        num_questions: numQuestions,
+        scope,
+        ...target,
+        num_questions: parseInt(numQuestions, 10) || 5,
+        language,
       };
 
       const { data } = await generateQuiz(payload);
       const html = data?.html || data?.quiz_html || data?.content || "";
-
       if (html) {
         setQuizHTML(html);
+        setContentId(data?.content_id || data?.id || null);
       } else {
         alert(t.empty);
       }
@@ -93,75 +121,102 @@ export default function QuizGenerator({
     setLoading(false);
   };
 
+  // Endpoint দিয়ে PDF ডাউনলোড করার হ্যান্ডলার (Worksheet ও StudyNote-এর মতো)
+  const handleDownloadPDF = async () => {
+    if (!contentId) {
+      alert("Content ID not found to download PDF.");
+      return;
+    }
+    try {
+      const response = await downloadWorksheetPDF(contentId);
+      
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `quiz_${contentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed. Please try again.");
+    }
+  };
+
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     printWindow.document.write(
-      `<html><head><title>Quiz Sheet</title></head><body>${quizHTML}</body></html>`
+      `<html><head><title>Quiz</title></head><body>${quizHTML}</body></html>`
     );
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
   };
 
-  const handleCopy = async () => {
-    const temp = document.createElement("div");
-    temp.innerHTML = quizHTML;
-    const text = temp.innerText || temp.textContent || "";
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      alert("Copy failed.");
-    }
-  };
-
   return (
     <div>
-      {/* Config & Button Row */}
+      {/* Config Row */}
       <div style={configRow}>
-        <div style={configField}>
-          <label style={configLabel}>{t.scope}</label>
-          <div style={badgeStyle(!!activeScope)}>
-            {activeScope === "topic" && `🎯 ${t.topicScope}`}
-            {activeScope === "chapter" && `🧩 ${t.chapterScope}`}
-            {activeScope === "subject" && `📚 ${t.subjectScope}`}
-            {!activeScope && "⚠️ None Selected"}
-          </div>
+        {/* Scope Selector */}
+        <div style={fieldGroup}>
+          <label style={labelStyle}>{t.scope}</label>
+          <select
+            value={scope}
+            onChange={(e) => setScope(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="topic" disabled={!selectedTopicId}>
+              {t.topicScope} {!selectedTopicId ? "(N/A)" : ""}
+            </option>
+            <option value="chapter" disabled={!selectedChapter}>
+              {t.chapterScope} {!selectedChapter ? "(N/A)" : ""}
+            </option>
+            <option value="subject" disabled={!selectedSubject}>
+              {t.subjectScope} {!selectedSubject ? "(N/A)" : ""}
+            </option>
+          </select>
         </div>
 
-        <div style={configField}>
-          <label style={configLabel}>{t.questions}</label>
-          <input
-            type="number"
+        {/* Questions Count */}
+        <div style={fieldGroup}>
+          <label style={labelStyle}>{t.questions}</label>
+          <select
             value={numQuestions}
             onChange={(e) => setNumQuestions(e.target.value)}
-            style={numberInput}
-            min="1"
-            max="50"
-          />
+            style={selectStyle}
+          >
+            <option value={5}>5</option>
+            <option value={10}>10</option>
+            <option value={15}>15</option>
+            <option value={20}>20</option>
+            <option value={25}>25</option>
+            <option value={30}>30</option>
+          </select>
         </div>
 
+        {/* Generate Button */}
         <button
           onClick={onGenerate}
-          disabled={loading || !activeScope}
-          style={generateBtn(loading || !activeScope)}
+          disabled={loading || !target}
+          style={generateBtn(loading || !target)}
         >
           {loading ? t.generating : t.generate}
         </button>
       </div>
 
-      {/* Preview Section */}
+      {/* Preview & Action Buttons Section */}
       {quizHTML && (
         <div style={previewCard}>
           <div style={previewHeaderRow}>
             <div style={previewHint}>{t.ready}</div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={handleCopy} style={refineBtn}>
-                {copied ? t.copied : t.copy}
-              </button>
-              <button onClick={handlePrint} style={downloadBtn}>
+              <button onClick={handlePrint} style={outlineBtn}>
                 {t.print}
+              </button>
+              <button onClick={handleDownloadPDF} style={downloadBtn}>
+                {t.download}
               </button>
             </div>
           </div>
@@ -177,7 +232,7 @@ export default function QuizGenerator({
   );
 }
 
-/* ===== STYLES (Pink Theme: #db2777) ===== */
+/* ===== STYLES ===== */
 const configRow = {
   display: "flex",
   gap: "16px",
@@ -189,20 +244,19 @@ const configRow = {
   border: "1px solid #e2e8f0",
 };
 
-const configField = { display: "flex", flexDirection: "column", gap: "8px" };
-const configLabel = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" };
+const fieldGroup = { display: "flex", flexDirection: "column", gap: "6px" };
+const labelStyle = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" };
 
-const badgeStyle = (active) => ({
+const selectStyle = {
   padding: "10px 14px",
-  borderRadius: "12px",
-  background: active ? "#fdf2f8" : "#f1f5f9",
-  border: `1.5px solid ${active ? "#fbcfe8" : "#e2e8f0"}`,
+  borderRadius: "10px",
+  border: "1.5px solid #e2e8f0",
+  background: "#fff",
   fontSize: "13.5px",
-  fontWeight: 700,
-  color: active ? "#db2777" : "#94a3b8",
-});
-
-const numberInput = { width: "90px", padding: "10px 14px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "#fff", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", outline: "none" };
+  fontWeight: 600,
+  color: "#0f172a",
+  outline: "none",
+};
 
 const generateBtn = (disabled) => ({
   padding: "12px 24px",
@@ -231,7 +285,7 @@ const previewCard = {
 const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
-const refineBtn = { backgroundColor: "#fdf2f8", color: "#db2777", padding: "10px 16px", border: "1.5px solid #fbcfe8", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
+const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
 const downloadBtn = { backgroundColor: "#db2777", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(219,39,119,0.3)" };
 
-const quizRenderStyle = { fontFamily: "'Segoe UI', sans-serif", lineHeight: "1.6", color: "#0f172a" };
+const quizRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

@@ -29,6 +29,8 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
   const [numQuestions, setNumQuestions] = useState(5);
   const [showRefine, setShowRefine] = useState(false);
 
+  // WorkSheetGenerator.js এর সংশ্লিষ্ট অংশ আপডেট করুন:
+
   const onGenerate = async () => {
     if (!selectedTopicId) {
       alert("Please select a Topic from the dropdowns above first!");
@@ -40,12 +42,14 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     setLoading(true);
     setWorksheetHTML("");
     try {
+      // 💡 এখানে 'language' পাঠাতে হবে (যেমন: "bangla" বা "english")
       const { data } = await generateWorksheet(
         selectedTopicId,
         userId,
         difficulty.toLowerCase(),
         numQuestions,
-        sampleFile
+        sampleFile,
+        language 
       );
       if (data && data.html) {
         setWorksheetHTML(data.html);
@@ -61,15 +65,27 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     setLoading(false);
   };
 
-  const handleDownloadPDF = async () => {
-    if (!contentId) return;
-    try {
-      await downloadWorksheetPDF(contentId);
-    } catch (err) {
-      console.error("Download failed:", err);
-      alert("Download failed. Please make sure you are logged in.");
-    }
-  };
+const handleDownloadPDF = async () => {
+  if (!contentId) return;
+  try {
+    // 💡 PDF ডাউনলোডের সঠিক হ্যান্ডলার
+    const response = await downloadWorksheetPDF(contentId);
+    
+    // Response থেকে blob তৈরি করে ডাউনলোডের লিংক জেনারেট করা
+    const blob = new Blob([response.data], { type: "application/pdf" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `worksheet_${contentId}.pdf`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Download failed:", err);
+    alert("Download failed. Please make sure you are logged in.");
+  }
+};
 
   const handleUpdateFromRefine = (newData) => {
     setWorksheetHTML(newData.html);

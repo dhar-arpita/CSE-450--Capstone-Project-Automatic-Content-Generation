@@ -33,6 +33,7 @@ const TXT = {
     didSolve: "তুমি কি পেরেছিলে?", solved: "✅ পেরেছি", notSolved: "❌ পারিনি",
     solvedMsg: "🎉 দারুণ!", notSolvedMsg: "ঠিক আছে, পরের বার হবে।",
     newChat: "➕ নতুন কথোপকথন", history: "আগের সেশন", noSessions: "কোনো আগের সেশন নেই",
+    loadingSessions: "⏳ লোড হচ্ছে...",
   },
   english: {
     subtitle: "Ask questions or practice — in your language",
@@ -59,6 +60,7 @@ const TXT = {
     didSolve: "Did you solve it?", solved: "✅ Got it", notSolved: "❌ Missed it",
     solvedMsg: "🎉 Great job!", notSolvedMsg: "That's okay — next time!",
     newChat: "➕ New conversation", history: "Past sessions", noSessions: "No past sessions",
+    loadingSessions: "⏳ Loading...",
   },
 };
 
@@ -118,7 +120,9 @@ export default function ChatbotPage() {
   const [sessionLoading, setSessionLoading] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
+  const [sessionsListLoading, setSessionsListLoading] = useState(true);
   const [activeSid, setActiveSid] = useState(null);
+  const [loadingSid, setLoadingSid] = useState(null);
   const feedEndRef = useRef(null);
   const prevCount = useRef(0);
   const [quizFeed, setQuizFeed] = useState([]);
@@ -143,6 +147,7 @@ export default function ChatbotPage() {
         setQaFeed((data.qa || []).map((q) => ({ id: newId(), question: q.question, answer: q.answer, context: q.context || "", explain: q.explain || null, explainLoading: false, loading: false })));
         setSetFeed((data.sets || []).map((s, i, arr) => ({ id: newId(), questions: s.questions || [], showAnswers: false, isLatest: i === arr.length - 1, loading: false })));
         setObFeed((data.oneByone || []).map((o, i, arr) => ({ id: newId(), contentId: o.content_id, question: o.question, hints: o.hints || [], hintsUsed: o.hints_used || 0, answer: o.answer || null, selfReport: o.self_report ?? null, isLatest: i === arr.length - 1, loading: false })));
+        setQuizFeed((data.quiz || []).map((qz, i, arr) => ({ id: newId(), questions: qz.questions || [], answers: qz.answers || {}, hints: qz.hints || {}, hintsUsed: qz.hints_used || {}, isLatest: i === arr.length - 1, loading: false })));
         if ((data.qa || []).length) setMode("qa");
         else if ((data.sets || []).length) setMode("set");
         else if ((data.oneByone || []).length) setMode("oneByone");
@@ -152,8 +157,10 @@ export default function ChatbotPage() {
   }, []);
 
   const refreshSessions = useCallback(async (uid) => {
+    setSessionsListLoading(true);
     try { const { data } = await chatSessions(uid); setSessions(data.sessions || []); }
     catch { setSessions([]); }
+    finally { setSessionsListLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -169,11 +176,10 @@ export default function ChatbotPage() {
   useEffect(() => {
     if (!user || didInitialLoad.current) return;
     didInitialLoad.current = true;
-    (async () => {
-      const sid = chat.getSessionId();
-      if (sid) await loadHistory(user.user_id, sid);
-      setHistoryLoaded(true);
-    })();
+    // Intentionally not auto-loading the last session's history here.
+    // History should only load when the user explicitly opens a session
+    // from the sidebar (openSession) or starts a new one via selections.
+    setHistoryLoaded(true);
   }, [user]);
 
   useEffect(() => {
@@ -183,9 +189,11 @@ export default function ChatbotPage() {
   }, [qaFeed, setFeed, obFeed]);
 
   const openSession = async (sid) => {
-    if (sid === activeSid) return;
+    if (sid === activeSid || sessionLoading) return;
+    setLoadingSid(sid);
     chat.setSessionId(sid);
     await loadHistory(user.user_id, sid);
+    setLoadingSid(null);
   };
 
   const newChat = () => {
@@ -337,6 +345,7 @@ export default function ChatbotPage() {
 
   return (
     <div style={pageStyle}>
+      <style>{`@keyframes skeletonPulse { 0% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }`}</style>
       {/* ===== TOP NAVBAR ===== */}
       <nav style={navStyle}>
         <div style={navInner}>
@@ -373,19 +382,32 @@ export default function ChatbotPage() {
       <div style={layoutStyle}>
         {/* SIDEBAR */}
         <aside style={sidebarStyle}>
-          <button onClick={newChat} style={newChatBtnStyle}>
+          <button onClick={newChat} disabled={sessionLoading} style={{...newChatBtnStyle, ...(sessionLoading ? {opacity:0.5, cursor:"not-allowed"} : {})}}>
             <span>➕</span> {t.newChat}
           </button>
           <div style={sidebarSectionLabel}>{t.history}</div>
           <div style={sessionListStyle}>
-            {sessions.length === 0 && <div style={emptySession}>{t.noSessions}</div>}
-            {sessions.map((s) => (
-              <button key={s.session_id} onClick={() => openSession(s.session_id)}
-                style={sessionItemStyle(s.session_id === activeSid)}>
-                <span style={{fontSize:"14px"}}>📖</span>
-                <span style={{flex:1, textAlign:"left", lineHeight:1.4}}>{sessionTitle(s)}</span>
-              </button>
-            ))}
+            {sessionsListLoading && (
+              <>
+                <div style={sessionSkeleton} />
+                <div style={sessionSkeleton} />
+                <div style={sessionSkeleton} />
+                <div style={{...emptySession, marginTop:"4px"}}>{t.loadingSessions}</div>
+              </>
+            )}
+            {!sessionsListLoading && sessions.length === 0 && <div style={emptySession}>{t.noSessions}</div>}
+            {!sessionsListLoading && sessions.map((s) => {
+              const isLoadingThis = loadingSid === s.session_id;
+              const isDisabled = sessionLoading && !isLoadingThis;
+              return (
+                <button key={s.session_id} onClick={() => openSession(s.session_id)}
+                  disabled={isDisabled}
+                  style={{...sessionItemStyle(s.session_id === activeSid), ...(isDisabled ? {opacity:0.5, cursor:"not-allowed"} : {}), ...(isLoadingThis ? {border:"2px solid #7c3aed"} : {})}}>
+                  <span style={{fontSize:"14px"}}>{isLoadingThis ? "⏳" : "📖"}</span>
+                  <span style={{flex:1, textAlign:"left", lineHeight:1.4}}>{sessionTitle(s)}</span>
+                </button>
+              );
+            })}
           </div>
         </aside>
 
@@ -441,8 +463,8 @@ export default function ChatbotPage() {
             ].map(({key, icon, color, bg, title, sub}) => (
               <button key={key}
                 onClick={() => key==="qa" ? openQA() : key==="set" ? openSet() : key==="oneByone" ? openOneByOne() : openQuiz()}
-                disabled={!canStart}
-                style={modeCard(color, mode === key, !canStart)}>
+                disabled={!canStart || sessionLoading}
+                style={modeCard(color, mode === key, !canStart || sessionLoading)}>
                 <span style={modeCardIcon(bg)}>{icon}</span>
                 <span style={modeCardTitle}>{title}</span>
                 <span style={modeCardSub}>{sub}</span>
@@ -742,6 +764,7 @@ const newChatBtnStyle = { display:"flex", alignItems:"center", justifyContent:"c
 const sidebarSectionLabel = { fontSize:"11px", fontWeight:800, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em", padding:"8px 4px 4px" };
 const sessionListStyle = { display:"flex", flexDirection:"column", gap:"6px", overflowY:"auto", flex:1, paddingRight:"4px" };
 const emptySession = { fontSize:"12px", color:"#94a3b8", padding:"8px 4px", textAlign:"center" };
+const sessionSkeleton = { height:"38px", borderRadius:"8px", marginBottom:"8px", background:"linear-gradient(90deg, #eef0f4 25%, #f7f8fa 37%, #eef0f4 63%)", backgroundSize:"400% 100%", animation:"skeletonPulse 1.4s ease infinite" };
 const sessionItemStyle = (active) => ({ display:"flex", alignItems:"center", gap:"8px", textAlign:"left", padding:"10px 12px", borderRadius:"10px", border: active?"2px solid #7c3aed":"1.5px solid #e2e8f0", background: active?"#faf5ff":"#f8fafc", color: active?"#7c3aed":"#374151", fontSize:"12px", fontWeight:600, cursor:"pointer" });
 
 // MAIN
