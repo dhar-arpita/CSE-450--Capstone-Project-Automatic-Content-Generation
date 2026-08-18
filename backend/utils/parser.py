@@ -66,6 +66,24 @@ def _describe_image(img_b64: str, context: str = "") -> str:
     return resp.choices[0].message.content.strip()
 
 
+# def _replace_images(md: str, page_images, page_num: int) -> str:
+#     """Replace each ![img] tag in `md` with a [Figure: ...] description.
+#     Decorative images are removed. If describing an image fails, its original
+#     tag is left in place so no page content is lost."""
+#     for img in page_images:
+#         tag_pattern = re.compile(r'!\[[^\]]*' + re.escape(img.id) + r'[^\]]*\]\([^)]*\)')
+#         try:
+#             desc = _describe_image(img.image_base64, context=md)
+#         except Exception as e:
+#             print(f"[Parser] Warning: could not describe image '{img.id}' on "
+#                   f"page {page_num} — keeping original tag. ({e})")
+#             continue
+#         if desc.upper() == "SKIP":
+#             md = tag_pattern.sub('', md)
+#         else:
+#             md = tag_pattern.sub(f'\n[Figure: {desc}]\n', md)
+#     return md
+
 def _replace_images(md: str, page_images, page_num: int) -> str:
     """Replace each ![img] tag in `md` with a [Figure: ...] description.
     Decorative images are removed. If describing an image fails, its original
@@ -78,10 +96,15 @@ def _replace_images(md: str, page_images, page_num: int) -> str:
             print(f"[Parser] Warning: could not describe image '{img.id}' on "
                   f"page {page_num} — keeping original tag. ({e})")
             continue
+            
         if desc.upper() == "SKIP":
             md = tag_pattern.sub('', md)
         else:
-            md = tag_pattern.sub(f'\n[Figure: {desc}]\n', md)
+            # FIX: Use a lambda function here!
+            # This prevents Python's regex engine from accidentally treating 
+            # LaTeX math symbols (like \lim or \left) as regex escape codes.
+            md = tag_pattern.sub(lambda match, d=desc: f'\n[Figure: {d}]\n', md)
+            
     return md
 
 
