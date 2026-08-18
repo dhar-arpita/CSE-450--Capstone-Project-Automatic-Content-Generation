@@ -221,6 +221,7 @@ export default function UploadPage() {
   const [uploadSuccess,setUploadSuccess]= useState(false);
   const [showSample,   setShowSample]   = useState(false);
   const [sampleFile,   setSampleFile]   = useState(null);
+  const [error, setError] = useState(false);
 
   // selection progress for stepper
   const selectionProgress = [
@@ -251,55 +252,60 @@ export default function UploadPage() {
     setSelectedChapter(v);
   };
 
-  const startPolling = (jobId, isSample) => {
-    const iv = setInterval(async () => {
+  const startPolling = (jobId, isSample) => { //[cite: 2]
+    const iv = setInterval(async () => { //[cite: 2]
       try {
-        const { data } = await getIngestionStatus(jobId);
-        setStatus(`Processing: ${data.job_status}…`);
-        if (data.job_status === "SUCCESS") {
-          clearInterval(iv);
-          setLoading(false);
-          if (!isSample) {
-            setStatus("✅ Curriculum ingested successfully!");
-            setUploadSuccess(true); setFile(null);
+        const { data } = await getIngestionStatus(jobId); //[cite: 2]
+        setStatus(`Processing: ${data.job_status}…`); //[cite: 2]
+        if (data.job_status === "SUCCESS") { //[cite: 2]
+          clearInterval(iv); //[cite: 2]
+          setLoading(false); //[cite: 2]
+          setError(false); // 👈 সাফল্য পাওয়া গেলে এরর ফলস করুন
+          if (!isSample) { //[cite: 2]
+            setStatus("✅ Curriculum ingested successfully!"); //[cite: 2]
+            setUploadSuccess(true); setFile(null); //[cite: 2]
           } else {
-            setStatus("✅ Sample worksheet processed!");
-            setShowSample(false); setSampleFile(null);
+            setStatus("✅ Sample worksheet processed!"); //[cite: 2]
+            setShowSample(false); setSampleFile(null); //[cite: 2]
           }
-        } else if (data.job_status === "FAILED") {
-          clearInterval(iv);
-          setStatus(`❌ Failed: ${data.error_message || "Unknown error"}`);
-          setLoading(false);
+        } else if (data.job_status === "FAILED") { //[cite: 2]
+          clearInterval(iv); //[cite: 2]
+          setStatus(`❌ Failed: ${data.error_message || "Unknown error"}`); //[cite: 2]
+          setError(true); // 👈 ফেইল করলে এরর ট্রু করুন
+          setLoading(false); //[cite: 2]
         }
       } catch {
-        clearInterval(iv);
-        setStatus("❌ Error checking status.");
-        setLoading(false);
+        clearInterval(iv); //[cite: 2]
+        setStatus("❌ Error checking status."); //[cite: 2]
+        setError(true); // 👈 ক্যাচ এররে এরর ট্রু করুন
+        setLoading(false); //[cite: 2]
       }
-    }, 3000);
+    }, 3000); //[cite: 2]
   };
 
-  const handleIngest = async (isSample = false) => {
-    const f = isSample ? sampleFile : file;
-    if (!f || !selectedChapter) {
-      alert("Please select a topic and a file first!"); return;
+  const handleIngest = async (isSample = false) => { //[cite: 2]
+    const f = isSample ? sampleFile : file; //[cite: 2]
+    if (!f || !selectedChapter) { //[cite: 2]
+      alert("Please select a topic and a file first!"); return; //[cite: 2]
     }
-    setLoading(true);
-    setStatus("Uploading file…");
+    setLoading(true); //[cite: 2]
+    setError(false); // 👈 নতুন ট্রাইয়ের শুরুতে আগের এরর ক্লিয়ার করুন
+    setStatus("Uploading file…"); //[cite: 2]
     try {
-      const res = await uploadCurriculumFile(f, selectedChapter, user?.user_id || 1);
-      if (res.data?.job_id) {
-        setStatus("Job queued — processing…");
-        startPolling(res.data.job_id, isSample);
+      const res = await uploadCurriculumFile(f, selectedChapter, user?.user_id || 1); //[cite: 2]
+      if (res.data?.job_id) { //[cite: 2]
+        setStatus("Job queued — processing…"); //[cite: 2]
+        startPolling(res.data.job_id, isSample); //[cite: 2]
       } else {
-        setStatus(isSample ? "✅ Sample uploaded!" : "✅ Uploaded successfully!");
-        setLoading(false);
-        if (!isSample) { setUploadSuccess(true); setFile(null); }
-        else            { setShowSample(false); setSampleFile(null); }
+        setStatus(isSample ? "✅ Sample uploaded!" : "✅ Uploaded successfully!"); //[cite: 2]
+        setLoading(false); //[cite: 2]
+        if (!isSample) { setUploadSuccess(true); setFile(null); } //[cite: 2]
+        else { setShowSample(false); setSampleFile(null); } //[cite: 2]
       }
     } catch (err) {
-      setStatus(`❌ Upload failed! ${err.response?.data?.detail || ""}`);
-      setLoading(false);
+      setStatus(`❌ Upload failed! ${err.response?.data?.detail || ""}`); //[cite: 2]
+      setError(true); // 👈 আপলোড ফেইল হলে এরর ট্রু করুন
+      setLoading(false); //[cite: 2]
     }
   };
 
@@ -391,6 +397,20 @@ export default function UploadPage() {
 
               {/* <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedTopicId} t={t} /> */}
               <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedChapter} t={t} />
+
+              {/* 💡 Upload ফেইল হলে এই এরর কার্ডটি দেখাবে */}
+              {error && (
+                <div style={errorCardStyle}>
+                  <span style={errorTextStyle}>
+                    {language === "bangla" 
+                      ? "⚠️ আপলোড করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।" 
+                      : "⚠️ Upload failed. Please try again."}
+                  </span>
+                  <button onClick={() => handleIngest(false)} style={retryBtnStyle}>
+                    {language === "bangla" ? "🔄 আবার চেষ্টা করুন" : "🔄 Try Again"}
+                  </button>
+                </div>
+              )}
 
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
                 <button
@@ -552,3 +572,34 @@ const sampleCard = { border:"1.5px solid #e2e8f0", borderRadius:"16px", padding:
 const tipsCard = { background:"#fff", border:"1px solid #e2e8f0", borderRadius:"18px", padding:"22px 24px", marginTop:"20px", boxShadow:"0 4px 16px rgba(0,0,0,0.05)" };
 const tipsTitle = { fontSize:"12.5px", fontWeight:800, color:"#475569", marginBottom:"12px", marginTop:0, textTransform:"uppercase", letterSpacing:"0.06em" };
 const tipItem = { display:"flex", gap:"8px", fontSize:"13px", color:"#475569", fontWeight:500 };
+
+
+const errorCardStyle = {
+  marginTop: "16px",
+  padding: "12px 16px",
+  backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const errorTextStyle = { 
+  fontSize: "13px", 
+  color: "#991b1b", 
+  fontWeight: 600 
+};
+
+const retryBtnStyle = {
+  backgroundColor: "#dc2626",
+  color: "#fff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: "12.5px",
+  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
+};

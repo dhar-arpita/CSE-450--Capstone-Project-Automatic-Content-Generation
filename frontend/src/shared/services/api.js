@@ -1,9 +1,27 @@
 import axios from "axios";
+import axiosRetry from "axios-retry";
 
 const API_URL = "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_URL,
+});
+
+// ──── AXIOS RETRY CONFIGURATION ────
+
+axiosRetry(api, {
+  retries: 3,
+  retryDelay: axiosRetry.exponentialDelay, 
+  onRetry: (retryCount, error, requestConfig) => {
+    console.log(`⚠️ Retrying API request... Attempt #${retryCount}`);
+  },
+  retryCondition: (error) => {
+    
+    return (
+      axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+      (error.response && error.response.status >= 500)
+    );
+  },
 });
 
 // ──── AXIOS INTERCEPTOR ────
@@ -85,7 +103,6 @@ export const chatQuizGenerate = (body) => api.post("/chat/quiz/generate", body);
 
 
 // ──── WORKSHEET GENERATION ────
-// 💡 Fix: added language parameter (defaulted to 'bangla')
 export const generateWorksheet = (
   topicId,
   userId,
@@ -168,6 +185,7 @@ export const deleteFile = (filename) => api.delete(`/ingest/delete-file/${filena
 
 
 // ──── CHAT HISTORY & SESSIONS ────
+// 💡 Session history retrieval methods
 export const chatHistory = (sessionId = null) =>
   api.get(`/chat/history${sessionId ? `?session_id=${sessionId}` : ""}`);
 
@@ -175,7 +193,6 @@ export const chatSessions = () => api.get(`/chat/sessions`);
 
 
 // ──── FILE DOWNLOAD ────
-// 💡 Fix: Returns the Axios promise with arraybuffer/blob response type for clean stream download
 export const downloadWorksheetPDF = (contentId) => {
   return api.get(`/generate/download/${contentId}`, { responseType: "blob" });
 };

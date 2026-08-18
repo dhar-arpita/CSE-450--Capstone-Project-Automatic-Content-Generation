@@ -10,6 +10,8 @@ const TXT = {
     generate: "✨ Worksheet তৈরি করো", generating: "⌛ তৈরি হচ্ছে...",
     ready: "✨ Worksheet তৈরি। ডাউনলোডের আগে নির্দিষ্ট অংশ refine করতে পারো।",
     refine: "🛠 Refine করো", download: "📥 PDF ডাউনলোড করো",
+    errorMsg: "⚠️ কনটেন্ট জেনারেট হতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+    retry: "🔄 আবার চেষ্টা করুন",
   },
   english: {
     difficulty: "Difficulty", questions: "Questions",
@@ -17,19 +19,20 @@ const TXT = {
     generate: "✨ Generate Worksheet", generating: "⌛ Generating...",
     ready: "✨ Worksheet ready. You can refine specific parts before downloading.",
     refine: "🛠 Refine Worksheet", download: "📥 Download as PDF",
+    errorMsg: "⚠️ Failed to generate worksheet. Please try again.",
+    retry: "🔄 Try Again",
   },
 };
 
 export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false); // 💡 নতুন Error State
   const [worksheetHTML, setWorksheetHTML] = useState("");
   const [contentId, setContentId] = useState(null);
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
   const [showRefine, setShowRefine] = useState(false);
-
-  // WorkSheetGenerator.js এর সংশ্লিষ্ট অংশ আপডেট করুন:
 
   const onGenerate = async () => {
     if (!selectedTopicId) {
@@ -40,9 +43,10 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     const userId = user?.user_id || 1;
 
     setLoading(true);
+    setError(false); // 💡 নতুন রিকোয়েস্টের শুরুতে আগের এরর ক্লিয়ার করা হচ্ছে
     setWorksheetHTML("");
+    
     try {
-      // 💡 এখানে 'language' পাঠাতে হবে (যেমন: "bangla" বা "english")
       const { data } = await generateWorksheet(
         selectedTopicId,
         userId,
@@ -56,36 +60,35 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
         setContentId(data.content_id);
         setShowRefine(false);
       } else {
-        alert("Worksheet generated but content is empty.");
+        setError(true);
       }
     } catch (err) {
       console.error("Error:", err);
-      alert("Failed to generate worksheet.");
+      setError(true); // 💡 alert() তুলে দিয়ে setError(true) দেওয়া হলো
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-const handleDownloadPDF = async () => {
-  if (!contentId) return;
-  try {
-    // 💡 PDF ডাউনলোডের সঠিক হ্যান্ডলার
-    const response = await downloadWorksheetPDF(contentId);
-    
-    // Response থেকে blob তৈরি করে ডাউনলোডের লিংক জেনারেট করা
-    const blob = new Blob([response.data], { type: "application/pdf" });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute("download", `worksheet_${contentId}.pdf`);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.URL.revokeObjectURL(url);
-  } catch (err) {
-    console.error("Download failed:", err);
-    alert("Download failed. Please make sure you are logged in.");
-  }
-};
+  const handleDownloadPDF = async () => {
+    if (!contentId) return;
+    try {
+      const response = await downloadWorksheetPDF(contentId);
+      
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `worksheet_${contentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed. Please make sure you are logged in.");
+    }
+  };
 
   const handleUpdateFromRefine = (newData) => {
     setWorksheetHTML(newData.html);
@@ -131,6 +134,16 @@ const handleDownloadPDF = async () => {
           {loading ? t.generating : t.generate}
         </button>
       </div>
+
+      {/* 💡 Error UI with Try Again Button */}
+      {error && (
+        <div style={errorCard}>
+          <span style={errorText}>{t.errorMsg}</span>
+          <button onClick={onGenerate} style={retryBtn}>
+            {t.retry}
+          </button>
+        </div>
+      )}
 
       {/* Preview & Action Buttons Section */}
       {worksheetHTML && (
@@ -188,7 +201,6 @@ const pillCaret = { color: "#94a3b8", fontSize: "12px", flexShrink: 0 };
 
 const numberInput = { width: "80px", padding: "10px 14px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "#fff", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", outline: "none" };
 
-/* Updated to Emerald Green (#059669 & #10b981) */
 const generateBtn = (disabled) => ({
   padding: "12px 24px",
   borderRadius: "12px",
@@ -201,6 +213,33 @@ const generateBtn = (disabled) => ({
   boxShadow: disabled ? "none" : "0 4px 14px rgba(5,150,105,0.35)",
   transition: "all 0.15s",
 });
+
+/* Error UI Styles */
+const errorCard = {
+  marginTop: "16px",
+  padding: "14px 18px",
+  backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
+
+const retryBtn = {
+  backgroundColor: "#dc2626",
+  color: "#fff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: "12.5px",
+  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
+};
 
 const previewCard = {
   marginTop: "20px",
@@ -216,7 +255,6 @@ const previewCard = {
 const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
-/* Updated Refine & Download Buttons to match Green theme */
 const refineBtn = { backgroundColor: "#ecfdf5", color: "#059669", padding: "10px 16px", border: "1.5px solid #a7f3d0", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
 const downloadBtn = { backgroundColor: "#059669", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(5,150,105,0.3)" };
 

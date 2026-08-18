@@ -12,11 +12,12 @@ const TXT = {
     print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
     selectFirst: "প্রথমে অন্তত একটি Scope (Topic/Chapter/Subject) সিলেক্ট করুন!",
-    empty: "Quiz তৈরি হয়েছে কিন্তু কোনো কন্টেন্ট পাওয়া যায়নি।",
-    failed: "Quiz তৈরি করা যায়নি। আবার চেষ্টা করুন।",
+    empty: "Quiz তৈরি হয়েছে কিন্তু কোনো কন্টেন্ট পাওয়া যায়নি।",
     topicScope: "Topic Scope",
     chapterScope: "Chapter Scope",
     subjectScope: "Subject Scope",
+    errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
+    retry: "🔄 আবার চেষ্টা করুন",
   },
   english: {
     scope: "Scope",
@@ -28,15 +29,14 @@ const TXT = {
     download: "📥 Download PDF",
     selectFirst: "Please select at least a Topic, Chapter or Subject first!",
     empty: "Quiz generated but content is empty.",
-    failed: "Failed to generate quiz. Please try again.",
     topicScope: "Topic Scope",
     chapterScope: "Chapter Scope",
     subjectScope: "Subject Scope",
+    errorMsg: "⚠️ Failed to generate quiz.",
+    retry: "🔄 Try Again",
   },
 };
 
-// Backend-er agents/quiz_agent.py-r QUESTION_COUNT_MAP-er sathe match kora —
-// scope change hole eta default hisebe boshe, user chaile pore manually change korte parbe.
 const SCOPE_DEFAULT_QUESTIONS = { topic: 10, chapter: 20, subject: 30 };
 
 export default function QuizGenerator({
@@ -51,22 +51,16 @@ export default function QuizGenerator({
   const [scope, setScope] = useState("topic");
   const [numQuestions, setNumQuestions] = useState(SCOPE_DEFAULT_QUESTIONS.topic);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false); // 💡 Error State
   const [quizHTML, setQuizHTML] = useState("");
   const [contentId, setContentId] = useState(null);
 
-  // Jokhon user notun kore select kore (topic/chapter/subject), tokhon
-  // sobcheye specific (deepest) available scope-e auto-switch kori, jate
-  // user-ke abar manually dropdown theke scope change korte na hoy.
   React.useEffect(() => {
     if (selectedTopicId) setScope("topic");
     else if (selectedChapter) setScope("chapter");
     else if (selectedSubject) setScope("subject");
   }, [selectedTopicId, selectedChapter, selectedSubject]);
 
-  // Scope jokhoni change hoy (auto-detect theke ba user-er manual dropdown
-  // theke), oi scope-er default question count-e reset kori. User erpor
-  // "প্রশ্ন সংখ্যা" dropdown theke chaile nijer moto change korte parbe —
-  // eta shudhu scope change howar shomoy-i notun default boshaay.
   React.useEffect(() => {
     setNumQuestions(SCOPE_DEFAULT_QUESTIONS[scope] || 10);
   }, [scope]);
@@ -96,6 +90,7 @@ export default function QuizGenerator({
     }
 
     setLoading(true);
+    setError(false); // 💡 নতুন চেষ্টার আগে এরর ক্লিয়ার করা হচ্ছে
     setQuizHTML("");
     setContentId(null);
     try {
@@ -112,16 +107,16 @@ export default function QuizGenerator({
         setQuizHTML(html);
         setContentId(data?.content_id || data?.id || null);
       } else {
-        alert(t.empty);
+        setError(true);
       }
     } catch (err) {
       console.error("Error generating quiz:", err);
-      alert(t.failed);
+      setError(true); // 💡 alert() তুলে দিয়ে setError(true) দেওয়া হলো
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  // Endpoint দিয়ে PDF ডাউনলোড করার হ্যান্ডলার (Worksheet ও StudyNote-এর মতো)
   const handleDownloadPDF = async () => {
     if (!contentId) {
       alert("Content ID not found to download PDF.");
@@ -206,6 +201,16 @@ export default function QuizGenerator({
         </button>
       </div>
 
+      {/* 💡 Error UI with Dynamic Try Again Button */}
+      {error && (
+        <div style={errorCard}>
+          <span style={errorText}>{t.errorMsg}</span>
+          <button onClick={onGenerate} style={retryBtn}>
+            {t.retry}
+          </button>
+        </div>
+      )}
+
       {/* Preview & Action Buttons Section */}
       {quizHTML && (
         <div style={previewCard}>
@@ -270,6 +275,33 @@ const generateBtn = (disabled) => ({
   boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.35)",
   transition: "all 0.15s",
 });
+
+/* Error UI Styles */
+const errorCard = {
+  marginTop: "16px",
+  padding: "14px 18px",
+  backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
+
+const retryBtn = {
+  backgroundColor: "#dc2626",
+  color: "#fff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: "12.5px",
+  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
+};
 
 const previewCard = {
   marginTop: "20px",

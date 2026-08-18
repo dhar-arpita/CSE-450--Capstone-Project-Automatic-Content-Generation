@@ -11,7 +11,8 @@ const TXT = {
     download: "📥 PDF ডাউনলোড করো",
     selectFirst: "প্রথমে উপরের ড্রপডাউন থেকে একটা Topic বেছে নাও!",
     empty: "Study note তৈরি হয়েছে কিন্তু কোনো কনটেন্ট পাওয়া যায়নি।",
-    failed: "Study note তৈরি করা যায়নি। আবার চেষ্টা করো।",
+    errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
+    retry: "🔄 আবার চেষ্টা করুন",
   },
   english: {
     generate: "📒 Generate Study Note",
@@ -21,13 +22,15 @@ const TXT = {
     download: "📥 Download PDF",
     selectFirst: "Please select a Topic from the dropdowns above first!",
     empty: "Study note generated but content is empty.",
-    failed: "Failed to generate study note. Please try again.",
+    errorMsg: "⚠️ Failed to generate study note.",
+    retry: "🔄 Try Again",
   },
 };
 
 export default function StudyNoteGenerator({ selectedTopicId, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false); // 💡 Error State
   const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
 
@@ -38,8 +41,10 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     }
 
     setLoading(true);
+    setError(false); // 💡 নতুন চেষ্টার শুরুতে আগের এরর রিমুভ করা হচ্ছে
     setNoteHTML("");
     setContentId(null);
+
     try {
       const { data } = await generateStudyNote(selectedTopicId, language);
       const html = data?.html || data?.note_html || data?.content || "";
@@ -47,13 +52,14 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
         setNoteHTML(html);
         setContentId(data?.content_id || data?.id || null);
       } else {
-        alert(t.empty);
+        setError(true);
       }
     } catch (err) {
       console.error("Error:", err);
-      alert(t.failed);
+      setError(true); // 💡 alert() তুলে দেওয়া হলো
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleDownloadPDF = async () => {
@@ -63,7 +69,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     }
     try {
       const response = await downloadWorksheetPDF(contentId);
-      
+
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -101,6 +107,16 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
           {loading ? t.generating : t.generate}
         </button>
       </div>
+
+      {/* 💡 Error UI with Dynamic Try Again Button */}
+      {error && (
+        <div style={errorCard}>
+          <span style={errorText}>{t.errorMsg}</span>
+          <button onClick={onGenerate} style={retryBtn}>
+            {t.retry}
+          </button>
+        </div>
+      )}
 
       {/* Preview & Action Buttons Section */}
       {noteHTML && (
@@ -152,6 +168,33 @@ const generateBtn = (disabled) => ({
   boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.35)",
   transition: "all 0.15s",
 });
+
+/* Error UI Styles */
+const errorCard = {
+  marginTop: "16px",
+  padding: "14px 18px",
+  backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
+
+const retryBtn = {
+  backgroundColor: "#dc2626",
+  color: "#fff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: "12.5px",
+  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
+};
 
 const previewCard = {
   marginTop: "20px",
