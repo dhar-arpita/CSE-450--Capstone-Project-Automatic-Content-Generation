@@ -1,9 +1,27 @@
 import axios from "axios";
+import axiosRetry from "axios-retry";
 
 const API_URL = "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_URL,
+});
+
+// ──── AXIOS RETRY CONFIGURATION ────
+
+axiosRetry(api, {
+  retries: 3,
+  retryDelay: axiosRetry.exponentialDelay, 
+  onRetry: (retryCount, error, requestConfig) => {
+    console.log(`⚠️ Retrying API request... Attempt #${retryCount}`);
+  },
+  retryCondition: (error) => {
+    
+    return (
+      axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+      (error.response && error.response.status >= 500)
+    );
+  },
 });
 
 // ──── AXIOS INTERCEPTOR ────
@@ -19,12 +37,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Optional: Response interceptor to handle 401 (token expired)
+// Response interceptor to handle 401 (token expired)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid — clear storage and redirect to login
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("user");
@@ -37,7 +54,7 @@ api.interceptors.response.use(
 // ──── AUTH ENDPOINTS ────
 export const signup = (userData) => api.post("/users/", userData);
 export const login = (email, password) =>
-  api.post("/login/", { email, password });  // Changed to POST with body
+  api.post("/login/", { email, password });
 export const getCurrentUser = () => api.get("/users/me");
 export const getUsers = () => api.get("/users/");
 
@@ -69,7 +86,6 @@ export const uploadCurriculumFile = (file, chapterId, userId) => {
 
 
 // ──── CHATBOT ENDPOINTS ────
-// NOTE: student_id should no longer be sent in body — it's extracted from JWT token on backend
 export const chatQaSamples = (body) => api.post("/chat/qa/samples", body);
 export const chatQaAsk = (body) => api.post("/chat/qa/ask", body);
 export const chatExplainMore = (body) => api.post("/chat/qa/explain_more", body);
@@ -87,12 +103,20 @@ export const chatQuizGenerate = (body) => api.post("/chat/quiz/generate", body);
 
 
 // ──── WORKSHEET GENERATION ────
-export const generateWorksheet = (topicId, userId, difficulty, numProblems, sampleFile = null) => {
+export const generateWorksheet = (
+  topicId,
+  userId,
+  difficulty,
+  numProblems,
+  sampleFile = null,
+  language = "bangla"
+) => {
   const formData = new FormData();
   formData.append("topic_id", topicId);
   formData.append("user_id", userId);
   formData.append("difficulty", difficulty);
   formData.append("num_problems", numProblems);
+  formData.append("language", language);
 
   if (sampleFile) {
     formData.append("sample_worksheet", sampleFile);
@@ -161,27 +185,16 @@ export const deleteFile = (filename) => api.delete(`/ingest/delete-file/${filena
 
 
 // ──── CHAT HISTORY & SESSIONS ────
-// NOTE: student_id now extracted from JWT token on backend
+// 💡 Session history retrieval methods
 export const chatHistory = (sessionId = null) =>
   api.get(`/chat/history${sessionId ? `?session_id=${sessionId}` : ""}`);
 
-export const chatSessions = () =>
-  api.get(`/chat/sessions`);
+export const chatSessions = () => api.get(`/chat/sessions`);
 
 
-
-export const downloadWorksheetPDF = async (contentId) => {
-  const res = await api.get(`/generate/download/${contentId}`, { responseType: "blob" });
-  // blob theke file save
-  const url = window.URL.createObjectURL(new Blob([res.data], { type: "application/pdf" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `worksheet_${contentId}.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  window.URL.revokeObjectURL(url);
+// ──── FILE DOWNLOAD ────
+export const downloadWorksheetPDF = (contentId) => {
+  return api.get(`/generate/download/${contentId}`, { responseType: "blob" });
 };
-
 
 export default api;

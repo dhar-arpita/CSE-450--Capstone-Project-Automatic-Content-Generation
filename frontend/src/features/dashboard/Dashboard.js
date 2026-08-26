@@ -187,6 +187,7 @@ export default function Dashboard() {
       borderColor: "#c4b5fd",
       // badge: "New",
       path: "/chatbot",
+      studentOnly: true,
     },
     {
       icon: "📒",
@@ -356,9 +357,11 @@ export default function Dashboard() {
           marginBottom: "36px",
           animation: "fadeInUp 0.6s ease 0.25s both",
         }}>
-          {features.map((f, i) => (
-            <FeatureCard key={i} {...f} onClick={() => navigate(f.path)} />
-          ))}
+          {features
+            .filter(f => !f.studentOnly || user?.role === "student")
+            .map((f, i) => (
+              <FeatureCard key={i} {...f} onClick={() => navigate(f.path)} />
+            ))}
         </div>
 
         {/* WORKFLOW EXPLAINER */}

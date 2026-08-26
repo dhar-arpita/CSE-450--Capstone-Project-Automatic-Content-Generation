@@ -1,37 +1,41 @@
 // features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
 import React, { useState } from "react";
-import { generateStudyNote } from "../../shared/services/api";
+import { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
 
 const TXT = {
   bangla: {
     generate: "📒 Study Note তৈরি করো",
     generating: "⌛ তৈরি হচ্ছে...",
-    ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা কপি করতে পারো।",
-    print: "🖨️ Print / PDF Save",
-    copy: "📋 কপি করো",
-    copied: "✅ কপি হয়েছে!",
+    ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা ডাউনলোড করতে পারো।",
+    print: "🖨️ Print",
+    download: "📥 PDF ডাউনলোড করো",
+    downloading: "⌛ ডাউনলোড হচ্ছে...",
     selectFirst: "প্রথমে উপরের ড্রপডাউন থেকে একটা Topic বেছে নাও!",
     empty: "Study note তৈরি হয়েছে কিন্তু কোনো কনটেন্ট পাওয়া যায়নি।",
-    failed: "Study note তৈরি করা যায়নি। আবার চেষ্টা করো।",
+    errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
+    retry: "🔄 আবার চেষ্টা করুন",
   },
   english: {
     generate: "📒 Generate Study Note",
     generating: "⌛ Generating...",
-    ready: "📒 Study note ready. Review below — print or copy it.",
-    print: "🖨️ Print / Save PDF",
-    copy: "📋 Copy Text",
-    copied: "✅ Copied!",
+    ready: "📒 Study note ready. Review below — print or download as PDF.",
+    print: "🖨️ Print",
+    download: "📥 Download PDF",
+    downloading: "⌛ Downloading...",
     selectFirst: "Please select a Topic from the dropdowns above first!",
     empty: "Study note generated but content is empty.",
-    failed: "Failed to generate study note. Please try again.",
+    errorMsg: "⚠️ Failed to generate study note.",
+    retry: "🔄 Try Again",
   },
 };
 
 export default function StudyNoteGenerator({ selectedTopicId, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [error, setError] = useState(false);
   const [noteHTML, setNoteHTML] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [contentId, setContentId] = useState(null);
 
   const onGenerate = async () => {
     if (!selectedTopicId) {
@@ -40,23 +44,52 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     }
 
     setLoading(true);
+    setError(false);
     setNoteHTML("");
-    setCopied(false);
+    setContentId(null);
+
     try {
       const { data } = await generateStudyNote(selectedTopicId, language);
-      // NOTE: adjust this line once you confirm the exact response shape
-      // from your backend (e.g. data.html, data.note_html, data.content...)
       const html = data?.html || data?.note_html || data?.content || "";
       if (html) {
         setNoteHTML(html);
+        setContentId(data?.content_id || data?.id || null);
       } else {
-        alert(t.empty);
+        setError(true);
       }
     } catch (err) {
       console.error("Error:", err);
-      alert(t.failed);
+      setError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!contentId) {
+      alert("Content ID not found to download PDF.");
+      return;
+    }
+
+    setDownloading(true); // 💡 ডাউনলোড শুরু
+    try {
+      const response = await downloadWorksheetPDF(contentId);
+
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `studynote_${contentId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Download failed. Please try again.");
+    } finally {
+      setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
+    }
   };
 
   const handlePrint = () => {
@@ -67,19 +100,6 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     printWindow.document.close();
     printWindow.focus();
     printWindow.print();
-  };
-
-  const handleCopy = async () => {
-    const temp = document.createElement("div");
-    temp.innerHTML = noteHTML;
-    const text = temp.innerText || temp.textContent || "";
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      alert("Copy failed. Please select and copy manually.");
-    }
   };
 
   return (
@@ -95,17 +115,31 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
         </button>
       </div>
 
+      {/* Error UI with Dynamic Try Again Button */}
+      {error && (
+        <div style={errorCard}>
+          <span style={errorText}>{t.errorMsg}</span>
+          <button onClick={onGenerate} style={retryBtn}>
+            {t.retry}
+          </button>
+        </div>
+      )}
+
       {/* Preview & Action Buttons Section */}
       {noteHTML && (
         <div style={previewCard}>
           <div style={previewHeaderRow}>
             <div style={previewHint}>{t.ready}</div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={handleCopy} style={refineBtn}>
-                {copied ? t.copied : t.copy}
-              </button>
-              <button onClick={handlePrint} style={downloadBtn}>
+              <button onClick={handlePrint} style={outlineBtn}>
                 {t.print}
+              </button>
+              <button
+                onClick={handleDownloadPDF}
+                disabled={downloading}
+                style={downloadBtn(downloading)}
+              >
+                {downloading ? t.downloading : t.download}
               </button>
             </div>
           </div>
@@ -146,6 +180,33 @@ const generateBtn = (disabled) => ({
   transition: "all 0.15s",
 });
 
+/* Error UI Styles */
+const errorCard = {
+  marginTop: "16px",
+  padding: "14px 18px",
+  backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca",
+  borderRadius: "12px",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "space-between",
+  gap: "12px",
+};
+
+const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
+
+const retryBtn = {
+  backgroundColor: "#dc2626",
+  color: "#fff",
+  border: "none",
+  padding: "8px 14px",
+  borderRadius: "8px",
+  cursor: "pointer",
+  fontWeight: 700,
+  fontSize: "12.5px",
+  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
+};
+
 const previewCard = {
   marginTop: "20px",
   backgroundColor: "#fff",
@@ -160,7 +221,20 @@ const previewCard = {
 const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
-const refineBtn = { backgroundColor: "#ecfeff", color: "#0891b2", padding: "10px 16px", border: "1.5px solid #a5f3fc", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-const downloadBtn = { backgroundColor: "#0891b2", color: "#fff", padding: "10px 20px", border: "none", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px", boxShadow: "0 4px 14px rgba(8,145,178,0.3)" };
+const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
+
+const downloadBtn = (disabled) => ({
+  backgroundColor: disabled ? "#a5f3fc" : "#0891b2",
+  color: "#fff",
+  padding: "10px 20px",
+  border: "none",
+  borderRadius: "10px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  fontWeight: 700,
+  fontSize: "13px",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)",
+  opacity: disabled ? 0.8 : 1,
+  transition: "all 0.2s",
+});
 
 const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

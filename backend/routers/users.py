@@ -10,7 +10,7 @@ from core.security import (
     create_access_token, create_refresh_token,
     get_current_user_from_header
 )
-from models.db_models import User, Student
+from models.db_models import User, Student,Teacher
 from schemas.user import UserCreate, UserResponse, LoginRequest, TokenResponse
 from services import rag_service
 
@@ -52,6 +52,9 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         # You can update this later or require it in frontend
         student = Student(student_id=db_user.user_id)
         db.add(student)
+    elif user.role == "teacher":                          # <- new add
+        teacher = Teacher(teacher_id=db_user.user_id)      # <- new add
+        db.add(teacher)
     
     db.commit()
     db.refresh(db_user)
