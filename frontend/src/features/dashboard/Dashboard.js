@@ -164,7 +164,7 @@ export default function Dashboard() {
       color: "#4f46e5",
       bg: "#eef2ff",
       borderColor: "#a5b4fc",
-      badge: "Step 1",
+      // badge: "Step 1",
       path: "/upload",
     },
     {
@@ -174,7 +174,7 @@ export default function Dashboard() {
       color: "#059669",
       bg: "#ecfdf5",
       borderColor: "#6ee7b7",
-      badge: "Step 2",
+      // badge: "Step 2",
       path: "/generate",
     },
 
@@ -185,8 +185,28 @@ export default function Dashboard() {
       color: "#7c3aed",
       bg: "#f5f3ff",
       borderColor: "#c4b5fd",
-      badge: "New",
+      // badge: "New",
       path: "/chatbot",
+    },
+    {
+      icon: "📒",
+      title: "Study Note Generation",
+      description: "Turn your uploaded curriculum into concise, well-organized study notes ready for revision.",
+      color: "#0891b2",
+      bg: "#ecfeff",
+      borderColor: "#67e8f9",
+      // badge: "New",
+      path: "/study-notes",
+    },
+    {
+      icon: "🧠",
+      title: "Quiz Generation",
+      description: "Automatically create AI-powered quizzes with custom question types and difficulty to test understanding.",
+      color: "#db2777",
+      bg: "#fdf2f8",
+      borderColor: "#f9a8d4",
+      // badge: "New",
+      path: "/quiz",
     },
   ];
 
