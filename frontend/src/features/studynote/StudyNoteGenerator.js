@@ -35,6 +35,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
   const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
   const [error, setError] = useState(false);
   const [noteHTML, setNoteHTML] = useState("");
+  const [speaking, setSpeaking] = useState(false);   // audio porche kina
   const [contentId, setContentId] = useState(null);
 
   const onGenerate = async () => {
@@ -92,6 +93,40 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     }
   };
 
+  // ---- Audio (browser TTS) — teacher er moto pore shonai ----
+  const getPlainText = (html) => {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = html;
+    return (tmp.textContent || tmp.innerText || "").replace(/\s+/g, " ").trim();
+  };
+
+  const toggleSpeak = () => {
+    if (!("speechSynthesis" in window)) {
+      alert("Sorry, your browser does not support audio playback.");
+      return;
+    }
+    if (speaking) {                         // cholche -> thamao
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
+      return;
+    }
+    const text = getPlainText(noteHTML);
+    if (!text) return;
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = language === "bangla" ? "bn" : "en-US";   // vasha onujayi voice
+    u.rate = 0.95;                          // ektu dhire, bujhte subidha
+    u.onend = () => setSpeaking(false);     // sesh hole button reset
+    u.onerror = () => setSpeaking(false);
+    window.speechSynthesis.cancel();        // age kichu cholle thamao
+    window.speechSynthesis.speak(u);
+    setSpeaking(true);
+  };
+
+  // component chere gele / note bodlale audio thamao
+  React.useEffect(() => {
+    return () => { if ("speechSynthesis" in window) window.speechSynthesis.cancel(); };
+  }, []);
+
   const handlePrint = () => {
     const printWindow = window.open("", "_blank");
     printWindow.document.write(
@@ -131,6 +166,9 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
           <div style={previewHeaderRow}>
             <div style={previewHint}>{t.ready}</div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+              <button onClick={toggleSpeak} style={outlineBtn}>
+                {speaking ? "⏸️ থামান" : "🔊 শুনুন"}
+              </button>
               <button onClick={handlePrint} style={outlineBtn}>
                 {t.print}
               </button>

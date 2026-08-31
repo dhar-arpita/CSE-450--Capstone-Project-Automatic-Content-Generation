@@ -26,9 +26,6 @@ from agents.qa_answer_agent import run_qa_answer_agent, run_explain_more_agent
 router = APIRouter(prefix="/chat", tags=["chatbot"])
 
 
-# ============================================================
-# Helper functions (NO CHANGES)
-# ============================================================
 def _gen_json(prompt: str, temperature: float = 0.5) -> dict:
     """FAST_MODEL দিয়ে JSON generate + repair + parse"""
     resp = generate_with_backoff(
