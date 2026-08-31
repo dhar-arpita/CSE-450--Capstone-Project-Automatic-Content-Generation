@@ -173,7 +173,14 @@ class GeneratedContent(Base):
      answer_key = Column(Text)
      explanation = Column(Text)
      language = Column(String(50), default="english")
-     generated_at = Column(TIMESTAMP, server_default=func.now())    
+     generated_at = Column(TIMESTAMP, server_default=func.now())
+     # ── Cache columns ──────────────────────────────────────────────────────
+     # Only rows with is_cache_seed=True are ever READ as cache, so an ordinary
+     # teacher generation (or a refined worksheet) can never be served to
+     # someone else. Seed rows are written only by scripts/warm_cache.py.
+     is_cache_seed = Column(Boolean, default=False, nullable=False)
+     cache_version = Column(String(50), nullable=True)
+     num_problems = Column(Integer, nullable=True)
      
      
      

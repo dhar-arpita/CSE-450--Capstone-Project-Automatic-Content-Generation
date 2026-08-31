@@ -116,3 +116,18 @@ def get_current_user_from_header(credentials: HTTPAuthorizationCredentials = Dep
         raise HTTPException(status_code=404, detail="User not found")
     
     return user
+
+# ──── DEPENDENCY: role gate ────
+def require_teacher_or_admin(current_user: User = Depends(get_current_user_from_header)) -> User:
+    """
+    Allow teachers and admins only; students get 403.
+
+    Single shared gate for the cache-admin endpoints so the role check exists in
+    exactly one place.
+    """
+    if current_user.role not in ("teacher", "admin"):
+        raise HTTPException(
+            status_code=403,
+            detail="Cache administration is restricted to teachers and admins.",
+        )
+    return current_user

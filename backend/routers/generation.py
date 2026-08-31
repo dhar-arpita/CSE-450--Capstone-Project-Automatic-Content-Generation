@@ -27,6 +27,29 @@ from services.generation_service import (
     handle_visuals,
     remap_refinement_ids,
 )
+from services.cache_service import (
+    CACHE_VERSION,
+    FIXED_DIFFICULTY,
+    effective_quiz_questions,
+    normalize_key,
+    get_cache_seed,
+    clone_seed_for_user,
+    _save_generated_content,
+    build_seed_key,
+    key_for_row,
+    resolve_topic_chain,
+    run_seed_pipeline,
+    write_seed,
+    mark_as_seed,
+    mark_not_seed,
+)
+from core.security import require_teacher_or_admin
+from schemas.cache import (
+    PromoteToSeedRequest, PromoteResponse,
+    SeedRequest, SeedResponse,
+    DemoteSeedRequest, DemoteResponse,
+    CacheSeedsResponse,
+)
 from agents.math_verifier import verify_and_fix_problems
 from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
@@ -34,61 +57,9 @@ from agents.compiler_agent import run_compiler_agent
 from fastapi.responses import HTMLResponse
 import json
 import ast
+import time
 
 router = APIRouter(prefix="/generate", tags=["Worksheet Generation"])
-
-
-def _save_generated_content(db, current_user, topic_id, content_type,
-                            difficulty_level, display_body, answer_key,
-                            explanation, language=None):
-    """
-    Role onujayi thik session e save kore:
-      - teacher/admin -> teacher_session + generated_content.teacher_session_id
-      - student        -> learning_session + generated_content.learning_session_id
-    Returns (content_id, session_id).
-    """
-    uid = current_user.user_id
-    role = current_user.role
-
-    if role == "student":
-        session = LearningSession(student_id=uid, current_topic_id=topic_id)
-        db.add(session)
-        db.flush()
-        if topic_id:
-            db.add(LearningSessionTopic(session_id=session.session_id, topic_id=topic_id))
-        gc_kwargs = dict(learning_session_id=session.session_id)
-    else:
-        session = TeacherSession(teacher_id=uid, started_at=datetime.utcnow())
-        db.add(session)
-        db.flush()
-        if topic_id:
-            db.add(TeacherSessionTopic(session_id=session.session_id, topic_id=topic_id))
-        gc_kwargs = dict(teacher_session_id=session.session_id)
-
-    generated = GeneratedContent(
-        topic_id=topic_id,
-        content_type=content_type,
-        difficulty_level=difficulty_level,
-        display_body=display_body,
-        answer_key=answer_key,
-        explanation=explanation,
-        generated_at=datetime.utcnow(),
-        **gc_kwargs,
-    )
-    if language is not None:
-        generated.language = language
-    db.add(generated)
-    db.flush()
-
-    if role == "student":
-        session.end_time = datetime.utcnow()
-    else:
-        session.ended_at = datetime.utcnow()
-    db.commit()
-
-    return generated.content_id, session.session_id
-
-
 
 
 @router.post("/worksheet")
@@ -97,6 +68,7 @@ async def create_worksheet(
     difficulty: str = Form("easy"),
     num_problems: int = Form(5),
     language: str = Form("english"),   # NEW — teacher's output-language choice
+    refresh: bool = Form(False),       # NEW — true bypasses the cache entirely
     sample_worksheet: Optional[UploadFile] = File(None),
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
@@ -120,6 +92,39 @@ async def create_worksheet(
     chapter_name = chapter.name
     subject_name = subject.name
     class_name = subject.class_name
+
+    # ── STEP 1b: Cache read ───────────────────────────────────────────────────
+    # Bypassed when a style sample was uploaded (the output is sample-specific)
+    # or when the caller explicitly asked for a fresh generation.
+    if not refresh and sample_worksheet is None:
+        key = normalize_key(
+            topic_id=topic_id,
+            content_type="worksheet",
+            language=language,
+            difficulty_level=difficulty,
+            num_problems=num_problems,
+        )
+        seed = get_cache_seed(db, key)
+        if seed:
+            try:
+                parsed = ast.literal_eval(seed.answer_key)
+                problems_count = len(parsed.get("localized_problems", [])) if isinstance(parsed, dict) else 0
+            except (ValueError, SyntaxError):
+                # Unparseable seed — treat as a MISS and run the pipeline.
+                print(f"[Cache] Seed {seed.content_id} answer_key unparseable — falling through")
+                seed = None
+
+            if seed:
+                content_id, session_id = clone_seed_for_user(db, seed, current_user, topic_id)
+                print(f"[Cache] HIT worksheet seed={seed.content_id} -> clone={content_id} key={key}")
+                return {
+                    "content_id": content_id,
+                    "session_id": session_id,
+                    "html": seed.display_body,
+                    "problems_count": problems_count,
+                    "style_used": False,
+                    "cached": True,
+                }
 
     sample_bytes = None
     if sample_worksheet:
@@ -162,6 +167,8 @@ async def create_worksheet(
             display_body=result["html"],
             answer_key=str(result.get("problems", "")),
             explanation=str(result.get("visuals", "")),
+            language=language,
+            num_problems=num_problems,
         )
     except Exception as db_error:
         print(f"[DB Error] Failed to save worksheet to DB: {db_error}")
@@ -171,7 +178,8 @@ async def create_worksheet(
             "html": result["html"],
             "problems_count": len(result.get("problems", {}).get("localized_problems", [])),
             "style_used": result.get("style_used", False),
-            "warning": "Worksheet generated successfully but could not be saved to database."
+            "warning": "Worksheet generated successfully but could not be saved to database.",
+            "cached": False,
         }
 
     return {
@@ -179,7 +187,8 @@ async def create_worksheet(
         "session_id": session_id,
         "html": result["html"],
         "problems_count": len(result.get("problems", {}).get("localized_problems", [])),
-        "style_used": result.get("style_used", False)
+        "style_used": result.get("style_used", False),
+        "cached": False,
     }
 
 
@@ -187,6 +196,7 @@ async def create_worksheet(
 async def create_study_note(
     topic_id: int = Form(...),
     language: str = Form("english"),
+    refresh: bool = Form(False),       # NEW — true bypasses the cache entirely
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
@@ -209,6 +219,34 @@ async def create_study_note(
     chapter_name = chapter.name
     subject_name = subject.name
     class_name = subject.class_name
+
+    # ── Cache read ───────────────────────────────────────────────────────────
+    if not refresh:
+        key = normalize_key(
+            topic_id=topic_id,
+            content_type="study_note",
+            language=language,
+            difficulty_level=FIXED_DIFFICULTY["study_note"],
+        )
+        seed = get_cache_seed(db, key)
+        if seed:
+            try:
+                parsed = ast.literal_eval(seed.answer_key)
+                concept_blocks_count = len(parsed.get("concept_blocks", [])) if isinstance(parsed, dict) else 0
+            except (ValueError, SyntaxError):
+                print(f"[Cache] Seed {seed.content_id} answer_key unparseable — falling through")
+                seed = None
+
+            if seed:
+                content_id, session_id = clone_seed_for_user(db, seed, current_user, topic_id)
+                print(f"[Cache] HIT study_note seed={seed.content_id} -> clone={content_id} key={key}")
+                return {
+                    "content_id": content_id,
+                    "session_id": session_id,
+                    "html": seed.display_body,
+                    "concept_blocks_count": concept_blocks_count,
+                    "cached": True,
+                }
 
     db.close()
 
@@ -251,14 +289,16 @@ async def create_study_note(
             "session_id": None,
             "html": result["html"],
             "concept_blocks_count": len(result.get("note", {}).get("concept_blocks", [])),
-            "warning": "Study note generated successfully but could not be saved to database."
+            "warning": "Study note generated successfully but could not be saved to database.",
+            "cached": False,
         }
 
     return {
         "content_id": content_id,
         "session_id": session_id,
         "html": result["html"],
-        "concept_blocks_count": len(result.get("note", {}).get("concept_blocks", []))
+        "concept_blocks_count": len(result.get("note", {}).get("concept_blocks", [])),
+        "cached": False,
     }
 
 
@@ -529,6 +569,7 @@ async def create_quiz(
     subject_id: Optional[int] = Form(None),
     language: str = Form("english"),
     num_questions: Optional[int] = Form(None),   # optional: dile eta, na dile scope map (10/20/30)
+    refresh: bool = Form(False),                # NEW — true bypasses the cache entirely
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
@@ -584,6 +625,40 @@ async def create_quiz(
     else:
         raise HTTPException(status_code=400, detail="scope must be 'topic', 'chapter', or 'subject'")
 
+    # ── Cache read ───────────────────────────────────────────────────────────
+    # Phase 1 caches topic-scope quizzes only; chapter/subject scope always runs
+    # the pipeline (their keys would need chapter_id/subject_id columns).
+    if not refresh and scope == "topic":
+        # num_problems carries the quiz's EFFECTIVE question count, so a request
+        # for 30 questions cannot be served a cached 10-question quiz.
+        key = normalize_key(
+            topic_id=target_topic_id,
+            content_type="quiz_topic",
+            language=language,
+            difficulty_level=FIXED_DIFFICULTY["quiz_topic"],
+            num_problems=effective_quiz_questions(num_questions, scope),
+            chapter_id=curr_chapter_id,
+            subject_id=curr_subject_id,
+        )
+        seed = get_cache_seed(db, key)
+        if seed:
+            try:
+                parsed = ast.literal_eval(seed.answer_key)
+            except (ValueError, SyntaxError):
+                print(f"[Cache] Seed {seed.content_id} answer_key unparseable — falling through")
+                seed = None
+
+            if seed:
+                content_id, session_id = clone_seed_for_user(db, seed, current_user, target_topic_id)
+                print(f"[Cache] HIT quiz_topic seed={seed.content_id} -> clone={content_id} key={key}")
+                return {
+                    "content_id": content_id,
+                    "session_id": session_id,
+                    "html": seed.display_body,
+                    "quiz": parsed,
+                    "cached": True,
+                }
+
     db.close()
 
     try:
@@ -619,6 +694,7 @@ async def create_quiz(
             answer_key=str(result.get("quiz", "")),
             explanation=str(result.get("visuals", "")),
             language=language,
+            num_problems=effective_quiz_questions(num_questions, scope),
         )
     except Exception as db_error:
         print(f"[DB Error] Failed to save quiz to DB: {db_error}")
@@ -627,15 +703,241 @@ async def create_quiz(
             "session_id": None,
             "html": result["html"],
             "quiz": result.get("quiz"),
-            "warning": "Quiz generated successfully but could not be saved to database."
+            "warning": "Quiz generated successfully but could not be saved to database.",
+            "cached": False,
         }
 
     return {
         "content_id": content_id,
         "session_id": session_id,
         "html": result["html"],
-        "quiz": result.get("quiz")
+        "quiz": result.get("quiz"),
+        "cached": False,
     }
+
+
+# --------------------------------------------------------------------------
+# CACHE ADMIN ENDPOINTS
+# --------------------------------------------------------------------------
+# Called from /docs only, never from the frontend. All four are restricted to
+# teachers and admins by the shared require_teacher_or_admin dependency, and all
+# build their keys through cache_service so they can never disagree with the
+# lookup path or with scripts/warm_cache.py.
+
+
+def _resolve_seed_conflict(db, key, replace, apply=True):
+    """
+    Enforce "at most one live seed per key".
+
+    Raises 409 when a seed already exists and replace is False. When replace is
+    True and apply is True, demotes the incumbent and returns its content_id.
+
+    Does NOT commit — the caller commits, so the demote and the promote land in
+    one transaction and the table is never left with two live seeds under a key.
+    Call with apply=False for a pre-flight check that only raises.
+    """
+    existing = get_cache_seed(db, key)
+    if existing is None:
+        return None
+
+    if not replace:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"A seed already exists for this key (content_id={existing.content_id}). "
+                f"Pass replace=true to demote it and use the new one instead. Key: {key}"
+            ),
+        )
+
+    if apply:
+        mark_not_seed(existing)
+    return existing.content_id
+
+
+@router.post("/promote-to-seed", response_model=PromoteResponse)
+def promote_to_seed(
+    body: PromoteToSeedRequest,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Mark an existing generated_content row as the cache seed for its key.
+    No pipeline call, so this returns immediately.
+    """
+    row = db.query(GeneratedContent).filter(
+        GeneratedContent.content_id == body.content_id
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"content_id {body.content_id} not found")
+
+    if row.is_cache_seed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"content_id {body.content_id} is already a seed (cache_version={row.cache_version!r})",
+        )
+
+    try:
+        key = key_for_row(row)
+    except ValueError as e:
+        # Row can never be matched by a live request — refuse rather than create
+        # an unreachable seed.
+        raise HTTPException(status_code=400, detail=str(e))
+
+    replaced = _resolve_seed_conflict(db, key, body.replace)
+    mark_as_seed(row)
+    db.commit()
+
+    return {
+        "content_id": row.content_id,
+        "key": key,
+        "cache_version": CACHE_VERSION,
+        "replaced_content_id": replaced,
+    }
+
+
+@router.post("/seed", response_model=SeedResponse)
+def create_seed(
+    body: SeedRequest,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Generate fresh content and store it directly as a cache seed.
+
+    Synchronous: this blocks for the full pipeline (~2-5 minutes), the same way
+    POST /generate/worksheet already does.
+    """
+    # ── Validate and check the conflict BEFORE generating ────────────────────
+    # Burning two minutes only to 409 at the end would be a poor trade.
+    if body.content_type == "worksheet" and not body.num_problems:
+        raise HTTPException(status_code=400, detail="num_problems is required for worksheet seeds")
+
+    try:
+        key = build_seed_key(
+            content_type=body.content_type,
+            topic_id=body.topic_id,
+            language=body.language,
+            difficulty=body.difficulty,
+            num_problems=body.num_problems,
+            num_questions=body.num_questions,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    try:
+        topic, chapter, subject = resolve_topic_chain(db, body.topic_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Pre-flight only: raises 409 now if the key is taken and replace is False.
+    _resolve_seed_conflict(db, key, body.replace, apply=False)
+
+    # ── Run the pipeline ─────────────────────────────────────────────────────
+    started = time.time()
+    db.close()   # match the other endpoints: no idle connection during the pipeline
+
+    try:
+        result, answer_key, explanation = run_seed_pipeline(key, topic, chapter, subject)
+    except genai_errors.ClientError as e:
+        if e.code == 429:
+            raise HTTPException(
+                status_code=503,
+                detail="The AI model is over capacity right now. Please try again in a minute."
+            )
+        raise
+
+    if result.get("error"):
+        raise HTTPException(status_code=500, detail=result["error"])
+
+    # ── Persist ──────────────────────────────────────────────────────────────
+    # Re-check after the pipeline: the key may have been taken while we were
+    # generating. The demote is staged here so write_seed's commit covers both.
+    replaced = _resolve_seed_conflict(db, key, body.replace)
+    content_id, session_id = write_seed(db, current_user, key, result, answer_key, explanation)
+
+    return {
+        "content_id": content_id,
+        "session_id": session_id,
+        "key": key,
+        "cache_version": CACHE_VERSION,
+        "elapsed_seconds": round(time.time() - started, 1),
+        "replaced_content_id": replaced,
+    }
+
+
+@router.post("/demote-seed", response_model=DemoteResponse)
+def demote_seed(
+    body: DemoteSeedRequest,
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Stop serving a row as a cache seed. The row itself is kept — see
+    cache_service.mark_not_seed for why deleting is unsafe.
+    """
+    row = db.query(GeneratedContent).filter(
+        GeneratedContent.content_id == body.content_id
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail=f"content_id {body.content_id} not found")
+
+    if not row.is_cache_seed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"content_id {body.content_id} is not currently a seed",
+        )
+
+    mark_not_seed(row)
+    db.commit()
+
+    return {
+        "content_id": row.content_id,
+        "is_cache_seed": False,
+        "detail": "Demoted. The row was kept — only the cache flags changed.",
+    }
+
+
+@router.get("/cache-seeds", response_model=CacheSeedsResponse)
+def list_cache_seeds(
+    current_user: User = Depends(require_teacher_or_admin),
+    db: Session = Depends(get_db),
+):
+    """
+    Every live seed for the current CACHE_VERSION, with curriculum names and who
+    created it. Pre-demo checklist and audit trail.
+    """
+    rows = (
+        db.query(GeneratedContent, Topic, Chapter, Subject, User)
+        .outerjoin(Topic, GeneratedContent.topic_id == Topic.topic_id)
+        .outerjoin(Chapter, Topic.chapter_id == Chapter.chapter_id)
+        .outerjoin(Subject, Chapter.subject_id == Subject.subject_id)
+        .outerjoin(TeacherSession, GeneratedContent.teacher_session_id == TeacherSession.session_id)
+        .outerjoin(User, TeacherSession.teacher_id == User.user_id)
+        .filter(
+            GeneratedContent.is_cache_seed == True,  # noqa: E712
+            GeneratedContent.cache_version == CACHE_VERSION,
+        )
+        .order_by(Subject.name, Chapter.chapter_no, Topic.name, GeneratedContent.content_type)
+        .all()
+    )
+
+    seeds = [
+        {
+            "content_id": gc.content_id,
+            "subject_name": subject.name if subject else None,
+            "chapter_name": chapter.name if chapter else None,
+            "topic_name": topic.name if topic else None,
+            "content_type": gc.content_type,
+            "language": gc.language,
+            "difficulty_level": gc.difficulty_level,
+            "num_problems": gc.num_problems,
+            "generated_at": gc.generated_at.isoformat() if gc.generated_at else None,
+            "created_by": user.name if user else None,
+        }
+        for gc, topic, chapter, subject, user in rows
+    ]
+
+    return {"cache_version": CACHE_VERSION, "total": len(seeds), "seeds": seeds}
 
 
 # --------------------------------------------------------------------------
