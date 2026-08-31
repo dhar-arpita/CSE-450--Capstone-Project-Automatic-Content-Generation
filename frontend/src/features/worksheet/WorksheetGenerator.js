@@ -1,6 +1,6 @@
 // features/worksheet/WorksheetGenerator.js — Redesigned to match Emerald Green (#059669) Theme
 import React, { useState } from "react";
-import { generateWorksheet, downloadWorksheetPDF } from "../../shared/services/api";
+import { generateWorksheet, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
 import RefineWorksheet from "./RefineWorksheet";
 
 const TXT = {
@@ -8,23 +8,27 @@ const TXT = {
     difficulty: "কঠিনতা", questions: "প্রশ্ন সংখ্যা",
     easy: "সহজ", medium: "মাঝারি", hard: "কঠিন",
     generate: "✨ Worksheet তৈরি করো", generating: "⌛ তৈরি হচ্ছে...",
+    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ খুঁজছি...",
     ready: "✨ Worksheet তৈরি। ডাউনলোডের আগে নির্দিষ্ট অংশ refine করতে পারো।",
-    refine: "🛠 Refine করো", 
+    refine: "🛠 Refine করো",
     download: "📥 PDF ডাউনলোড করো",
     downloading: "⌛ ডাউনলোড হচ্ছে...",
-    errorMsg: "⚠️ কনটেন্ট জেনারেট হতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+    errorMsg: "⚠️ কনটেন্ট জেনারেট হতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
     retry: "🔄 আবার চেষ্টা করুন",
+    noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
   },
   english: {
     difficulty: "Difficulty", questions: "Questions",
     easy: "Easy", medium: "Medium", hard: "Hard",
     generate: "✨ Generate Worksheet", generating: "⌛ Generating...",
+    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ Searching...",
     ready: "✨ Worksheet ready. You can refine specific parts before downloading.",
-    refine: "🛠 Refine Worksheet", 
+    refine: "🛠 Refine Worksheet",
     download: "📥 Download as PDF",
     downloading: "⌛ Downloading...",
     errorMsg: "⚠️ Failed to generate worksheet. Please try again.",
     retry: "🔄 Try Again",
+    noCache: "⚠️ No cached content found for this topic.",
   },
 };
 
@@ -32,6 +36,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false); // 💡 Quick Answer Loading State
   const [error, setError] = useState(false);
   const [worksheetHTML, setWorksheetHTML] = useState("");
   const [contentId, setContentId] = useState(null);
@@ -99,6 +104,42 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     }
   };
 
+  const handleQuickAnswer = async () => {
+    if (!selectedTopicId) {
+      alert("Please select a Topic from the dropdowns above first!");
+      return;
+    }
+
+    setQuickAnswerLoading(true);
+    setError(false);
+    setWorksheetHTML("");
+
+    try {
+      const { data } = await quickAnswer({
+        topic_id: selectedTopicId,
+        content_type: "worksheet",
+        language: language,
+        difficulty: difficulty.toLowerCase(),
+        num_problems: numQuestions,
+      });
+      
+      if (data && data.found && data.html) {
+        setWorksheetHTML(data.html);
+        setContentId(data.content_id);
+        setShowRefine(false);
+        setQuickAnswerLoading(false);
+      } else {
+        console.log("No cache found, calling regular generator...");
+        setQuickAnswerLoading(false);
+        await onGenerate();
+      }
+    } catch (err) {
+      console.error("Quick Answer Error, falling back to general pipeline:", err);
+      setQuickAnswerLoading(false);
+      await onGenerate();
+    }
+  };
+
   const handleUpdateFromRefine = (newData) => {
     setWorksheetHTML(newData.html);
     setContentId(newData.content_id);
@@ -141,6 +182,14 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
           style={generateBtn(loading || !selectedTopicId)}
         >
           {loading ? t.generating : t.generate}
+        </button>
+
+        <button
+          onClick={handleQuickAnswer}
+          disabled={quickAnswerLoading || !selectedTopicId}
+          style={quickAnswerBtn(quickAnswerLoading || !selectedTopicId)}
+        >
+          {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
         </button>
       </div>
 
@@ -282,6 +331,19 @@ const downloadBtn = (disabled) => ({
   boxShadow: disabled ? "none" : "0 4px 14px rgba(5,150,105,0.3)",
   opacity: disabled ? 0.8 : 1,
   transition: "all 0.2s",
+});
+
+const quickAnswerBtn = (disabled) => ({
+  padding: "12px 24px",
+  borderRadius: "12px",
+  border: "none",
+  background: disabled ? "#fef3c7" : "linear-gradient(135deg, #f59e0b, #fbbf24)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: "13.5px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)",
+  transition: "all 0.15s",
 });
 
 const worksheetRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.6", color: "#000" };

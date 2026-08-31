@@ -1,23 +1,26 @@
 // features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
 import React, { useState } from "react";
-import { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
+import { generateStudyNote, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
 
 const TXT = {
   bangla: {
     generate: "📒 Study Note তৈরি করো",
     generating: "⌛ তৈরি হচ্ছে...",
+    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ খুঁজছি...",
     ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা ডাউনলোড করতে পারো।",
     print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
     downloading: "⌛ ডাউনলোড হচ্ছে...",
     selectFirst: "প্রথমে উপরের ড্রপডাউন থেকে একটা Topic বেছে নাও!",
     empty: "Study note তৈরি হয়েছে কিন্তু কোনো কনটেন্ট পাওয়া যায়নি।",
-    errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
+    errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
+    noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
   },
   english: {
     generate: "📒 Generate Study Note",
     generating: "⌛ Generating...",
+    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ Searching...",
     ready: "📒 Study note ready. Review below — print or download as PDF.",
     print: "🖨️ Print",
     download: "📥 Download PDF",
@@ -26,6 +29,7 @@ const TXT = {
     empty: "Study note generated but content is empty.",
     errorMsg: "⚠️ Failed to generate study note.",
     retry: "🔄 Try Again",
+    noCache: "⚠️ No cached content found for this topic.",
   },
 };
 
@@ -33,6 +37,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false); // 💡 Quick Answer Loading State
   const [error, setError] = useState(false);
   const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
@@ -102,6 +107,39 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     printWindow.print();
   };
 
+  const handleQuickAnswer = async () => {
+    if (!selectedTopicId) {
+      alert("Please select a Topic from the dropdowns above first!");
+      return;
+    }
+
+    setQuickAnswerLoading(true);
+    setError(false);
+    setNoteHTML("");
+
+    try {
+      const { data } = await quickAnswer({
+        topic_id: selectedTopicId,
+        content_type: "study_note",
+        language: language,
+      });
+      
+      if (data && data.found && data.html) {
+        setNoteHTML(data.html);
+        setContentId(data.content_id);
+        setQuickAnswerLoading(false);
+      } else {
+        console.log("No cache found, calling regular generator...");
+        setQuickAnswerLoading(false);
+        await onGenerate();
+      }
+    } catch (err) {
+      console.error("Quick Answer Error, falling back to general pipeline:", err);
+      setQuickAnswerLoading(false);
+      await onGenerate();
+    }
+  };
+
   return (
     <div>
       {/* Generate Button Row */}
@@ -112,6 +150,14 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
           style={generateBtn(loading || !selectedTopicId)}
         >
           {loading ? t.generating : t.generate}
+        </button>
+
+        <button
+          onClick={handleQuickAnswer}
+          disabled={quickAnswerLoading || !selectedTopicId}
+          style={quickAnswerBtn(quickAnswerLoading || !selectedTopicId)}
+        >
+          {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
         </button>
       </div>
 
@@ -235,6 +281,19 @@ const downloadBtn = (disabled) => ({
   boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)",
   opacity: disabled ? 0.8 : 1,
   transition: "all 0.2s",
+});
+
+const quickAnswerBtn = (disabled) => ({
+  padding: "12px 24px",
+  borderRadius: "12px",
+  border: "none",
+  background: disabled ? "#fef3c7" : "linear-gradient(135deg, #f59e0b, #fbbf24)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: "13.5px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)",
+  transition: "all 0.15s",
 });
 
 const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

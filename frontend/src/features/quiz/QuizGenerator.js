@@ -1,6 +1,6 @@
 // features/quiz/QuizGenerator.js
 import React, { useState } from "react";
-import { generateQuiz, downloadWorksheetPDF } from "../../shared/services/api";
+import { generateQuiz, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
 
 const TXT = {
   bangla: {
@@ -8,6 +8,7 @@ const TXT = {
     questions: "প্রশ্ন সংখ্যা",
     generate: "🎯 Quiz তৈরি করো",
     generating: "⌛ তৈরি হচ্ছে...",
+    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ খুঁজছি...",
     ready: "🎯 Quiz তৈরি শেষ। নিচে প্রশ্নগুলো দেখুন এবং প্র্যাকটিস করুন।",
     print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
@@ -19,12 +20,14 @@ const TXT = {
     subjectScope: "Subject Scope",
     errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
+    noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
   },
   english: {
     scope: "Scope",
     questions: "Questions Count",
     generate: "🎯 Generate Quiz",
     generating: "⌛ Generating...",
+    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ Searching...",
     ready: "🎯 Quiz is ready. Review and practice below.",
     print: "🖨️ Print",
     download: "📥 Download PDF",
@@ -36,6 +39,7 @@ const TXT = {
     subjectScope: "Subject Scope",
     errorMsg: "⚠️ Failed to generate quiz.",
     retry: "🔄 Try Again",
+    noCache: "⚠️ No cached content found for this topic.",
   },
 };
 
@@ -54,6 +58,7 @@ export default function QuizGenerator({
   const [numQuestions, setNumQuestions] = useState(SCOPE_DEFAULT_QUESTIONS.topic);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
+  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false); // 💡 Quick Answer Loading State
   const [error, setError] = useState(false);
   const [quizHTML, setQuizHTML] = useState("");
   const [contentId, setContentId] = useState(null);
@@ -157,6 +162,46 @@ export default function QuizGenerator({
     printWindow.print();
   };
 
+  const handleQuickAnswer = async () => {
+    if (!selectedTopicId) {
+      alert("Please select a Topic from the dropdowns above first!");
+      return;
+    }
+
+    // Quick Answer only works for topic-scope quizzes
+    if (scope !== "topic") {
+      alert("Quick Answer is only available for Topic Scope quizzes.");
+      return;
+    }
+
+    setQuickAnswerLoading(true);
+    setError(false);
+    setQuizHTML("");
+
+    try {
+      const { data } = await quickAnswer({
+        topic_id: selectedTopicId,
+        content_type: "quiz_topic",
+        language: language,
+        num_questions: numQuestions,
+      });
+      
+      if (data && data.found && data.html) {
+        setQuizHTML(data.html);
+        setContentId(data.content_id);
+        setQuickAnswerLoading(false);
+      } else {
+        console.log("No cache found, calling regular generator...");
+        setQuickAnswerLoading(false);
+        await onGenerate();
+      }
+    } catch (err) {
+      console.error("Quick Answer Error, falling back to general pipeline:", err);
+      setQuickAnswerLoading(false);
+      await onGenerate();
+    }
+  };
+
   return (
     <div>
       {/* Config Row */}
@@ -206,6 +251,17 @@ export default function QuizGenerator({
         >
           {loading ? t.generating : t.generate}
         </button>
+
+        {/* Quick Answer Button - only for topic scope */}
+        {scope === "topic" && selectedTopicId && (
+          <button
+            onClick={handleQuickAnswer}
+            disabled={quickAnswerLoading}
+            style={quickAnswerBtn(quickAnswerLoading)}
+          >
+            {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
+          </button>
+        )}
       </div>
 
       {/* Error UI with Dynamic Try Again Button */}
@@ -343,4 +399,18 @@ const downloadBtn = (disabled) => ({
   opacity: disabled ? 0.8 : 1,
   transition: "all 0.2s",
 });
+
+const quickAnswerBtn = (disabled) => ({
+  padding: "12px 24px",
+  borderRadius: "12px",
+  border: "none",
+  background: disabled ? "#fef3c7" : "linear-gradient(135deg, #f59e0b, #fbbf24)",
+  color: "#fff",
+  fontWeight: 800,
+  fontSize: "13.5px",
+  cursor: disabled ? "not-allowed" : "pointer",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)",
+  transition: "all 0.15s",
+});
+
 const quizRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

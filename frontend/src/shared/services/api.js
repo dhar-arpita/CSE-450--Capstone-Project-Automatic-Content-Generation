@@ -197,4 +197,10 @@ export const downloadWorksheetPDF = (contentId) => {
   return api.get(`/generate/download/${contentId}`, { responseType: "blob" });
 };
 
+
+// ──── QUICK ANSWER (CACHED CONTENT) ────
+export const quickAnswer = (params) => {
+  return api.post("/generate/quick-answer", params);
+};
+
 export default api;
