@@ -10,8 +10,19 @@ from core.config import get_db
 from services import rag_service
 from models.db_models import UploadRequest, IngestionJob, Chapter
 from services.ingestion_service import run_ingestion_pipeline
+from core.security import get_current_user_from_header
+from models.db_models import User
 
 router = APIRouter(prefix="/ingest", tags=["Curriculum Ingestion"])
+
+
+# ── role guard (teacher/admin only) — security.py te hat na diye ekhanei ──
+def _require_teacher_admin(current_user: User = Depends(get_current_user_from_header)) -> User:
+    if current_user.role not in ("teacher", "admin"):
+        raise HTTPException(status_code=403, detail="Only teacher/admin can do this.")
+    return current_user
+
+
 
 
 # ── PYDANTIC RESPONSE MODELS ──────────────────────────────────────────────────
@@ -41,7 +52,8 @@ async def upload_curriculum(
     chapter_id: int = Form(...),
     user_id: int = Form(...),
     source_type: str = Form("nctb"),   # 'nctb' or 'foreign'
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_teacher_admin)
 ):
     """
     Accepts a curriculum file upload.
@@ -128,7 +140,8 @@ async def upload_curriculum(
 # ── GET /ingest/status/{job_id} ───────────────────────────────────────────────
 
 @router.get("/status/{job_id}", response_model=JobStatusResponse)
-def get_job_status(job_id: int, db: Session = Depends(get_db)):
+def get_job_status(job_id: int, db: Session = Depends(get_db),
+                    current_user: User = Depends(_require_teacher_admin)):
     job = db.query(IngestionJob).filter(IngestionJob.job_id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail=f"No ingestion job found with ID {job_id}.")
@@ -143,7 +156,8 @@ def get_job_status(job_id: int, db: Session = Depends(get_db)):
 # ── GET /ingest/jobs ──────────────────────────────────────────────────────────
 
 @router.get("/jobs")
-def list_all_jobs(db: Session = Depends(get_db)):
+def list_all_jobs(db: Session = Depends(get_db),
+                    current_user: User = Depends(_require_teacher_admin)):
     jobs = db.query(IngestionJob).order_by(IngestionJob.job_id.desc()).all()
     result = []
     for job in jobs:
@@ -158,7 +172,8 @@ def list_all_jobs(db: Session = Depends(get_db)):
 
 
 @router.delete("/delete-file/{filename}")
-def delete_file(filename: str, db: Session = Depends(get_db)):
+def delete_file(filename: str, db: Session = Depends(get_db),
+                    current_user: User = Depends(_require_teacher_admin)):
     result = rag_service.delete_file_from_system(filename, db)
     if result["status"] == "error":
         raise HTTPException(status_code=500, detail=result["message"])

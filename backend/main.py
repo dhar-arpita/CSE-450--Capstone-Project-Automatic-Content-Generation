@@ -20,6 +20,7 @@ from routers.users import router as users_router
 from routers.ingestion import router as ingestion_router
 from routers.curriculum import router as curriculum_router
 from routers.generation import router as generation_router
+from routers.chat_router import router as chat_router
 
 
 # ── LIFESPAN MANAGER ──────────────────────────────────────────────────────────
@@ -67,7 +68,7 @@ app.include_router(users_router)
 app.include_router(ingestion_router)
 app.include_router(curriculum_router)
 app.include_router(generation_router)
-
+app.include_router(chat_router)
 
 # ── HEALTH CHECK ──────────────────────────────────────────────────────────────
 

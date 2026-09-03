@@ -123,6 +123,8 @@ def run_quiz_agent(
     topic_name: str = None,
     difficulty: str = "mixed",
     language: str = "english",
+    num_questions_override: int = None,   # dile eta use hobe (chatbot 5 pathabe), na dile scope map
+    text_only: bool = False,              # True hole shudhu text proshno (chobi/diagram/stimulus na)
 ) -> dict:
     """
     Quiz Agent: writes a scope-bound multiple-choice quiz grounded in the
@@ -142,7 +144,7 @@ def run_quiz_agent(
     if scope == "chapter" and not chapter_name:
         raise ValueError("chapter_name is required when scope='chapter'")
 
-    num_questions = QUESTION_COUNT_MAP[scope]
+    num_questions = num_questions_override if num_questions_override else QUESTION_COUNT_MAP[scope]
     scope_name = {"topic": topic_name, "chapter": chapter_name, "subject": subject_name}[scope]
     scope_instructions = _build_scope_instructions(
         scope, class_name, subject_name, chapter_name, topic_name, num_questions
@@ -165,6 +167,29 @@ def run_quiz_agent(
         language=language,
         scope_instructions=scope_instructions,
     )
+
+    # text_only: chatbot er jonno — shudhu text proshno, kono chobi/diagram/stimulus na.
+    # tai protita proshno-i self-contained text hobe, kichu baad dite hobe na.
+    if text_only:
+        prompt += (
+            "\n\nIMPORTANT ADDITIONAL RULE (STRICT): Every question must be fully "
+            "self-contained in TEXT only. Specifically:\n"
+            "1. NO image, diagram, figure, chart, or visual. Never refer to 'the figure', "
+            "'the diagram', 'the image'. Set needs_diagram=false for every question.\n"
+            "2. NO separate shared stimulus/passage block. Do NOT use stimulus_based "
+            "question_format.\n"
+            "3. Roman-numeral / statement-combination questions (options like 'i and ii', "
+            "'ii and iii', 'i, ii and iii') ARE ALLOWED and encouraged for depth — BUT the "
+            "numbered statements themselves (i, ii, iii ...) MUST be written out IN FULL "
+            "inside the question_text of that same question. Never reference i/ii/iii that "
+            "are not spelled out in the question_text. For example, question_text should "
+            "look like: 'Regarding collisions, which statements are correct?\\ni. momentum "
+            "is conserved\\nii. kinetic energy is always conserved\\niii. velocities are "
+            "exchanged in elastic collision' and then options A/B/C/D combine them.\n"
+            "4. Every question must be answerable from its own question_text alone. Use "
+            "question_format 'simple' for standalone questions and 'polynomial' for the "
+            "roman-numeral ones — but NEVER 'stimulus_based'."
+        )
 
     config = types.GenerateContentConfig(
         temperature=0.3,

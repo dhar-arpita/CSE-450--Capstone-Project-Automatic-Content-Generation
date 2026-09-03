@@ -1,74 +1,64 @@
-// features/worksheet/WorksheetGenerator.js — Redesigned to match Emerald Green (#059669) Theme
+// features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
 import React, { useState } from "react";
-import { generateWorksheet, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
-import RefineWorksheet from "./RefineWorksheet";
+import { generateStudyNote, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
 
 const TXT = {
   bangla: {
-    difficulty: "কঠিনতা", questions: "প্রশ্ন সংখ্যা",
-    easy: "সহজ", medium: "মাঝারি", hard: "কঠিন",
-    generate: "✨ Worksheet তৈরি করো", generating: "⌛ তৈরি হচ্ছে...",
+    generate: "📒 Study Note তৈরি করো",
+    generating: "⌛ তৈরি হচ্ছে...",
     quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ খুঁজছি...",
-    ready: "✨ Worksheet তৈরি। ডাউনলোডের আগে নির্দিষ্ট অংশ refine করতে পারো।",
-    refine: "🛠 Refine করো",
+    ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা ডাউনলোড করতে পারো।",
+    print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
     downloading: "⌛ ডাউনলোড হচ্ছে...",
-    errorMsg: "⚠️ কনটেন্ট জেনারেট হতে সমস্যা হয়েছে। আবার চেষ্টা করুন।",
+    selectFirst: "প্রথমে উপরের ড্রপডাউন থেকে একটা Topic বেছে নাও!",
+    empty: "Study note তৈরি হয়েছে কিন্তু কোনো কনটেন্ট পাওয়া যায়নি।",
+    errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
     noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
   },
   english: {
-    difficulty: "Difficulty", questions: "Questions",
-    easy: "Easy", medium: "Medium", hard: "Hard",
-    generate: "✨ Generate Worksheet", generating: "⌛ Generating...",
+    generate: "📒 Generate Study Note",
+    generating: "⌛ Generating...",
     quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ Searching...",
-    ready: "✨ Worksheet ready. You can refine specific parts before downloading.",
-    refine: "🛠 Refine Worksheet",
-    download: "📥 Download as PDF",
+    ready: "📒 Study note ready. Review below — print or download as PDF.",
+    print: "🖨️ Print",
+    download: "📥 Download PDF",
     downloading: "⌛ Downloading...",
-    errorMsg: "⚠️ Failed to generate worksheet. Please try again.",
+    selectFirst: "Please select a Topic from the dropdowns above first!",
+    empty: "Study note generated but content is empty.",
+    errorMsg: "⚠️ Failed to generate study note.",
     retry: "🔄 Try Again",
     noCache: "⚠️ No cached content found for this topic.",
   },
 };
 
-export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, language = "bangla" }) {
+export default function StudyNoteGenerator({ selectedTopicId, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
   const [quickAnswerLoading, setQuickAnswerLoading] = useState(false); // 💡 Quick Answer Loading State
   const [error, setError] = useState(false);
-  const [worksheetHTML, setWorksheetHTML] = useState("");
+  const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
-  const [difficulty, setDifficulty] = useState("Medium");
-  const [numQuestions, setNumQuestions] = useState(5);
-  const [showRefine, setShowRefine] = useState(false);
 
   const onGenerate = async () => {
     if (!selectedTopicId) {
-      alert("Please select a Topic from the dropdowns above first!");
+      alert(t.selectFirst);
       return;
     }
 
-    const userId = user?.user_id || 1;
-
     setLoading(true);
     setError(false);
-    setWorksheetHTML("");
-    
+    setNoteHTML("");
+    setContentId(null);
+
     try {
-      const { data } = await generateWorksheet(
-        selectedTopicId,
-        userId,
-        difficulty.toLowerCase(),
-        numQuestions,
-        sampleFile,
-        language 
-      );
-      if (data && data.html) {
-        setWorksheetHTML(data.html);
-        setContentId(data.content_id);
-        setShowRefine(false);
+      const { data } = await generateStudyNote(selectedTopicId, language);
+      const html = data?.html || data?.note_html || data?.content || "";
+      if (html) {
+        setNoteHTML(html);
+        setContentId(data?.content_id || data?.id || null);
       } else {
         setError(true);
       }
@@ -81,27 +71,40 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
   };
 
   const handleDownloadPDF = async () => {
-    if (!contentId) return;
+    if (!contentId) {
+      alert("Content ID not found to download PDF.");
+      return;
+    }
 
     setDownloading(true); // 💡 ডাউনলোড শুরু
     try {
       const response = await downloadWorksheetPDF(contentId);
-      
+
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `worksheet_${contentId}.pdf`);
+      link.setAttribute("download", `studynote_${contentId}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Download failed:", err);
-      alert("Download failed. Please make sure you are logged in.");
+      alert("Download failed. Please try again.");
     } finally {
       setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
     }
+  };
+
+  const handlePrint = () => {
+    const printWindow = window.open("", "_blank");
+    printWindow.document.write(
+      `<html><head><title>Study Note</title></head><body>${noteHTML}</body></html>`
+    );
+    printWindow.document.close();
+    printWindow.focus();
+    printWindow.print();
   };
 
   const handleQuickAnswer = async () => {
@@ -112,21 +115,18 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
 
     setQuickAnswerLoading(true);
     setError(false);
-    setWorksheetHTML("");
+    setNoteHTML("");
 
     try {
       const { data } = await quickAnswer({
         topic_id: selectedTopicId,
-        content_type: "worksheet",
+        content_type: "study_note",
         language: language,
-        difficulty: difficulty.toLowerCase(),
-        num_problems: numQuestions,
       });
       
       if (data && data.found && data.html) {
-        setWorksheetHTML(data.html);
+        setNoteHTML(data.html);
         setContentId(data.content_id);
-        setShowRefine(false);
         setQuickAnswerLoading(false);
       } else {
         console.log("No cache found, calling regular generator...");
@@ -140,42 +140,10 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
     }
   };
 
-  const handleUpdateFromRefine = (newData) => {
-    setWorksheetHTML(newData.html);
-    setContentId(newData.content_id);
-  };
-
   return (
     <div>
-      {/* Config & Button Row */}
+      {/* Generate Button Row */}
       <div style={configRow}>
-        <div style={configField}>
-          <label style={configLabel}>{t.difficulty}</label>
-          <div style={pillWrap}>
-            <select
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value)}
-              style={pillSelect}
-            >
-              <option value="Easy">{t.easy}</option>
-              <option value="Medium">{t.medium}</option>
-              <option value="Hard">{t.hard}</option>
-            </select>
-            <span style={pillCaret}>▾</span>
-          </div>
-        </div>
-
-        <div style={configField}>
-          <label style={configLabel}>{t.questions}</label>
-          <input
-            type="number"
-            value={numQuestions}
-            onChange={(e) => setNumQuestions(e.target.value)}
-            style={numberInput}
-            min="1"
-          />
-        </div>
-
         <button
           onClick={onGenerate}
           disabled={loading || !selectedTopicId}
@@ -193,7 +161,7 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
         </button>
       </div>
 
-      {/* Error UI with Try Again Button */}
+      {/* Error UI with Dynamic Try Again Button */}
       {error && (
         <div style={errorCard}>
           <span style={errorText}>{t.errorMsg}</span>
@@ -204,13 +172,13 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
       )}
 
       {/* Preview & Action Buttons Section */}
-      {worksheetHTML && (
+      {noteHTML && (
         <div style={previewCard}>
           <div style={previewHeaderRow}>
             <div style={previewHint}>{t.ready}</div>
             <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={() => setShowRefine(true)} style={refineBtn}>
-                {t.refine}
+              <button onClick={handlePrint} style={outlineBtn}>
+                {t.print}
               </button>
               <button
                 onClick={handleDownloadPDF}
@@ -223,30 +191,21 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
           </div>
 
           <div
-            className="worksheet-render-area"
-            style={worksheetRenderStyle}
-            dangerouslySetInnerHTML={{ __html: worksheetHTML }}
+            className="note-render-area"
+            style={noteRenderStyle}
+            dangerouslySetInnerHTML={{ __html: noteHTML }}
           />
         </div>
-      )}
-
-      {/* Refinement Interface */}
-      {showRefine && (
-        <RefineWorksheet
-          contentId={contentId}
-          onClose={() => setShowRefine(false)}
-          onUpdate={handleUpdateFromRefine}
-        />
       )}
     </div>
   );
 }
 
-/* ===== STYLES ===== */
+/* ===== STYLES (mirrors WorksheetGenerator, cyan/teal theme) ===== */
 const configRow = {
   display: "flex",
   gap: "16px",
-  alignItems: "flex-end",
+  alignItems: "center",
   flexWrap: "wrap",
   backgroundColor: "#f8fafc",
   padding: "18px",
@@ -254,25 +213,16 @@ const configRow = {
   border: "1px solid #e2e8f0",
 };
 
-const configField = { display: "flex", flexDirection: "column", gap: "8px" };
-const configLabel = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" };
-
-const pillWrap = { display: "flex", alignItems: "center", gap: "8px", background: "#fff", border: "1.5px solid #e2e8f0", borderRadius: "12px", padding: "10px 14px", minWidth: "140px" };
-const pillSelect = { flex: 1, border: "none", outline: "none", background: "transparent", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", appearance: "none", fontFamily: "inherit", cursor: "pointer" };
-const pillCaret = { color: "#94a3b8", fontSize: "12px", flexShrink: 0 };
-
-const numberInput = { width: "80px", padding: "10px 14px", borderRadius: "12px", border: "1.5px solid #e2e8f0", background: "#fff", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", outline: "none" };
-
 const generateBtn = (disabled) => ({
   padding: "12px 24px",
   borderRadius: "12px",
   border: "none",
-  background: disabled ? "#a7f3d0" : "linear-gradient(135deg, #059669, #10b981)",
+  background: disabled ? "#a5f3fc" : "linear-gradient(135deg, #0891b2, #06b6d4)",
   color: "#fff",
   fontWeight: 800,
   fontSize: "13.5px",
   cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(5,150,105,0.35)",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.35)",
   transition: "all 0.15s",
 });
 
@@ -317,10 +267,10 @@ const previewCard = {
 const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
 
-const refineBtn = { backgroundColor: "#ecfdf5", color: "#059669", padding: "10px 16px", border: "1.5px solid #a7f3d0", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
+const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
 
 const downloadBtn = (disabled) => ({
-  backgroundColor: disabled ? "#6ee7b7" : "#059669",
+  backgroundColor: disabled ? "#a5f3fc" : "#0891b2",
   color: "#fff",
   padding: "10px 20px",
   border: "none",
@@ -328,7 +278,7 @@ const downloadBtn = (disabled) => ({
   cursor: disabled ? "not-allowed" : "pointer",
   fontWeight: 700,
   fontSize: "13px",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(5,150,105,0.3)",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)",
   opacity: disabled ? 0.8 : 1,
   transition: "all 0.2s",
 });
@@ -346,4 +296,4 @@ const quickAnswerBtn = (disabled) => ({
   transition: "all 0.15s",
 });
 
-const worksheetRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.6", color: "#000" };
+const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

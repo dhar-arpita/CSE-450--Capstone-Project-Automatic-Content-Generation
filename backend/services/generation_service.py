@@ -836,7 +836,9 @@ def generate_quiz(
     topic_name: str = None,
     topic_id: int = None,
     difficulty: str = "mixed",
-    language: str = "english"
+    language: str = "english",
+    num_questions: int = None,     # None = static (scope map 10/20/30); chatbot 5 pathabe
+    text_only: bool = False        # True hole shudhu text proshno (chatbot er jonno)
 ) -> dict:
     print(f"\n{'='*50}")
     print(f"QUIZ GENERATION STARTED")
@@ -873,7 +875,9 @@ def generate_quiz(
         chapter_name=chapter_name,
         topic_name=topic_name,
         difficulty=difficulty,
-        language=language
+        language=language,
+        num_questions_override=num_questions,
+        text_only=text_only
     )
 
     if not quiz_output.get("questions"):

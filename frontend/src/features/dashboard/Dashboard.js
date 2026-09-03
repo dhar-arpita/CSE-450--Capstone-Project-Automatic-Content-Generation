@@ -119,10 +119,10 @@ function FeatureCard({ icon, title, description, color, bg, borderColor, onClick
       }}>{description}</p>
 
       <div style={{
-        display: "inline-flex", alignItems: "center", gap: "6px",
+        display: "inline-flex", alignItems: "center", gap: hovered ? "10px" : "6px",
         color: color, fontSize: "13px", fontWeight: "600",
         transition: "gap 0.2s",
-        gap: hovered ? "10px" : "6px",
+        
       }}>
         Get started <span style={{ fontSize: "16px" }}>→</span>
       </div>
@@ -135,6 +135,10 @@ export default function Dashboard() {
   const [classList, setClassList] = useState([]);
   const [greeting, setGreeting]   = useState("Good day");
   const navigate = useNavigate();
+
+
+
+
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -160,7 +164,7 @@ export default function Dashboard() {
       color: "#4f46e5",
       bg: "#eef2ff",
       borderColor: "#a5b4fc",
-      badge: "Step 1",
+      // badge: "Step 1",
       path: "/upload",
     },
     {
@@ -170,8 +174,40 @@ export default function Dashboard() {
       color: "#059669",
       bg: "#ecfdf5",
       borderColor: "#6ee7b7",
-      badge: "Step 2",
+      // badge: "Step 2",
       path: "/generate",
+    },
+
+    {
+      icon: "💬",
+      title: "Study Chatbot",
+      description: "Ask questions, get instant answers, and practice with hints — in Bangla or English.",
+      color: "#7c3aed",
+      bg: "#f5f3ff",
+      borderColor: "#c4b5fd",
+      // badge: "New",
+      path: "/chatbot",
+      studentOnly: true,
+    },
+    {
+      icon: "📒",
+      title: "Study Note Generation",
+      description: "Turn your uploaded curriculum into concise, well-organized study notes ready for revision.",
+      color: "#0891b2",
+      bg: "#ecfeff",
+      borderColor: "#67e8f9",
+      // badge: "New",
+      path: "/study-notes",
+    },
+    {
+      icon: "🧠",
+      title: "Quiz Generation",
+      description: "Automatically create AI-powered quizzes with custom question types and difficulty to test understanding.",
+      color: "#db2777",
+      bg: "#fdf2f8",
+      borderColor: "#f9a8d4",
+      // badge: "New",
+      path: "/quiz",
     },
   ];
 
@@ -321,9 +357,11 @@ export default function Dashboard() {
           marginBottom: "36px",
           animation: "fadeInUp 0.6s ease 0.25s both",
         }}>
-          {features.map((f, i) => (
-            <FeatureCard key={i} {...f} onClick={() => navigate(f.path)} />
-          ))}
+          {features
+            .filter(f => !f.studentOnly || user?.role === "student")
+            .map((f, i) => (
+              <FeatureCard key={i} {...f} onClick={() => navigate(f.path)} />
+            ))}
         </div>
 
         {/* WORKFLOW EXPLAINER */}

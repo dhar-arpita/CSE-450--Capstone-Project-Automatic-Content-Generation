@@ -95,10 +95,24 @@ export function Login() {
     if (!email || !password) { setError("Please fill in all fields."); return; }
     setLoading(true);
     try {
+      // Call login with email and password (now POSTing to /login/ with body)
       const { data } = await login(email, password);
-      localStorage.setItem("user", JSON.stringify(data));
+      
+      // Save tokens to localStorage
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      
+      // Save user info (for quick access without needing to call /users/me)
+      localStorage.setItem("user", JSON.stringify({
+        user_id: data.user_id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+      }));
+      
       navigate("/dashboard");
-    } catch {
+    } catch (err) {
+      console.error("Login error:", err);
       setError("Invalid email or password. Please try again.");
     }
     setLoading(false);
@@ -243,9 +257,23 @@ export function Signup() {
     }
     setLoading(true);
     try {
-      await signup(form);
-      navigate("/", { state: { signedUp: true } });
-    } catch {
+      const { data } = await signup(form);
+      
+      // Save tokens to localStorage
+      localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("refresh_token", data.refresh_token);
+      
+      // Save user info
+      localStorage.setItem("user", JSON.stringify({
+        user_id: data.user_id,
+        name: data.name,
+        email: data.email,
+        role: data.role,
+      }));
+      
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Signup error:", err);
       setError("Signup failed. This email might already be registered.");
     }
     setLoading(false);
@@ -254,6 +282,7 @@ export function Signup() {
   const roles = [
     { value: "teacher", label: "Teacher", icon: "🧑‍🏫" },
     { value: "admin",   label: "Admin",   icon: "🏫" },
+    { value: "student", label: "Student", icon: "👨‍🎓" },
   ];
 
   return (

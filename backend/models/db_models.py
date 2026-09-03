@@ -173,7 +173,14 @@ class GeneratedContent(Base):
      answer_key = Column(Text)
      explanation = Column(Text)
      language = Column(String(50), default="english")
-     generated_at = Column(TIMESTAMP, server_default=func.now())    
+     generated_at = Column(TIMESTAMP, server_default=func.now())
+     # ── Cache columns ──────────────────────────────────────────────────────
+     # Only rows with is_cache_seed=True are ever READ as cache, so an ordinary
+     # teacher generation (or a refined worksheet) can never be served to
+     # someone else. Seed rows are written only by scripts/warm_cache.py.
+     is_cache_seed = Column(Boolean, default=False, nullable=False)
+     cache_version = Column(String(50), nullable=True)
+     num_problems = Column(Integer, nullable=True)
      
      
      
@@ -206,6 +213,8 @@ class LearningSession(Base):
     session_id = Column(Integer,primary_key = True)
     student_id = Column(Integer,ForeignKey("student.student_id"))
     current_topic_id = Column(Integer,ForeignKey("topic.topic_id"))
+    scope_subject_id = Column(Integer, nullable=True)
+    scope_chapter_id = Column(Integer, nullable=True)
     start_time = Column(TIMESTAMP,server_default=func.now())
     end_time = Column(TIMESTAMP, nullable=True)
     max_hints_allowed = Column(Integer, default=3)
