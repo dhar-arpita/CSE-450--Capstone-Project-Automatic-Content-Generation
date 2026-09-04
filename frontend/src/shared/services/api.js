@@ -109,7 +109,8 @@ export const generateWorksheet = (
   difficulty,
   numProblems,
   sampleFile = null,
-  language = "bangla"
+  language = "bangla",
+  refresh = false
 ) => {
   const formData = new FormData();
   formData.append("topic_id", topicId);
@@ -117,6 +118,10 @@ export const generateWorksheet = (
   formData.append("difficulty", difficulty);
   formData.append("num_problems", numProblems);
   formData.append("language", language);
+  // refresh=true bypasses the cache server-side. The Generate button sends it so
+  // "Generate" always means a fresh build; the cache is reached through Quick
+  // Answer only. Omitted (false) it would happily serve a seed instead.
+  if (refresh) formData.append("refresh", "true");
 
   if (sampleFile) {
     formData.append("sample_worksheet", sampleFile);
@@ -142,10 +147,11 @@ export const getIngestionStatus = (jobId) => api.get(`/ingest/status/${jobId}`);
 
 
 // ──── STUDY NOTE GENERATION ────
-export const generateStudyNote = (topicId, language = "bangla") => {
+export const generateStudyNote = (topicId, language = "bangla", refresh = false) => {
   const formData = new URLSearchParams();
   formData.append("topic_id", topicId);
   formData.append("language", language);
+  if (refresh) formData.append("refresh", "true");   // see generateWorksheet
 
   return api.post("/generate/study-note", formData, {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -163,6 +169,7 @@ export const generateQuiz = (params) => {
   if (params.subject_id) formData.append("subject_id", params.subject_id);
   if (params.language) formData.append("language", params.language);
   if (params.num_questions) formData.append("num_questions", params.num_questions);
+  if (params.refresh) formData.append("refresh", "true");   // see generateWorksheet
 
   return api.post("/generate/quiz", formData, {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },

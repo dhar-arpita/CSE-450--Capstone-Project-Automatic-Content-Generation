@@ -54,7 +54,8 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     setContentId(null);
 
     try {
-      const { data } = await generateStudyNote(selectedTopicId, language);
+      // refresh=true: Generate always builds fresh (see Quick Answer)
+      const { data } = await generateStudyNote(selectedTopicId, language, true);
       const html = data?.html || data?.note_html || data?.content || "";
       if (html) {
         setNoteHTML(html);

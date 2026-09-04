@@ -63,7 +63,8 @@ export default function WorksheetGenerator({ selectedTopicId, user, sampleFile, 
         difficulty.toLowerCase(),
         numQuestions,
         sampleFile,
-        language 
+        language,
+        true            // refresh: Generate always builds fresh (see Quick Answer)
       );
       if (data && data.html) {
         setWorksheetHTML(data.html);
