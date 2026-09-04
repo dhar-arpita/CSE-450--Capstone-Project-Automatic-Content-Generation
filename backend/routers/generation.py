@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Response, UploadFile, File, Form, HTTPException, Depends
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
@@ -30,14 +31,15 @@ from services.generation_service import (
 from services.cache_service import (
     CACHE_VERSION,
     FIXED_DIFFICULTY,
+    QUIZ_CONTENT_TYPE_BY_SCOPE,
     effective_quiz_questions,
     normalize_key,
+    resolve_chain_for_key,
     get_cache_seed,
     clone_seed_for_user,
     _save_generated_content,
     build_seed_key,
     key_for_row,
-    resolve_topic_chain,
     run_seed_pipeline,
     write_seed,
     mark_as_seed,
@@ -48,6 +50,7 @@ from schemas.cache import (
     PromoteToSeedRequest, PromoteResponse,
     SeedRequest, SeedResponse,
     DemoteSeedRequest, DemoteResponse,
+    QuickAnswerRequest, QuickAnswerResponse,
     CacheSeedsResponse,
 )
 from agents.math_verifier import verify_and_fix_problems
@@ -92,6 +95,10 @@ async def create_worksheet(
     chapter_name = chapter.name
     subject_name = subject.name
     class_name = subject.class_name
+    # Captured as plain ints now: the pipeline runs after db.close(), and touching
+    # an ORM attribute on an expired instance afterwards would re-hit the DB.
+    curr_chapter_id = chapter.chapter_id
+    curr_subject_id = subject.subject_id
 
     # ── STEP 1b: Cache read ───────────────────────────────────────────────────
     # Bypassed when a style sample was uploaded (the output is sample-specific)
@@ -162,6 +169,8 @@ async def create_worksheet(
     try:
         content_id, session_id = _save_generated_content(
             db, current_user, topic_id,
+            chapter_id=curr_chapter_id,
+            subject_id=curr_subject_id,
             content_type="worksheet",
             difficulty_level=difficulty,
             display_body=result["html"],
@@ -219,6 +228,8 @@ async def create_study_note(
     chapter_name = chapter.name
     subject_name = subject.name
     class_name = subject.class_name
+    # See the note in create_worksheet: read before the pipeline closes the session.
+    curr_subject_id = subject.subject_id
 
     # ── Cache read ───────────────────────────────────────────────────────────
     if not refresh:
@@ -274,6 +285,8 @@ async def create_study_note(
     try:
         content_id, session_id = _save_generated_content(
             db, current_user, topic_id,
+            chapter_id=chapter_id,
+            subject_id=curr_subject_id,
             content_type="study_note",
             difficulty_level="standard",
             display_body=result["html"],
@@ -626,17 +639,20 @@ async def create_quiz(
         raise HTTPException(status_code=400, detail="scope must be 'topic', 'chapter', or 'subject'")
 
     # ── Cache read ───────────────────────────────────────────────────────────
-    # Phase 1 caches topic-scope quizzes only; chapter/subject scope always runs
-    # the pipeline (their keys would need chapter_id/subject_id columns).
-    if not refresh and scope == "topic":
+    # All three scopes are cacheable. normalize_key picks the curriculum id to
+    # key on from the content_type, so a topic quiz keys on topic_id, a chapter
+    # quiz on chapter_id and a subject quiz on subject_id — the ids that are
+    # NULL at this scope are simply not part of the key.
+    if not refresh:
+        quiz_content_type = QUIZ_CONTENT_TYPE_BY_SCOPE[scope]
         # num_problems carries the quiz's EFFECTIVE question count, so a request
         # for 30 questions cannot be served a cached 10-question quiz.
         key = normalize_key(
-            topic_id=target_topic_id,
-            content_type="quiz_topic",
+            content_type=quiz_content_type,
             language=language,
-            difficulty_level=FIXED_DIFFICULTY["quiz_topic"],
+            difficulty_level=FIXED_DIFFICULTY[quiz_content_type],
             num_problems=effective_quiz_questions(num_questions, scope),
+            topic_id=target_topic_id,
             chapter_id=curr_chapter_id,
             subject_id=curr_subject_id,
         )
@@ -650,7 +666,7 @@ async def create_quiz(
 
             if seed:
                 content_id, session_id = clone_seed_for_user(db, seed, current_user, target_topic_id)
-                print(f"[Cache] HIT quiz_topic seed={seed.content_id} -> clone={content_id} key={key}")
+                print(f"[Cache] HIT {quiz_content_type} seed={seed.content_id} -> clone={content_id} key={key}")
                 return {
                     "content_id": content_id,
                     "session_id": session_id,
@@ -688,6 +704,8 @@ async def create_quiz(
     try:
         content_id, session_id = _save_generated_content(
             db, current_user, target_topic_id,
+            chapter_id=curr_chapter_id,
+            subject_id=curr_subject_id,
             content_type=f"quiz_{scope}",
             difficulty_level="mixed",
             display_body=result["html"],
@@ -713,6 +731,61 @@ async def create_quiz(
         "html": result["html"],
         "quiz": result.get("quiz"),
         "cached": False,
+    }
+
+
+@router.post("/quick-answer", response_model=QuickAnswerResponse)
+def quick_answer(
+    body: QuickAnswerRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """
+    Cache-only lookup behind the frontend's "⚡ Quick Answer" button.
+
+    This endpoint NEVER runs the generation pipeline. It builds the same cache
+    key the matching /generate/* endpoint would build, and either returns the
+    seed or reports found=false in milliseconds. The caller falls back to the
+    normal generate call on a miss — which is why a miss is a 200, not a 404:
+    "nothing cached" is an ordinary answer here, not an error.
+
+    Works at every scope. A quiz_chapter request is keyed on chapter_id and a
+    quiz_subject request on subject_id, exactly as the quiz endpoint keys them,
+    so a seed seeded for one is found by the other.
+    """
+    try:
+        key = build_seed_key(
+            content_type=body.content_type,
+            topic_id=body.topic_id,
+            chapter_id=body.chapter_id,
+            subject_id=body.subject_id,
+            language=body.language,
+            difficulty=body.difficulty,
+            num_problems=body.num_problems,
+            num_questions=body.num_questions,
+        )
+    except ValueError as e:
+        # Wrong id for the content_type, or an id missing altogether.
+        raise HTTPException(status_code=400, detail=str(e))
+
+    seed = get_cache_seed(db, key)
+    if not seed:
+        print(f"[QuickAnswer] MISS key={key}")
+        return {"found": False, "key": key, "cached": False}
+
+    # Hand the caller their own copy, same as the cache-hit path inside the
+    # generate endpoints: the clone is theirs to refine or download by
+    # content_id, and the seed itself is never handed out directly.
+    content_id, session_id = clone_seed_for_user(db, seed, current_user, seed.topic_id)
+    print(f"[QuickAnswer] HIT {key['content_type']} seed={seed.content_id} -> clone={content_id}")
+
+    return {
+        "found": True,
+        "key": key,
+        "html": seed.display_body,
+        "content_id": content_id,
+        "session_id": session_id,
+        "cached": True,
     }
 
 
@@ -816,6 +889,8 @@ def create_seed(
         key = build_seed_key(
             content_type=body.content_type,
             topic_id=body.topic_id,
+            chapter_id=body.chapter_id,
+            subject_id=body.subject_id,
             language=body.language,
             difficulty=body.difficulty,
             num_problems=body.num_problems,
@@ -824,8 +899,10 @@ def create_seed(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Resolve whichever curriculum level the key is built around — a chapter-scope
+    # seed has no topic to resolve, and a subject-scope seed has neither.
     try:
-        topic, chapter, subject = resolve_topic_chain(db, body.topic_id)
+        topic, chapter, subject = resolve_chain_for_key(db, key)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -853,7 +930,10 @@ def create_seed(
     # Re-check after the pipeline: the key may have been taken while we were
     # generating. The demote is staged here so write_seed's commit covers both.
     replaced = _resolve_seed_conflict(db, key, body.replace)
-    content_id, session_id = write_seed(db, current_user, key, result, answer_key, explanation)
+    content_id, session_id = write_seed(
+        db, current_user, key, result, answer_key, explanation,
+        topic=topic, chapter=chapter, subject=subject,
+    )
 
     return {
         "content_id": content_id,
@@ -906,11 +986,21 @@ def list_cache_seeds(
     Every live seed for the current CACHE_VERSION, with curriculum names and who
     created it. Pre-demo checklist and audit trail.
     """
+    # A seed names only the curriculum level it is keyed on: a topic seed has
+    # topic_id, a chapter-scope quiz has chapter_id, a subject-scope quiz only
+    # subject_id. Coalescing walks up from whichever level is present — and keeps
+    # working for pre-existing rows that carry topic_id alone.
     rows = (
         db.query(GeneratedContent, Topic, Chapter, Subject, User)
         .outerjoin(Topic, GeneratedContent.topic_id == Topic.topic_id)
-        .outerjoin(Chapter, Topic.chapter_id == Chapter.chapter_id)
-        .outerjoin(Subject, Chapter.subject_id == Subject.subject_id)
+        .outerjoin(
+            Chapter,
+            func.coalesce(Topic.chapter_id, GeneratedContent.chapter_id) == Chapter.chapter_id,
+        )
+        .outerjoin(
+            Subject,
+            func.coalesce(Chapter.subject_id, GeneratedContent.subject_id) == Subject.subject_id,
+        )
         .outerjoin(TeacherSession, GeneratedContent.teacher_session_id == TeacherSession.session_id)
         .outerjoin(User, TeacherSession.teacher_id == User.user_id)
         .filter(

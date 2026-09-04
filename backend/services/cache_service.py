@@ -27,10 +27,33 @@ from services.generation_service import (
 
 CACHE_VERSION = os.getenv("CACHE_VERSION", "v1")
 
-# The only content types phase 1 can cache. Chapter- and subject-scope quizzes
-# are excluded: their keys would need chapter_id/subject_id, which normalize_key
-# accepts but does not yet use.
-CACHEABLE_CONTENT_TYPES = ("worksheet", "study_note", "quiz_topic")
+# Every cacheable content type. A cache key identifies its target through
+# exactly ONE curriculum id, chosen by content type: topic-scope artifacts key on
+# topic_id, a chapter-scope quiz on chapter_id, a subject-scope quiz on
+# subject_id. content_type is always part of the lookup, so a quiz_chapter row can
+# never be served to a quiz_topic request even if the two ids collide numerically.
+CACHEABLE_CONTENT_TYPES = (
+    "worksheet", "study_note", "quiz_topic", "quiz_chapter", "quiz_subject",
+)
+
+# Which curriculum column each content type is keyed on.
+KEY_FIELD_BY_CONTENT_TYPE = {
+    "worksheet":     "topic_id",
+    "study_note":    "topic_id",
+    "quiz_topic":    "topic_id",
+    "quiz_chapter":  "chapter_id",
+    "quiz_subject":  "subject_id",
+}
+
+# quiz content_type <-> the scope string the quiz pipeline expects.
+QUIZ_CONTENT_TYPE_BY_SCOPE = {
+    "topic":   "quiz_topic",
+    "chapter": "quiz_chapter",
+    "subject": "quiz_subject",
+}
+QUIZ_SCOPE_BY_CONTENT_TYPE = {v: k for k, v in QUIZ_CONTENT_TYPE_BY_SCOPE.items()}
+
+ALL_KEY_FIELDS = ("topic_id", "chapter_id", "subject_id")
 
 # Difficulty is not a user-supplied field for these content types — the router
 # hardcodes it when it writes the row, so the cache key must use the same value.
@@ -40,6 +63,8 @@ CACHEABLE_CONTENT_TYPES = ("worksheet", "study_note", "quiz_topic")
 FIXED_DIFFICULTY = {
     "study_note": None,
     "quiz_topic": "mixed",
+    "quiz_chapter": "mixed",
+    "quiz_subject": "mixed",
 }
 
 # Question counts the quiz pipeline falls back to when num_questions is not sent
@@ -67,36 +92,66 @@ def _norm_str(value, default=None):
     return text if text else default
 
 
-def normalize_key(topic_id, content_type, language, difficulty_level,
-                  num_problems=None, chapter_id=None, subject_id=None) -> dict:
+def normalize_key(content_type, language, difficulty_level, num_problems=None,
+                  topic_id=None, chapter_id=None, subject_id=None) -> dict:
     """
     The single cache-key builder. Every read and every write — API and warming
     script alike — must build its key here so the two always agree.
 
-    chapter_id / subject_id are accepted but unused: chapter- and subject-scope
-    quiz caching is out of scope for phase 1, and taking the arguments now means
-    adding it later needs no signature change (and no new columns yet).
+    The key carries all three curriculum ids, but only the one named by
+    KEY_FIELD_BY_CONTENT_TYPE is populated; the other two are always None. That
+    single id, together with content_type, is what get_cache_seed matches on. The
+    caller may pass the whole chain (the routers do) — the extras are dropped
+    here rather than at every call site.
     """
-    return {
-        "topic_id": int(topic_id),
-        "content_type": _norm_str(content_type),
+    content_type = _norm_str(content_type)
+    key_field = KEY_FIELD_BY_CONTENT_TYPE.get(content_type)
+    if key_field is None:
+        raise ValueError(
+            f"content_type {content_type!r} is not cacheable; "
+            f"expected one of {CACHEABLE_CONTENT_TYPES}"
+        )
+
+    supplied = {"topic_id": topic_id, "chapter_id": chapter_id, "subject_id": subject_id}
+    key_id = supplied[key_field]
+    if key_id is None:
+        raise ValueError(
+            f"content_type {content_type!r} is keyed on {key_field}, but {key_field} is None"
+        )
+
+    key = {field: None for field in ALL_KEY_FIELDS}
+    key[key_field] = int(key_id)
+    key.update({
+        "content_type": content_type,
         "language": _norm_str(language),
         "difficulty_level": _norm_str(difficulty_level, default="standard") or "standard",
         "num_problems": int(num_problems) if num_problems is not None else None,
-    }
+    })
+    return key
+
+
+def key_field_of(key) -> str:
+    """The curriculum column `key` is keyed on."""
+    return KEY_FIELD_BY_CONTENT_TYPE[key["content_type"]]
 
 
 def get_cache_seed(db, key):
     """
     Return the newest seed row matching `key`, or None.
 
+    Matching is on content_type plus the ONE curriculum id the key is built
+    around — never on the other two. A chapter-scope quiz row also stores its
+    subject_id for display purposes, and matching on that too would be wrong;
+    content_type already keeps the scopes from colliding.
+
     num_problems participates in the match only when the key carries one, since
     study notes and quizzes have no problem count.
     """
+    key_field = key_field_of(key)
     query = db.query(GeneratedContent).filter(
         GeneratedContent.is_cache_seed == True,  # noqa: E712 — SQL boolean, not Python
         GeneratedContent.cache_version == CACHE_VERSION,
-        GeneratedContent.topic_id == key["topic_id"],
+        getattr(GeneratedContent, key_field) == key[key_field],
         GeneratedContent.content_type == key["content_type"],
         GeneratedContent.language == key["language"],
         GeneratedContent.difficulty_level == key["difficulty_level"],
@@ -110,7 +165,8 @@ def get_cache_seed(db, key):
 def _save_generated_content(db, current_user, topic_id, content_type,
                             difficulty_level, display_body, answer_key,
                             explanation, language=None, num_problems=None,
-                            is_cache_seed=False, cache_version=None):
+                            is_cache_seed=False, cache_version=None,
+                            chapter_id=None, subject_id=None):
     """
     Role onujayi thik session e save kore:
       - teacher/admin -> teacher_session + generated_content.teacher_session_id
@@ -140,6 +196,8 @@ def _save_generated_content(db, current_user, topic_id, content_type,
 
     generated = GeneratedContent(
         topic_id=topic_id,
+        chapter_id=chapter_id,
+        subject_id=subject_id,
         content_type=content_type,
         difficulty_level=difficulty_level,
         display_body=display_body,
@@ -165,15 +223,22 @@ def _save_generated_content(db, current_user, topic_id, content_type,
     return generated.content_id, session.session_id
 
 
-def clone_seed_for_user(db, seed, current_user, topic_id):
+def clone_seed_for_user(db, seed, current_user, topic_id=None):
     """
     Copy a seed row into a brand-new row owned by `current_user`, with its own
     session. The clone is is_cache_seed=False / cache_version=None, so the user
     can refine it freely without ever touching the seed.
+
+    topic_id is an optional override for the caller's own resolved topic; the
+    chapter/subject ids always come off the seed, and for a chapter- or
+    subject-scope quiz topic_id is simply None.
     Returns (content_id, session_id).
     """
     return _save_generated_content(
-        db, current_user, topic_id,
+        db, current_user,
+        topic_id if topic_id is not None else seed.topic_id,
+        chapter_id=seed.chapter_id,
+        subject_id=seed.subject_id,
         content_type=seed.content_type,
         difficulty_level=seed.difficulty_level,
         display_body=seed.display_body,
@@ -208,15 +273,53 @@ def resolve_topic_chain(db, topic_id):
     return topic, chapter, subject
 
 
-def build_seed_key(content_type, topic_id, language, difficulty=None,
-                   num_problems=None, num_questions=None) -> dict:
+def resolve_chapter_chain(db, chapter_id):
+    """Resolve chapter -> subject. topic is None: a chapter quiz spans all of them."""
+    chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+    if not chapter:
+        raise ValueError(f"Chapter {chapter_id} not found")
+
+    subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
+    if not subject:
+        raise ValueError(f"Subject {chapter.subject_id} not found")
+
+    return None, chapter, subject
+
+
+def resolve_subject_chain(db, subject_id):
+    """Resolve a subject alone. topic and chapter are None."""
+    subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+    if not subject:
+        raise ValueError(f"Subject {subject_id} not found")
+    return None, None, subject
+
+
+def resolve_chain_for_key(db, key):
+    """
+    Resolve whatever curriculum chain `key` points at, dispatching on the field
+    the key is built around. Returns (topic, chapter, subject), with the levels
+    above the key's scope set to None.
+    """
+    key_field = key_field_of(key)
+    if key_field == "topic_id":
+        return resolve_topic_chain(db, key["topic_id"])
+    if key_field == "chapter_id":
+        return resolve_chapter_chain(db, key["chapter_id"])
+    return resolve_subject_chain(db, key["subject_id"])
+
+
+def build_seed_key(content_type, topic_id=None, language="english", difficulty=None,
+                   num_problems=None, num_questions=None,
+                   chapter_id=None, subject_id=None) -> dict:
     """
     Turn a seed specification into a cache key.
 
-    Difficulty for study_note and quiz_topic is forced to the value the routers
-    hardcode, so a typo cannot produce a seed the API will never find. The count
-    slot holds num_problems for worksheets and the EFFECTIVE question count for
-    quizzes; study notes have no count.
+    Difficulty for study notes and every quiz scope is forced to the value the
+    routers hardcode, so a typo cannot produce a seed the API will never find.
+    The count slot holds num_problems for worksheets and the EFFECTIVE question
+    count for quizzes — resolved against the quiz's OWN scope, so an unspecified
+    chapter quiz keys as 20 and a subject quiz as 30, matching the pipeline.
+    Study notes have no count.
     """
     content_type = (content_type or "").strip().lower()
     if content_type not in CACHEABLE_CONTENT_TYPES:
@@ -230,17 +333,21 @@ def build_seed_key(content_type, topic_id, language, difficulty=None,
 
     if content_type == "worksheet":
         count = num_problems
-    elif content_type == "quiz_topic":
-        count = effective_quiz_questions(num_questions, "topic")
+    elif content_type in QUIZ_SCOPE_BY_CONTENT_TYPE:
+        count = effective_quiz_questions(
+            num_questions, QUIZ_SCOPE_BY_CONTENT_TYPE[content_type]
+        )
     else:
         count = None
 
     return normalize_key(
-        topic_id=topic_id,
         content_type=content_type,
         language=language,
         difficulty_level=difficulty,
         num_problems=count,
+        topic_id=topic_id,
+        chapter_id=chapter_id,
+        subject_id=subject_id,
     )
 
 
@@ -250,29 +357,43 @@ def key_for_row(row) -> dict:
 
     Raises ValueError when the row can never be matched by a live request, which
     is better than silently creating an unreachable seed:
-      - a content_type phase 1 does not cache
-      - no topic_id (chapter/subject-scope quizzes)
+      - a content_type this cache does not handle
+      - a NULL in the curriculum column its content_type keys on (e.g. a
+        quiz_chapter row with no chapter_id — one written before those columns
+        existed)
       - a worksheet/quiz row with no num_problems — the API always sends a count,
         so a NULL count can never compare equal. Rows written before the count
         was persisted fall in this bucket.
     """
-    if row.topic_id is None:
+    content_type = (row.content_type or "").strip().lower()
+    key_field = KEY_FIELD_BY_CONTENT_TYPE.get(content_type)
+    if key_field is None:
         raise ValueError(
-            f"content {row.content_id} has no topic_id, so it cannot be keyed "
-            "(chapter/subject-scope content is not cacheable in phase 1)"
+            f"content {row.content_id} has content_type {content_type!r}, which is "
+            f"not cacheable; expected one of {CACHEABLE_CONTENT_TYPES}"
         )
 
-    content_type = (row.content_type or "").strip().lower()
-    if content_type in ("worksheet", "quiz_topic") and row.num_problems is None:
+    if getattr(row, key_field) is None:
         raise ValueError(
-            f"content {row.content_id} ({content_type}) has num_problems=NULL, so no "
-            "request could ever match it. It predates the count being stored; "
-            "regenerate it with POST /generate/seed instead of promoting it."
+            f"content {row.content_id} ({content_type}) is keyed on {key_field}, "
+            f"but that column is NULL, so no request could ever match it. It "
+            "predates the curriculum columns; regenerate it with POST /generate/seed "
+            "instead of promoting it."
         )
+
+    if content_type in ("worksheet",) or content_type in QUIZ_SCOPE_BY_CONTENT_TYPE:
+        if row.num_problems is None:
+            raise ValueError(
+                f"content {row.content_id} ({content_type}) has num_problems=NULL, so no "
+                "request could ever match it. It predates the count being stored; "
+                "regenerate it with POST /generate/seed instead of promoting it."
+            )
 
     return build_seed_key(
         content_type=content_type,
         topic_id=row.topic_id,
+        chapter_id=row.chapter_id,
+        subject_id=row.subject_id,
         language=row.language,
         difficulty=row.difficulty_level,
         num_problems=row.num_problems,
@@ -313,16 +434,19 @@ def run_seed_pipeline(key, topic, chapter, subject):
         )
         return result, str(result.get("note", "")), str(result.get("visuals", ""))
 
-    if content_type == "quiz_topic":
+    if content_type in QUIZ_SCOPE_BY_CONTENT_TYPE:
+        # topic is None for a chapter-scope quiz; topic and chapter are both None
+        # for a subject-scope one. generate_quiz already treats those as optional
+        # and switches retrieval on `scope`, so pass them straight through.
         result = generate_quiz(
-            scope="topic",
+            scope=QUIZ_SCOPE_BY_CONTENT_TYPE[content_type],
             class_name=subject.class_name,
             subject_name=subject.name,
             subject_id=subject.subject_id,
-            chapter_name=chapter.name,
-            chapter_id=chapter.chapter_id,
-            topic_name=topic.name,
-            topic_id=topic.topic_id,
+            chapter_name=chapter.name if chapter else None,
+            chapter_id=chapter.chapter_id if chapter else None,
+            topic_name=topic.name if topic else None,
+            topic_id=topic.topic_id if topic else None,
             language=key["language"],
             # Use the key's effective count so the generated quiz always has
             # exactly the number of questions the cache key advertises.
@@ -333,14 +457,23 @@ def run_seed_pipeline(key, topic, chapter, subject):
     raise ValueError(f"Unsupported content_type {content_type!r}")
 
 
-def write_seed(db, current_user, key, result, answer_key, explanation):
+def write_seed(db, current_user, key, result, answer_key, explanation,
+               topic=None, chapter=None, subject=None):
     """
     Persist a freshly generated artifact as a cache seed. Goes through
     _save_generated_content so seeds and ordinary generations share one
     session-creation path. Returns (content_id, session_id).
+
+    The key names only the ONE id the seed is looked up by; pass the resolved
+    chain (as returned by resolve_chain_for_key) so the row also records the
+    levels above it for display and analytics. Those extra columns never take
+    part in matching — see get_cache_seed.
     """
     return _save_generated_content(
-        db, current_user, key["topic_id"],
+        db, current_user,
+        key["topic_id"] if topic is None else topic.topic_id,
+        chapter_id=key["chapter_id"] if chapter is None else chapter.chapter_id,
+        subject_id=key["subject_id"] if subject is None else subject.subject_id,
         content_type=key["content_type"],
         difficulty_level=key["difficulty_level"],
         display_body=result["html"],
