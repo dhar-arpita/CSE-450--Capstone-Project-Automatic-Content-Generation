@@ -28,7 +28,8 @@ from services.cache_service import (
     CACHE_VERSION,
     build_seed_key,
     get_cache_seed,
-    resolve_topic_chain,
+    key_field_of,
+    resolve_chain_for_key,
     run_seed_pipeline,
     write_seed,
 )
@@ -42,9 +43,18 @@ SEEDS = [
     {"content_type": "study_note", "topic_id": 75, "language": "english",
      "difficulty": None, "num_problems": None},
     # num_questions must match what the UI dropdown sends (5/10/15/20/25/30);
-    # omit it to seed the topic-scope default of 10.
+    # omit it to seed the scope default (topic 10, chapter 20, subject 30).
     {"content_type": "quiz_topic", "topic_id": 75, "language": "english",
      "difficulty": "mixed", "num_questions": 10},
+
+    # Chapter- and subject-scope quizzes are keyed on chapter_id / subject_id
+    # instead of topic_id. Fill in ids from your own curriculum and uncomment.
+    # A subject-scope seed generates 30 questions over the whole subject, so it
+    # is by far the slowest entry here — seed it only if the demo needs it.
+    # {"content_type": "quiz_chapter", "chapter_id": 12, "language": "english",
+    #  "num_questions": 20},
+    # {"content_type": "quiz_subject", "subject_id": 3, "language": "english",
+    #  "num_questions": 30},
 ]
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -53,7 +63,9 @@ def _build_key(seed):
     """Delegate to the shared key builder so the script and the API agree."""
     return build_seed_key(
         content_type=seed["content_type"],
-        topic_id=seed["topic_id"],
+        topic_id=seed.get("topic_id"),
+        chapter_id=seed.get("chapter_id"),
+        subject_id=seed.get("subject_id"),
         language=seed.get("language", "english"),
         difficulty=seed.get("difficulty"),
         num_problems=seed.get("num_problems"),
@@ -114,12 +126,16 @@ def cmd_warm(db, user_id, force):
 
     for index, seed in enumerate(SEEDS, 1):
         started = time.time()
-        label = f"[{index}/{len(SEEDS)}] {seed.get('content_type')} topic_id={seed.get('topic_id')}"
+        label = f"[{index}/{len(SEEDS)}] {seed.get('content_type')}"
         try:
             key = _build_key(seed)
-            topic, chapter, subject = resolve_topic_chain(db, key["topic_id"])
+            # Resolve whichever level this seed is keyed on — chapter- and
+            # subject-scope quizzes have no topic to resolve.
+            topic, chapter, subject = resolve_chain_for_key(db, key)
 
-            print(f"{label}  topic={topic.name!r}")
+            target = topic or chapter or subject
+            print(f"{label} {key_field_of(key)}={key[key_field_of(key)]}  "
+                  f"target={target.name!r}")
             print(f"    key={key}")
 
             existing = get_cache_seed(db, key)
@@ -135,7 +151,8 @@ def cmd_warm(db, user_id, force):
                 raise RuntimeError(result["error"])
 
             content_id, session_id = write_seed(
-                db, user, key, result, answer_key, explanation
+                db, user, key, result, answer_key, explanation,
+                topic=topic, chapter=chapter, subject=subject,
             )
             elapsed = time.time() - started
             print(f"    OK — content_id={content_id} session_id={session_id} "

@@ -20,7 +20,7 @@ const TXT = {
     subjectScope: "Subject Scope",
     errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
-    noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
+    noCache: "⚠️ এই সিলেকশনের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
   },
   english: {
     scope: "Scope",
@@ -39,7 +39,7 @@ const TXT = {
     subjectScope: "Subject Scope",
     errorMsg: "⚠️ Failed to generate quiz.",
     retry: "🔄 Try Again",
-    noCache: "⚠️ No cached content found for this topic.",
+    noCache: "⚠️ No cached content found for this selection.",
   },
 };
 
@@ -107,6 +107,9 @@ export default function QuizGenerator({
         ...target,
         num_questions: parseInt(numQuestions, 10) || 5,
         language,
+        // Generate always builds fresh. The cache is reached through the Quick
+        // Answer button, which falls back here only after confirming a miss.
+        refresh: true,
       };
 
       const { data } = await generateQuiz(payload);
@@ -163,27 +166,26 @@ export default function QuizGenerator({
   };
 
   const handleQuickAnswer = async () => {
-    if (!selectedTopicId) {
-      alert("Please select a Topic from the dropdowns above first!");
-      return;
-    }
-
-    // Quick Answer only works for topic-scope quizzes
-    if (scope !== "topic") {
-      alert("Quick Answer is only available for Topic Scope quizzes.");
+    if (!target) {
+      alert(t.selectFirst);
       return;
     }
 
     setQuickAnswerLoading(true);
     setError(false);
     setQuizHTML("");
+    setContentId(null);
 
     try {
+      // `target` already holds exactly the one id this scope is keyed on —
+      // topic_id, chapter_id or subject_id — and the backend keys quiz_topic /
+      // quiz_chapter / quiz_subject on the matching column. Same shape as
+      // onGenerate, so a cached and a generated quiz can never disagree.
       const { data } = await quickAnswer({
-        topic_id: selectedTopicId,
-        content_type: "quiz_topic",
+        ...target,
+        content_type: `quiz_${scope}`,
         language: language,
-        num_questions: numQuestions,
+        num_questions: parseInt(numQuestions, 10) || undefined,
       });
       
       if (data && data.found && data.html) {
@@ -246,18 +248,18 @@ export default function QuizGenerator({
         {/* Generate Button */}
         <button
           onClick={onGenerate}
-          disabled={loading || !target}
-          style={generateBtn(loading || !target)}
+          disabled={loading || quickAnswerLoading || !target}
+          style={generateBtn(loading || quickAnswerLoading || !target)}
         >
           {loading ? t.generating : t.generate}
         </button>
 
-        {/* Quick Answer Button - only for topic scope */}
-        {scope === "topic" && selectedTopicId && (
+        {/* Quick Answer Button - available at topic, chapter and subject scope */}
+        {target && (
           <button
             onClick={handleQuickAnswer}
-            disabled={quickAnswerLoading}
-            style={quickAnswerBtn(quickAnswerLoading)}
+            disabled={quickAnswerLoading || loading}
+            style={quickAnswerBtn(quickAnswerLoading || loading)}
           >
             {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
           </button>

@@ -167,6 +167,12 @@ class GeneratedContent(Base):
      learning_session_id = Column(Integer,ForeignKey("learning_session.session_id"),nullable=True) 
      teacher_session_id = Column(Integer,ForeignKey("teacher_session.session_id"),nullable=True)
      topic_id = Column(Integer,ForeignKey("topic.topic_id"))    
+     # Curriculum chain. topic_id alone cannot identify chapter- or subject-scope
+     # quizzes (those have no single topic), so the chain is stored explicitly.
+     # For topic-scope content all three are filled in; for chapter scope
+     # topic_id is NULL; for subject scope topic_id and chapter_id are NULL.
+     chapter_id = Column(Integer,ForeignKey("chapter.chapter_id"),nullable=True)
+     subject_id = Column(Integer,ForeignKey("subject.subject_id"),nullable=True)
      content_type = Column(String(100))
      difficulty_level = Column(String(50))
      display_body = Column(Text) 
