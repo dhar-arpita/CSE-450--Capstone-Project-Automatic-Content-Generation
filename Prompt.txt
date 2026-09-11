@@ -1,1 +1,42 @@
-In quiz generation part in frontend, I want that it should display class and scope and nothing else . If user selects both of them , then based upon it will show other options like if he selects subject as scope then nothing else should be displayed. If he selects chapter as scope, then it should display the chapters available for that class. If he selects topic as scope, then it should display the chapters and  topics available for that class. Now implement this . Just give me the files and their changes  in chat and do not edit them . Also tell me which part of file should be changed . Run google search . Think step by step. 
+now just read docker-compose.yml , .gitignore . 
+Great. Now, we are going to migrate this synchronous architecture to a Decoupled Asynchronous Architecture using FastAPI, Redis, and Celery.
+Here is the approved Deployment Architecture & Scalability Strategy:
+Now I shall give you guideline to deploy this project . Guideline : 
+Deployment Architecture & Scalability Strategy (Revised)
+Project: Automatic Content Generation Platform
+Prepared for: Capstone Project Supervisory Review
+1. Executive Summary
+This document outlines the deployment architecture for the Automatic Content Generation platform. The system utilizes a stateless backend architecture, externalizing state to Neon (PostgreSQL) and vector data to Qdrant Cloud.
+Currently, the multi-agent generative pipeline takes approximately five minutes to execute. This five-minute figure reflects the current pipeline implementation rather than an inherent system constraint. An asynchronous decoupled architecture (FastAPI + Redis + Celery) is chosen because it decouples user-facing responsiveness from pipeline duration. The system remains highly responsive whether generation takes five minutes or forty seconds, permitting optimization to proceed independently of the deployment design.
+This architecture will be hosted on a standard Linux Virtual Machine via Microsoft Azure, utilizing student credits.
+
+2. Architectural Blueprint: Two Tiers, Two Mechanisms
+The architecture avoids the fragility of holding synchronous HTTP connections open for long-running generative tasks. The system is split into two distinct tiers that scale using entirely different mechanisms:
+2.1. The Web Tier (FastAPI)
+Scales With: Request volume (logins, page loads, status polls).
+Mechanism: Cloud Load Balancer. The load balancer distributes inbound HTTP traffic across stateless web replicas. Since state is stored in PostgreSQL, any replica can seamlessly answer any polling request.
+2.2. The Worker Tier (Celery + Redis)
+Scales With: Generation volume (queued AI tasks).
+Mechanism: Competing-Consumers Pattern. Celery workers do not listen for HTTP requests; they pull tasks from a shared Redis queue. Distribution is inherent to the Redis broker rather than requiring an external load balancer.
+2.3. The Implementation Contract
+The implementation follows a strict four-step contract:
+Immediate Dispatch: A database row is created with status="processing", and the task is dispatched to Redis via generate_worksheet_task.delay(content_id).
+Instant Response: The FastAPI server returns the job_id to the client in milliseconds.
+Status Endpoint: A lightweight endpoint queries PostgreSQL for the job's current status.
+Polling Frontend: The React frontend polls this endpoint until completion.
+
+3. The Scaling Ladder: Concurrency Before Replicas
+A common misconception is that handling concurrent users requires spinning up multiple worker containers (replicas). However, horizontal scaling is the answer to sustained load, not the first line of defense. The pipeline spends nearly all of its time blocked on network I/O awaiting Gemini responses.
+We will follow a structured Scaling Ladder:
+Tune Worker Concurrency: Because tasks are I/O-bound, a single worker can hold many generations open simultaneously. By tuning worker concurrency (e.g., concurrency=12), 12 concurrent students will all receive their generations in ~5 minutes, rather than forcing the 12th student to wait 60 minutes in a serialized queue.
+Split Queues by Workload Type: The pipeline is a mixed workload. LLM calls and Qdrant retrievals are I/O-bound, whereas  and PDF rendering (weasyprint) are CPU-bound. We will configure two distinct queues:
+I/O-bound: celery -A app.worker worker -Q generation -P gevent -c 12
+CPU-bound: celery -A app.worker worker -Q rendering -P prefork -c 2
+
+
+Add Worker Replicas: Only once sustained demand exceeds the tuned capacity of a single worker will we horizontally scale by adding more Celery containers.
+(Caveat: gevent requires all HTTP clients to be non-blocking. If a client misbehaves and stalls the event loop, we will fall back to standard thread pools: -P threads -c 8).
+
+Based on my codebase and this strategy, I want you to create a step-by-step implementation plan. Do not write or modify any application code yet. Later I shall finish each step and verify it .  Also I think , 3 members will work on this deployment. We are manitaining branches for each member in git hub. After generating the steps , you can give me plan to divide the steps among 3 members in such a way that merging will be easy. 
+I think , this document may be based on the context of worksheet generation only. But our project also generates quiz , study note and we have also chat bot. In chat bot , student can generate practice questions and also other content . So if you think , you need to add steps for those features as well, please do so. Please create a file called DEPLOYMENT_PLAN.md in the root directory.
+Run google search if to verify something or found new.  Think step by step.

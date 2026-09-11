@@ -1,5 +1,5 @@
 # models.py - This file defines the SQLAlchemy models that represent the database schema for our application. It includes tables for users, classes, subjects, chapters, topics, learning objectives, upload requests, ingestion jobs, content embeddings, teacher sessions, generated content, feedback, saved content, learning sessions, student interactions, remediation decisions, and topic performance. Each model corresponds to a table in the database and defines the structure of the data we will be working with.
-from sqlalchemy import TIMESTAMP, Column, Integer, String, Text, Boolean, Date, BigInteger, Numeric, ForeignKey
+from sqlalchemy import TIMESTAMP, Column, Integer, String, Text, Boolean, Date, BigInteger, Numeric, ForeignKey, Index, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy import CheckConstraint
@@ -269,8 +269,61 @@ class TopicPerformance(Base):
     student_id = Column(Integer,ForeignKey("student.student_id"))
     topic_id = Column(Integer,ForeignKey("topic.topic_id"))
     total_attempts = Column(Integer,default=0)
-    correct_answer = Column(Integer,default=0)    
+    correct_answer = Column(Integer,default=0)
     total_hints_used = Column(Integer,default=0)
     mastery_score = Column(Numeric(5,2))
-    last_practiced = Column(TIMESTAMP)          
-        
+    last_practiced = Column(TIMESTAMP)
+
+
+# Step 1.7 (DEPLOYMENT_PLAN.md) — appended, not inserted among the tables
+# above, to keep the diff one contiguous block.
+#
+# NOTE: Step 0.2 (docs/JOB_CONTRACT.md, freezing this exact shape) was never
+# actually created. This model is built directly from the "Proposed shape"
+# written in DEPLOYMENT_PLAN.md §4.2 — the only concrete spec that exists on
+# disk — not from a separately frozen contract.
+class GenerationJob(Base):
+    __tablename__ = "generation_job"
+
+    job_id = Column(Integer, primary_key=True)
+    # Celery task id — nullable because the row is created (status=QUEUED)
+    # before dispatch, and only stamped once Celery hands back an id.
+    task_id = Column(String(255), nullable=True)
+    job_type = Column(
+        String(50),
+        CheckConstraint(
+            "job_type IN ('worksheet', 'study_note', 'quiz_topic', 'quiz_chapter', "
+            "'quiz_subject', 'refine', 'seed', 'ingestion', 'chat_quiz')"
+        ),
+        nullable=False,
+    )
+    status = Column(
+        String(50),
+        CheckConstraint("status IN ('QUEUED', 'PROCESSING', 'SUCCESS', 'FAILED')"),
+        nullable=False,
+        default="QUEUED",
+    )
+    # e.g. "retrieval" | "content_agent" | "localization" — surfaces pipeline
+    # progress in polling UI instead of a blank spinner (§4.2).
+    progress_stage = Column(String(100), nullable=True)
+    requested_by = Column(Integer, ForeignKey("user.user_id"), nullable=False)
+    # Original request payload, for idempotency and retry. For ingestion
+    # jobs this holds a shared-volume file PATH, not the raw uploaded bytes.
+    params = Column(JSON, nullable=True)
+    # Nullable: a failed job never gets one, and chat_quiz jobs may never
+    # produce a generated_content row at all.
+    content_id = Column(Integer, ForeignKey("generated_content.content_id"), nullable=True)
+    error_message = Column(Text, nullable=True)
+    attempts = Column(Integer, default=0, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=func.now())
+    started_at = Column(TIMESTAMP, nullable=True)
+    finished_at = Column(TIMESTAMP, nullable=True)
+
+    # Polling (`GET /jobs/{job_id}`) is a PK lookup, but a user's "my recent
+    # jobs" list (`GET /jobs?mine=true`, Step 3.5) filters by status and
+    # orders by recency — this composite index is what keeps that indexed
+    # instead of a sequential scan as the table grows.
+    __table_args__ = (
+        Index("ix_generation_job_status_created_at", "status", "created_at"),
+    )
+    

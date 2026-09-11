@@ -92,6 +92,23 @@ EMBEDDING_MODEL = "gemini-embedding-001"
 # The new collection is versioned as "pdf_collection_v2" to set the dimension to 3072 for the new embedding model. The old collection can be deleted after migration.........................................................
 COLLECTION_NAME = "pdf_collection_v2"
 
+# Step 1.6 (DEPLOYMENT_PLAN.md, R9) — JWT signing key, used by
+# core/security.py to sign and verify login tokens (HS256: the SAME key
+# signs and verifies, so anyone who has it can forge a valid token for any
+# user). Required, no fallback: previously this had a hardcoded insecure
+# default ("your-secret-key-change-in-production") baked into security.py,
+# so a missing env var silently downgraded to a publicly-known signing key
+# instead of failing — a full authentication-bypass risk, not just a broken
+# feature. Single source of truth lives here now; security.py imports it
+# rather than reading its own (insecure) default.
+SECRET_KEY = os.getenv("SECRET_KEY")
+
+if not SECRET_KEY:
+    raise ValueError(
+        "SECRET_KEY is missing from .env file. Generate one with: "
+        "openssl rand -hex 32"
+    )
+
 # PostgreSQL database setup via SQLAlchemy
 DATABASE_URL = os.getenv("DATABASE_URL")
 

@@ -3,6 +3,7 @@
 # Business logic lives in services/, routes in routers/, config in core/.
 
 # asynccontextmanager allows us to define startup and shutdown logic
+import os
 from contextlib import asynccontextmanager
 
 # Core FastAPI components
@@ -10,10 +11,6 @@ from fastapi import FastAPI
 
 # Middleware that allows the React frontend (on a different port) to call our API
 from fastapi.middleware.cors import CORSMiddleware
-
-# Config (DB engine / Base) and vector-store bootstrap
-from core.config import Base, engine
-from services import rag_service
 
 # Routers — each owns a slice of the API surface
 from routers.users import router as users_router
@@ -32,12 +29,11 @@ async def lifespan(app: FastAPI):
     and shutdown logic when the server stops.
     """
 
-    # On startup: create all SQL tables (if they don't exist) and Qdrant collection
-    print("Starting up: Creating SQL tables and Qdrant vector collection...")
-    Base.metadata.create_all(bind=engine)
-    rag_service.init_vector_db()
-
-    # The 'yield' is where the application actually runs and handles requests
+    # Step 1.5 (DEPLOYMENT_PLAN.md, R8): SQL-table and Qdrant-collection
+    # bootstrap used to run here, on every replica's startup. Moved to
+    # ops/init_db.py, run once as a compose init service, so N backend
+    # replicas (Phase 5) don't all race to run startup DDL/vector-collection
+    # creation at once. lifespan now only handles shutdown logging.
     yield
 
     # On shutdown: just log a message (connections close automatically)
@@ -52,11 +48,28 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware so the React frontend can send requests to this backend
-# allow_origins=["*"] is fine for development — restrict this in production
+# Add CORS middleware so the React frontend can send requests to this backend.
+#
+# Step 1.5 (DEPLOYMENT_PLAN.md, R9): env-driven allow-list instead of
+# allow_origins=["*"]. The combination of "*" with allow_credentials=True is
+# rejected by browsers anyway per the Fetch spec (a wildcard can't be paired
+# with credentialed requests) — but FastAPI/Starlette don't enforce that at
+# the server, so it silently "worked" for cookie-less bearer-token auth while
+# still being wrong as a policy: it means literally any website could call
+# this API from a logged-in user's browser. CORS_ORIGINS is a comma-separated
+# list (e.g. "http://localhost:3000,https://app.example.com"); unset falls
+# back to the dev frontend's own origin so local `docker compose up` keeps
+# working without extra setup. Set CORS_ORIGINS explicitly in backend/.env
+# once deployed (Phase 5) to the real frontend origin(s).
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

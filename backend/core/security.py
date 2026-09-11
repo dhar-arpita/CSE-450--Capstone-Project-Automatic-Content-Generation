@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 from fastapi import HTTPException, Depends
 from sqlalchemy.orm import Session
 
-from core.config import get_db
+from core.config import get_db, SECRET_KEY
 from models.db_models import User
 
 # ──── PASSWORD HASHING ────
@@ -25,7 +25,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 # ──── JWT CONFIGURATION ────
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+# Step 1.6 (DEPLOYMENT_PLAN.md, R9): SECRET_KEY now comes from core.config,
+# which raises at import time if it's unset — no more insecure hardcoded
+# fallback here.
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60  # 1 hour
 REFRESH_TOKEN_EXPIRE_DAYS = 7
