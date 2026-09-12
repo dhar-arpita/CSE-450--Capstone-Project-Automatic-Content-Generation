@@ -120,20 +120,56 @@ if not DATABASE_URL:
 
 # pool_pre_ping=True tells SQLAlchemy to test the connection before using it.
 # If the connection is dead, it automatically gets a fresh one instead of crashing.
+# Kept as-is under Step 2.4 (below) — this is exactly the right defence
+# against Neon's serverless auto-suspend: the first query after Neon's
+# compute has gone idle can find a stale pooled connection, and pre-ping
+# catches that instead of surfacing it as a query failure.
 # pool_recycle=300 forces connections to be recycled every 5 minutes,
 # preventing Supabase from closing them due to idle timeout.
-# pool_size=5 keeps up to 5 connections ready in the pool.
-# max_overflow=10 allows up to 10 extra connections if all 5 are busy.
+#
+# Step 2.4 (DEPLOYMENT_PLAN.md, R5/R6): pool_size/max_overflow LOWERED from
+# 5/10 (15 total). That sizing assumed one process holds the whole pool
+# (true under gevent, one shared event loop) — under -P prefork (§4.1, Step
+# 2.1's pool decision) every forked worker process gets its OWN copy of this
+# engine, so N processes means up to N x pool_size connections in aggregate,
+# not one shared 15-connection ceiling. Since prefork runs one task per
+# process at a time, each process only ever needs a small handful of
+# connections (its own session, plus the two internal SessionLocal() calls
+# in generation_service.py's search_curriculum_context /
+# _get_topics_for_chapter) — 3 + 2 = 5 total is comfortable headroom without
+# every process hoarding 15. DATABASE_URL itself also switched to Neon's
+# `-pooler` (PgBouncer transaction-mode) endpoint (backend/.env) so the
+# N-processes-multiply-connections problem is absorbed there too, not just
+# by shrinking these numbers.
 engine = create_engine(
     DATABASE_URL,
     connect_args={"sslmode": "require"},
     pool_pre_ping=True,
     pool_recycle=300,
-    pool_size=5,
-    max_overflow=10
+    pool_size=3,
+    max_overflow=2
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Step 2.4 (DEPLOYMENT_PLAN.md, R6): under -P prefork every worker start
+# forks this module's already-imported `engine`, and each child inherits the
+# PARENT's live, already-open connections — reusing that same underlying
+# socket from multiple processes at once corrupts whichever query loses the
+# race. worker_process_init fires once per forked child, before it picks up
+# any task, so disposing here forces each child to open its own fresh
+# connections instead of reusing the parent's. This import only matters
+# inside an actual Celery worker process (the signal is emitted by Celery's
+# own worker bootstrap) — celery is already a dependency of this whole
+# image, so importing it here is harmless when FastAPI's uvicorn process
+# loads this same module; the handler below simply never fires there.
+from celery.signals import worker_process_init
+
+
+@worker_process_init.connect
+def _dispose_engine_after_fork(**kwargs):
+    engine.dispose()
+    print(f"[worker_process_init] engine.dispose() ran in pid {os.getpid()}")
 
 # Dependency injected into every FastAPI endpoint that needs a DB session
 def get_db():

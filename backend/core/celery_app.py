@@ -6,9 +6,16 @@
 # make long-running, retry-safe task execution actually safe.
 #
 # CLI usage (from /app inside the backend container):
-#   celery -A core.celery_app worker --loglevel=info -Q generation,ingestion
+#   celery -A core.celery_app worker --loglevel=info -Q generation,ingestion --concurrency=4
 #   celery -A core.celery_app inspect ping
 #   celery -A core.celery_app inspect conf
+#
+# Pool: prefork (Celery's default — no -P flag needed). NOT gevent: Step 2.1
+# found soft_time_limit/time_limit are silently unenforced under gevent
+# (confirmed against Celery's own docs, reproduced live against this exact
+# worker — see DEPLOYMENT_PLAN.md §4.1's "why prefork" note). --pool=solo
+# ALSO does not enforce time limits — solo has no separate child process to
+# signal. Only prefork actually kills a task that overruns its limit.
 
 import os
 
@@ -21,6 +28,20 @@ from dotenv import load_dotenv
 # put a .env file on disk), but makes this module independently correct if
 # ever run outside Docker.
 load_dotenv()
+
+# Step 2.4 (DEPLOYMENT_PLAN.md, R6): required, not incidental. Importing
+# core.config here is what registers its worker_process_init handler
+# (engine.dispose() after every fork) BEFORE Celery forks any worker child —
+# `celery -A core.celery_app worker` imports THIS module first, so whatever
+# this module imports is guaranteed loaded pre-fork. Without this explicit
+# import, nothing forces core.config to load at all until Phase 3's task
+# modules (backend/tasks/) exist and happen to import it themselves — until
+# then the R6 fix is silently dead code, registered nowhere. Verified this
+# the hard way: it briefly worked only because a since-removed verification
+# task happened to import core.config as a side effect; removing that task
+# also removed the only thing loading this module, and the fix silently
+# stopped running with no error anywhere.
+import core.config  # noqa: F401 — imported for its side effect (signal registration), not used directly here
 
 # ── BROKER / BACKEND ──────────────────────────────────────────────────────────
 # Same Redis instance (Step 1.1/1.2), different logical DBs, so queue keys and
@@ -62,11 +83,34 @@ app = Celery(
 #             soft_time_limit=GENERATION_SOFT_TIME_LIMIT)
 #
 # Values match Step 2.1 exactly, decided once here so Step 2.1 becomes a
-# verification pass rather than a second round of picking numbers.
+# verification pass rather than a second round of picking numbers. Step 2.1
+# confirmed: both pairs sit comfortably under the 14400s visibility timeout
+# above (R3) — the widest gap, ingestion's 4200s hard limit vs. the 14400s
+# redelivery window, is 10200s, so a task always finishes (success or its
+# own timeout) long before Redis could ever mistake a live worker for a dead
+# one. Soft/hard gap is 300s (generation) and 600s (ingestion) — Celery's
+# own guidance is >=300s so a caught SoftTimeLimitExceeded has time to run
+# job_service.mark_failed() before the hard SIGKILL.
 GENERATION_TIME_LIMIT = 1200        # hard limit, seconds (20 min)
 GENERATION_SOFT_TIME_LIMIT = 900    # soft limit, seconds (15 min)
 INGESTION_TIME_LIMIT = 4200         # hard limit, seconds (70 min)
 INGESTION_SOFT_TIME_LIMIT = 3600    # soft limit, seconds (60 min)
+
+# Phase 3 task-authoring note, from Step 2.1's live verification: when
+# SoftTimeLimitExceeded interrupts a DB call in progress (not just a plain
+# sleep), the SQLAlchemy session is left in a failed-transaction state —
+# the next query on that same session raises PendingRollbackError, silently
+# swallowing the real failure. Every task's except SoftTimeLimitExceeded
+# handler must call `db.rollback()` BEFORE calling job_service.mark_failed()
+# on that same session:
+#
+#   try:
+#       job_service.mark_processing(db, job_id, task_id=self.request.id)
+#       ...
+#   except SoftTimeLimitExceeded:
+#       db.rollback()
+#       job_service.mark_failed(db, job_id, "Task exceeded soft time limit")
+#       raise
 
 # ── APP CONFIGURATION ──────────────────────────────────────────────────────────
 app.conf.update(
@@ -105,7 +149,7 @@ app.conf.update(
     task_time_limit=INGESTION_TIME_LIMIT,
     task_soft_time_limit=INGESTION_SOFT_TIME_LIMIT,
 
-    # §4.1 — two queues, both gevent, both I/O-bound. No "rendering" queue:
+    # §4.1 — two queues, both prefork, both I/O-bound. No "rendering" queue:
     # PDF export stays synchronous in the web tier (DEPLOYMENT_PLAN.md §4.4).
     # Patterns match task names Phase 3 will create under backend/tasks/;
     # fnmatch-style globs are natively supported here (unlike

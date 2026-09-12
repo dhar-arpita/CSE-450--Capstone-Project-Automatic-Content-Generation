@@ -93,25 +93,33 @@ dedicated queue. Full reasoning in §4.1; the endpoint itself is untouched (§4.
 These were verified against current library documentation and the actual code in this repo.
 Each one silently breaks the architecture if not handled.
 
-### R1 — `psycopg2` cannot be monkey-patched by gevent 🔴 Critical
+### ~~R1 — `psycopg2` cannot be monkey-patched by gevent~~ 🔴 Critical — **Resolved: pool switched to prefork**
 
-The strategy prescribes `-P gevent -c 12`. gevent achieves concurrency by monkey-patching
-Python's socket module. **`psycopg2` is a C extension and is invisible to that patch.** Every
-database call inside a gevent worker blocks the *entire* event loop, so all 12 greenlets stall
-behind one query and concurrency collapses toward 1.
+~~The strategy prescribes `-P gevent -c 12`. gevent achieves concurrency by monkey-patching
+Python's socket module. `psycopg2` is a C extension and is invisible to that patch. Every
+database call inside a gevent worker blocks the entire event loop, so all 12 greenlets stall
+behind one query and concurrency collapses toward 1. The fix is `psycogreen`...~~
 
-The fix is `psycogreen`, which registers a wait callback that lets psycopg2 yield to the gevent
-scheduler during libpq calls. This must be installed **before** the engine is created, in the
-Celery worker bootstrap. Handled in **Step 2.3**.
+**Superseded by Step 2.1's live verification**, which found a separate, more fundamental problem
+with gevent: Celery's `soft_time_limit`/`time_limit` — the mechanism R3's "a stuck job is marked
+`FAILED`, not left `PROCESSING` forever" guarantee depends on — is silently a **no-op** under
+gevent (confirmed against Celery's own docs, and reproduced live: a task with
+`soft_time_limit=2` ran a 10-second sleep to completion, uninterrupted). That alone was reason
+enough to drop gevent as the worker pool entirely (see §4.1's "why prefork" note). Under
+`-P prefork`, each worker is a real OS process with its own socket — there is no shared event
+loop for `psycopg2` (or anything else) to block, so R1 cannot fire by construction. `psycogreen`
+and the gevent bootstrap (former Steps 2.2/2.3) are removed as dead weight.
 
-### R2 — `grpcio` in the dependency tree is not gevent-safe 🟠 High
+### ~~R2 — `grpcio` in the dependency tree is not gevent-safe~~ 🟠 High — **Moot under prefork**
 
-`requirements.txt` pins `google-generativeai==0.8.6`, `google-ai-generativelanguage==0.6.15`
-and `grpcio==1.78.0`. The application actually uses the **new** `google-genai` SDK
-(`from google import genai` in [core/config.py:8](backend/core/config.py#L8)), which uses
-**httpx** — and httpx *is* gevent-patchable. The legacy gRPC-based packages appear to be dead
-weight, but gRPC's C core does not cooperate with gevent. Remove them so the risk cannot
-resurface. Handled in **Step 2.2**.
+~~`requirements.txt` pins `google-generativeai==0.8.6`, `google-ai-generativelanguage==0.6.15`
+and `grpcio==1.78.0`... gRPC's C core does not cooperate with gevent...~~
+
+**Moot.** This risk existed only because gevent's monkey-patching requires every network client
+in the worker path to cooperate with it. Prefork forks real OS processes and monkey-patches
+nothing, so a non-cooperative client is irrelevant to it. The legacy packages were still correct
+to remove in Step 1.3 (genuine dead weight — the app uses `google-genai`/httpx, not these), just
+no longer for a gevent-safety reason.
 
 ### R3 — Redis `visibility_timeout` will duplicate long tasks 🔴 Critical
 
@@ -138,23 +146,27 @@ Handled in **Step 4.2**.
 ### R5 — SQLAlchemy connection pool is undersized as concurrency climbs 🟠 High
 
 The engine is `pool_size=5, max_overflow=10` → 15 connections
-([core/config.py:110](backend/core/config.py#L110)). Under gevent all 12 greenlets share **one
-process's pool**. The pipeline also opens *additional* sessions internally — `search_curriculum_context`
-and `_get_topics_for_chapter` each call `SessionLocal()` directly
-([generation_service.py:294](backend/services/generation_service.py#L294),
-[:404](backend/services/generation_service.py#L404)). Twelve concurrent tasks will exhaust the
-pool and start timing out. Requires pool re-sizing plus Neon's pooled (`-pooler`, PgBouncer
-transaction-mode) endpoint. Handled in **Step 2.4**.
+([core/config.py:110](backend/core/config.py#L110)). Under `-P prefork` (§4.1) this risk
+actually shifts shape rather than disappearing: each forked worker process gets its **own**
+copy of the pool, so N processes can open up to N×15 connections in aggregate — not 15 shared
+across all concurrency the way a single-process pool would be. The pipeline also opens
+*additional* sessions internally — `search_curriculum_context` and `_get_topics_for_chapter`
+each call `SessionLocal()` directly ([generation_service.py:294](backend/services/generation_service.py#L294),
+[:404](backend/services/generation_service.py#L404)). At real concurrency this can exceed
+Neon's connection limit rather than exhaust one process's pool. Requires pool re-sizing (smaller
+per-process `pool_size` now that N processes each hold one) plus Neon's pooled (`-pooler`,
+PgBouncer transaction-mode) endpoint, which absorbs exactly this N-processes-multiply-connections
+problem. Handled in **Step 2.4**.
 
-### R6 — Forked workers inherit a poisoned connection pool 🟡 Medium
+### R6 — Forked workers inherit a poisoned connection pool 🟠 High
 
-Under `-P prefork`, if the SQLAlchemy engine is created before the fork, child processes inherit
-**live socket file descriptors** and will corrupt each other's connections.
-
-Both queues in this deployment are gevent (§4.1), so nothing forks and this does not fire in
-normal operation — hence Medium rather than High. It stays in the register because **prefork is
-Celery's default pool**: anyone who starts a worker without `-P gevent` gets it silently. The
-guard is one line, so keep it as cheap insurance. Handled in **Step 2.4**.
+Under `-P prefork` — this deployment's actual pool (Step 2.1), not a hypothetical
+misconfiguration anyone could stumble into — if the SQLAlchemy engine is created before the
+fork, child processes inherit **live socket file descriptors** and will corrupt each other's
+connections. This now fires on **every worker start**, not just if someone forgets a flag.
+Requires a `worker_process_init` handler calling `engine.dispose()` so each forked child builds
+its own fresh connections rather than reusing the parent's. No longer optional insurance —
+required correctness. Handled in **Step 2.4**.
 
 ### R7 — Redis eviction can silently delete queued tasks 🟠 High
 
@@ -184,13 +196,18 @@ one-shot init container/job. Handled in **Step 1.5**.
 
 Handled in **Steps 1.5, 1.6 and 4.1**.
 
-### R10 — Gemini backoff behaves differently per pool 🟢 Low (document only)
+### ~~R10 — Gemini backoff behaves differently per pool~~ 🟢 Low — **Moot under prefork**
 
-`generate_with_backoff` uses `time.sleep` for up to ~105 s
-([core/config.py:76](backend/core/config.py#L76)). Under gevent this is monkey-patched and
-yields correctly, so both queues are safe as configured. It becomes a real problem the moment
-anyone switches pools: under prefork or `-P threads` (the Step 5.7 fallback drill), a task that
-hits a 429 blocks a whole process or thread for up to 105 s. Note it in the fallback procedure.
+~~`generate_with_backoff` uses `time.sleep` for up to ~105s... Under gevent this is
+monkey-patched and yields correctly... becomes a real problem the moment anyone switches
+pools...~~
+
+**Moot, and actually simpler under prefork than the gevent framing implied.** This risk only
+existed because gevent's cooperative model means an unpatched blocking call stalls *every*
+greenlet sharing that one process. Under `-P prefork`, each worker is an independent OS
+process — `time.sleep` inside `generate_with_backoff` blocks only that one process's single
+in-flight task while it waits out a 429, exactly as intended, and every sibling process keeps
+working normally. No monkey-patching, no cooperation required, nothing to verify.
 
 ### R11 — Gemini API quota, not the worker pool, is the concurrency ceiling 🔴 Critical
 
@@ -251,7 +268,7 @@ Handled by **Step 5.0** (quota decision — a hard prerequisite for load testing
                    ▼                               ▼           │
         ┌─────────────────────┐       ┌─────────────────────┐  │
         │     generation      │       │      ingestion      │  │
-        │    gevent c=3→N     │       │    gevent c=2→4     │  │
+        │   prefork c=3→N     │       │   prefork c=2→4     │  │
         │ worksheet · note    │       │ PDF → OCR →         │  │
         │ quiz · refine       │       │ topics → embeddings │  │
         │ seed · chat-quiz    │       │                     │  │
@@ -264,20 +281,37 @@ Handled by **Step 5.0** (quota decision — a hard prerequisite for load testing
    in the FastAPI threadpool, unchanged from today (§4.4).
 ```
 
-### 4.1 Two queues — but not the two the strategy specified
+### 4.1 Two queues — but not the two the strategy specified, and not on the pool it specified either
 
 The strategy specifies `generation` (gevent, I/O-bound) and `rendering` (prefork, CPU-bound).
-This plan keeps two queues but **swaps `rendering` for `ingestion`**:
+This plan keeps two queues but **swaps `rendering` for `ingestion`** (§4.4) — and, a second and
+later deviation, runs **both** queues on `-P prefork`, not gevent:
 
 | Queue | Pool | Start → target | Workload | Why separate |
 |---|---|---|---|---|
-| `generation` | gevent | **3 → measured** | worksheet, study-note, quiz, refine, seed, chat-quiz | I/O-bound; 2–10 min. **Do not start at 12.** The ceiling is set by the Gemini quota, not the pool (R11) — climb the Step 5.3 ladder and let the data pick the number. |
-| `ingestion` | gevent | **2 → 4** | PDF → OCR → topics → embeddings | 10–40 min. Sharing the generation queue lets one textbook upload occupy generation slots for half an hour. Kept low because each job fires hundreds of sequential API calls. |
+| `generation` | prefork | **3 → measured** | worksheet, study-note, quiz, refine, seed, chat-quiz | I/O-bound; 2–10 min. **Do not start at 12.** The ceiling is set by the Gemini quota, not the pool (R11) — climb the Step 5.3 ladder and let the data pick the number. |
+| `ingestion` | prefork | **2 → 4** | PDF → OCR → topics → embeddings | 10–40 min. Sharing the generation queue lets one textbook upload occupy generation slots for half an hour. Kept low because each job fires hundreds of sequential API calls. |
 
 > **Why "start → measured" rather than a fixed number:** the approved strategy's own scaling
 > ladder puts *tuning* concurrency at rung 1. Starting at 12 and hoping is not tuning — it is
 > guessing, and R11 shows the guess is wrong for the free tier. Starting at 3 and climbing is
 > what the strategy actually asks for, and each rung isolates one failure mode (Step 5.3).
+
+> **Why prefork, not gevent — must be stated, not silently absorbed.** A reviewer holding the
+> approved strategy will look for `-P gevent`. The defensible answer is mechanism-backed, not a
+> preference: Step 2.1's live verification found that Celery's `soft_time_limit`/`time_limit` —
+> the exact mechanism R3's "a stuck job is marked `FAILED`, not left `PROCESSING` forever"
+> guarantee depends on — is **silently disabled under gevent** (confirmed against Celery's own
+> documentation, and reproduced live: a task decorated with `soft_time_limit=2` ran a 10-second
+> `sleep()` to completion, uninterrupted, as if no limit existed at all). Only `-P prefork`
+> actually enforces both limits, because it is the only pool where the worker's parent process
+> manages real, independently-signalable OS child processes rather than cooperatively-scheduled
+> greenlets in one shared process. *"gevent's concurrency model is incompatible with the
+> task-timeout enforcement this plan relies on to guarantee a job is never left stuck; we moved
+> to prefork — Celery's own default pool — and re-derived VM and connection-pool sizing
+> accordingly (Step 1.9, R5, R6)."* This single finding also **removes R1 and R2** entirely
+> (gevent-specific monkey-patching risks) and the former Steps 2.2/2.3 (gevent bootstrap +
+> safety audit) — there is nothing left for either to guard against.
 
 #### Why `ingestion` was added
 
@@ -425,7 +459,7 @@ The single most important phase for merge safety. Nothing else starts until this
 |---|---|---|---|
 | **1.1** | `docker-compose.yml` | Add a `redis:7-alpine` service. Keep the existing dev bind-mounts and `--reload`. | `docker compose up redis` → `redis-cli ping` returns `PONG`. |
 | **1.2** | `docker-compose.yml`, `ops/redis.conf` (new) | Configure Redis as a **broker**, not a cache: `appendonly yes`, **`maxmemory-policy noeviction`** (R7), `requirepass`. Do not expose 6379 outside the compose network. | `redis-cli CONFIG GET maxmemory-policy` → `noeviction`. Port 6379 is not reachable from the host. |
-| **1.3** | `backend/requirements.txt` | Add `celery[redis]==5.6.3`, `gevent`, `psycogreen`, `flower`. Remove `google-generativeai`, `google-ai-generativelanguage`, `grpcio`, `grpcio-status` (R2). Reconcile the two duplicate `cryptography` pins (`46.0.5` and `41.0.7` both appear). | `docker compose build backend` succeeds; `python -c "import google.genai"` still works; `pip list \| grep grpcio` is empty. |
+| **1.3** | `backend/requirements.txt` | ~~Add `celery[redis]==5.6.3`, `gevent`, `psycogreen`, `flower`.~~ **`gevent`/`psycogreen` later removed — see Step 2.1's pool decision (§4.1).** Add `celery[redis]==5.6.3`, `flower`. Remove `google-generativeai`, `google-ai-generativelanguage`, `grpcio`, `grpcio-status` (R2). Reconcile the two duplicate `cryptography` pins (`46.0.5` and `41.0.7` both appear). | `docker compose build backend` succeeds; `python -c "import google.genai"` still works; `pip list \| grep grpcio` is empty. |
 | **1.4** | `backend/core/celery_app.py` (new) | Create the Celery application: broker/backend URLs from env, `task_ignore_result=True` (PostgreSQL is the source of truth for status, not the Redis result backend), `task_acks_late=True`, `worker_prefetch_multiplier=1`, **`broker_transport_options={"visibility_timeout": 14400}`** (R3), `task_routes` mapping each task to `generation` or `ingestion` (§4.1 — there is no `rendering` queue), and `task_time_limit` / `task_soft_time_limit` per queue. | `celery -A core.celery_app inspect ping` responds. `celery -A core.celery_app inspect registered` lists the routes. |
 | **1.5** | `backend/main.py`, `ops/init_db.py` (new) | Move `Base.metadata.create_all()` + `init_vector_db()` out of `lifespan` into a one-shot init script run as a compose `init` service (R8). Make CORS origins env-driven (`CORS_ORIGINS`) and drop `allow_origins=["*"]` alongside `allow_credentials=True` (R9). | Two backend replicas start concurrently with no DDL race. Browser preflight succeeds from the configured origin only. |
 | **1.6** | `backend/core/config.py`, `.env.example` (new) | Make `SECRET_KEY` **required** — raise at startup if unset (R9), matching how `DATABASE_URL` is already handled. Add `REDIS_URL`, `CORS_ORIGINS`, `CELERY_*` settings. Commit `.env.example` with placeholder values (`.env` itself stays gitignored). | Backend refuses to boot with `SECRET_KEY` unset. `.env.example` documents every required variable. |
@@ -436,7 +470,7 @@ The single most important phase for merge safety. Nothing else starts until this
 
 | Step | Owner | Files | Description | Done when |
 |---|---|---|---|---|
-| **1.9** | B or C | `ops/azure-setup.md` (new) | Provision the Azure VM (**B2ms or D2s_v3** — 2 vCPU / 8 GB; both queues are gevent and I/O-bound, so vCPU count is not the worker constraint — the CPU headroom is for synchronous WeasyPrint renders in the web tier, §4.4). NSG: 80/443 open, 22 restricted to team IPs, **6379 and 8000 never exposed**. Use the Azure DNS label (`<name>.<region>.cloudapp.azure.com`) so Let's Encrypt can issue a certificate. Install Docker + Compose. Document the secrets procedure for `.env` on the VM (root-owned, `chmod 600`). | `ssh` into the VM works; `docker run hello-world` succeeds; the DNS label resolves. |
+| **1.9** | B or C | `ops/azure-setup.md` (new) | Provision the Azure VM (**B2ms or D2s_v3** — 2 vCPU / 8 GB. Both queues run `-P prefork` (§4.1) — unlike gevent, prefork concurrency consumes real OS processes, so vCPU count **is** now a genuine constraint on worker concurrency, on top of the CPU headroom needed for synchronous WeasyPrint renders in the web tier, §4.4. Our workload is still I/O-bound and tolerates some oversubscription, but re-check this sizing against Step 5.3's measured concurrency before committing to a tier). NSG: 80/443 open, 22 restricted to team IPs, **6379 and 8000 never exposed**. Use the Azure DNS label (`<name>.<region>.cloudapp.azure.com`) so Let's Encrypt can issue a certificate. Install Docker + Compose. Document the secrets procedure for `.env` on the VM (root-owned, `chmod 600`). | `ssh` into the VM works; `docker run hello-world` succeeds; the DNS label resolves. |
 
 > **Why this moved out of Phase 5 and up to Phase 1:** Step 1.9 has **zero code dependency**. It
 > is student-credit activation, VM creation, networking and DNS — all long-lead items where
@@ -449,15 +483,17 @@ The single most important phase for merge safety. Nothing else starts until this
 
 ### Phase 2 — Worker runtime hardening (Member A)
 
-These four steps are where R1, R5 and R6 are actually neutralised. Skipping them produces a
-system that *looks* correct at concurrency 1 and falls apart at concurrency 12.
+These steps are where R5 and R6 are actually neutralised. Skipping them produces a system that
+*looks* correct at concurrency 1 and falls apart at real concurrency. (Originally four steps;
+2.2 and 2.3 were removed once Step 2.1's own verification eliminated the gevent-specific risks
+— R1, R2 — they existed to guard against. See §4.1's "why prefork" note.)
 
 | Step | Files | Description | Done when |
 |---|---|---|---|
-| **2.1** | `backend/core/celery_app.py` | Configure per-queue time limits: `generation` soft 900 s / hard 1200 s; `ingestion` soft 3600 s / hard 4200 s. Both comfortably under the 14400 s visibility timeout from Step 1.4. | A task that sleeps past its soft limit raises `SoftTimeLimitExceeded` and the job row is marked `FAILED`, not left `PROCESSING` forever. |
-| **2.2** | `backend/core/gevent_bootstrap.py` (new), `backend/Dockerfile` | gevent monkey-patching must happen **before any other import**. Create a bootstrap module that calls `gevent.monkey.patch_all()` then `psycogreen.gevent.patch_psycopg()` (R1), and load it via the worker entrypoint. | `python -c "from gevent import monkey; print(monkey.is_module_patched('socket'))"` → `True` in the worker container. |
-| **2.3** | `backend/core/celery_app.py` | **gevent safety audit.** Confirm every network client in the worker path is patchable, and document the result: `google-genai` → httpx ✅ · `qdrant-client` → httpx ✅ (assert `prefer_grpc=False`, the default) · `mistralai` → httpx ✅ · `requests` (video search) ✅ · `pdf2image`/poppler (sample-style rasterise) → CPU + subprocess, brief, `generation` queue ⚠️ measure · `weasyprint` → never runs in a worker at all (web tier only, §4.4) ✅ · `psycopg2` → handled by 2.2 ✅ · `grpcio` → removed in 1.3 ✅ | A written audit table lives in `docs/GEVENT_AUDIT.md`. This is the evidence for the strategy's own gevent caveat. |
-| **2.4** | `backend/core/config.py` | Fix the pool for concurrency (R5): raise `pool_size`/`max_overflow` for worker processes, switch `DATABASE_URL` to Neon's **`-pooler`** (PgBouncer transaction-mode) endpoint, keep `pool_pre_ping=True` (correct for Neon's auto-suspend). Register a `worker_process_init` handler calling `engine.dispose()` (R6) — both queues are gevent so nothing forks today, but prefork is Celery's default pool and this is one line of insurance against a worker started without `-P gevent`. | Six concurrent generation tasks run with zero `QueuePool limit ... overflow` errors in the logs — then re-verified at every rung of the Step 5.3 ladder. |
+| **2.1** | `backend/core/celery_app.py` | Configure per-queue time limits: `generation` soft 900 s / hard 1200 s; `ingestion` soft 3600 s / hard 4200 s. Both comfortably under the 14400 s visibility timeout from Step 1.4. **Live-verified this requires `-P prefork`** — a `-P solo` (and, per Celery's own docs, a `-P gevent`) worker silently does not enforce either limit at all; a task with `soft_time_limit=2` ran a 10s sleep to completion uninterrupted under both. Pool switched to prefork as a result (§4.1). | A task that sleeps past its soft limit raises `SoftTimeLimitExceeded` and the job row is marked `FAILED`, not left `PROCESSING` forever — proven under a real `-P prefork` worker. |
+| ~~**2.2**~~ | — | ~~gevent monkey-patching bootstrap (`gevent.monkey.patch_all()` + `psycogreen.gevent.patch_psycopg()`).~~ **Removed — see §4.1.** Prefork forks real OS processes; there is nothing to monkey-patch. Number retained so later step references stay stable. | n/a |
+| ~~**2.3**~~ | — | ~~gevent safety audit (`docs/GEVENT_AUDIT.md`) — per-client cooperative-patchability review.~~ **Removed — same reason as 2.2.** Prefork's process isolation makes cooperative-patchability irrelevant; the one client concern that was gevent-specific (`grpcio`, R2) is moot too. Number retained so later step references stay stable. | n/a |
+| **2.4** | `backend/core/config.py` | Fix the pool for concurrency (R5): **lower** `pool_size`/`max_overflow` per worker process now that each forked process holds its own copy (not one pool shared by all concurrency), switch `DATABASE_URL` to Neon's **`-pooler`** (PgBouncer transaction-mode) endpoint, keep `pool_pre_ping=True` (correct for Neon's auto-suspend). Register a `worker_process_init` handler calling `engine.dispose()` (R6) — prefork (§4.1) forks on **every** worker start now, so every child inherits the parent's live connections unless this runs. No longer optional insurance — required correctness. | Six concurrent generation tasks run with zero `QueuePool limit ... overflow` errors **and** zero forked-connection corruption errors in the logs — then re-verified at every rung of the Step 5.3 ladder. |
 
 > **Transaction-mode note:** PgBouncer in transaction mode disallows session-level features
 > (`SET`, `LISTEN/NOTIFY`, server-side `PREPARE`). `psycopg2` does not use server-side prepared
@@ -474,7 +510,7 @@ roughly day 2 (§8.3). B therefore builds against **real** `celery_app`, `Genera
 
 | Step | Files | Description | Done when |
 |---|---|---|---|
-| **3.1** | `backend/tasks/__init__.py`, `backend/tasks/generation_tasks.py` (new) | Wrap `generate_worksheet`, `generate_study_note`, `generate_quiz`, the refine pipeline and `run_seed_pipeline` as Celery tasks. **The task is a thin wrapper — do not modify `generation_service.py`.** Each task: opens its own session, `mark_processing()`, calls the existing service function, `mark_success()` / `mark_failed()`, and reports `set_stage()` between agents. | `generate_worksheet_task.delay(job_id)` from a Python shell produces a completed row. `services/generation_service.py` shows **zero** diff. |
+| **3.1** | `backend/tasks/__init__.py`, `backend/tasks/generation_tasks.py` (new) | Wrap `generate_worksheet`, `generate_study_note`, `generate_quiz`, the refine pipeline and `run_seed_pipeline` as Celery tasks. **The task is a thin wrapper — do not modify `generation_service.py`.** Each task: opens its own session, `mark_processing()`, calls the existing service function, `mark_success()` / `mark_failed()`, and reports `set_stage()` between agents. **`except SoftTimeLimitExceeded` must call `db.rollback()` before `job_service.mark_failed()` on that same session** — Step 2.1's live verification found the interrupt can land mid-flush, leaving the session in a failed-transaction state (`PendingRollbackError` on the next query otherwise); see the pattern documented in `celery_app.py`. | `generate_worksheet_task.delay(job_id)` from a Python shell produces a completed row. `services/generation_service.py` shows **zero** diff. |
 | **3.2** | `backend/tasks/generation_tasks.py` | **Idempotency guard** (R3): each task first re-reads its job row and returns immediately if the status is already `SUCCESS`. A redelivered message must be a no-op, not a second pipeline run. | Calling the same task twice with one `job_id` produces one content row. |
 | **3.3** | `backend/tasks/ingestion_tasks.py` (new) | Convert `run_ingestion_pipeline` from `BackgroundTasks` to a Celery task on the `ingestion` queue. Keep the existing `IngestionJob` status writes — do **not** merge the two job tables in this migration; that is a separate refactor. Add retry on transient Mistral/Gemini failures with `autoretry_for` + exponential backoff. | Killing the web container mid-ingestion no longer loses the job — the worker carries on. |
 | ~~**3.4**~~ | — | ~~`render_pdf_task` on a `rendering` queue.~~ **Removed by decision — see §4.4.** PDF export stays synchronous and unchanged. Number retained so later step references stay stable. | n/a |
@@ -522,7 +558,6 @@ Steps 4.1–4.4 need only the frozen contract, so C starts in parallel with B on
    ─────────────────────────────── hand off VM, A stops changing things
 5.3  C   concurrency ladder        ← the headline evidence
 5.4  C   Tier-B chat measurement
-5.7  B   gevent fallback drill
 5.6  All replica decision          ← uses 5.3's numbers
 5.8  C   runbook                   ← written by a non-deployer, on purpose
 ```
@@ -534,7 +569,7 @@ Steps 4.1–4.4 need only the frozen contract, so C starts in parallel with B on
 | **5.5** | A | `docker-compose.prod.yml` | Add **Flower** behind Caddy basic-auth for queue visibility (depth, active tasks, failure counts). Needed *before* 5.3 — the ladder is much harder to interpret without queue introspection. | Flower shows the three queues and live task counts. |
 | **5.3** | C | `loadtest/` (new) | **The concurrency ladder — the headline evidence for the supervisory review.** Climb the rungs below with Locust or k6, recording p50/p95 completion, error rate, `QueuePool` errors and 429 count at each. Stop at the rung where the quota from 5.0 binds. **Also time one PDF download** (worksheet and a diagram-heavy study note) — a one-off measurement, not part of the ladder. It is the number that justifies dropping the strategy's `rendering` queue (§4.1), and it flags the §4.4 disk-cache option if renders exceed ~3 s. | A results table, one row per rung, with the chosen production concurrency justified by the data — plus a single recorded PDF render time. |
 | **5.4** | C | `loadtest/` | Measure Tier-B chat latency under load (§2.2). If p95 > 20 s, open a follow-up to add an `interactive` queue; if not, record the measurement as the justification for leaving those endpoints synchronous. | A documented decision backed by numbers. |
-| **5.7** | B | `backend/tasks/` | **gevent fallback drill.** Deliberately run the generation queue with `-P threads -c 8` and confirm the system still works, per the strategy's own caveat. | A fallback procedure that has actually been executed once, not merely written down. |
+| ~~**5.7**~~ | — | — | ~~gevent fallback drill — deliberately run the generation queue with `-P threads -c 8`, per the strategy's own gevent caveat.~~ **Removed.** Existed only because the approved strategy caveated gevent's reliability; moot once prefork became the primary pool (§4.1) — there is no gevent to have a fallback *from*. Number retained so later step references stay stable. | n/a |
 | **5.6** | All | `docker-compose.prod.yml` | **Scaling ladder rung 3.** Only now, and only if 5.3 showed the knee was reached *for a reason other than the API quota*, add generation worker replicas. Note that if the ceiling turned out to be Gemini's quota, **more replicas cannot help** — that is a finding, not a failure. | Either replicas added with a before/after measurement, or a written "not required — we are quota-bound, not worker-bound" conclusion. |
 | **5.8** | C (non-deployer) | `docs/RUNBOOK.md` (new) | Operational runbook: deploy, rollback, restart a stuck queue, drain workers before deploy, purge a poisoned queue, read logs, rotate secrets. | **Validated by re-execution:** C performs a rollback drill on the live VM using only the runbook. A runbook its own author can follow proves nothing; one a second person can follow is the deliverable. |
 
@@ -545,17 +580,19 @@ Each rung isolates **one** failure mode, so a failure tells you exactly which ri
 | Rung | Config | Proves | Failure signature |
 |---|---|---|---|
 | 0 | `-P solo` | Task logic works at all | Job row never leaves `PROCESSING` |
-| 1 | `-P gevent -c 3` | **gevent + psycopg2 (R1)** | See the diagnostic below |
-| 2 | `-P gevent -c 6` | Pool sizing (R5/R6) | `QueuePool limit ... overflow` in worker logs |
-| 3 | `-P gevent -c 12` | Whether the quota ceiling (R11) is reached | 429 storm; completion time flat or *worse* than rung 2 |
+| 1 | `-P prefork -c 3` | **Forked workers get clean connections (R6)** | See the diagnostic below |
+| 2 | `-P prefork -c 6` | Pool sizing (R5) | `QueuePool limit ... overflow` in worker logs |
+| 3 | `-P prefork -c 12` | Whether the quota ceiling (R11) is reached | 429 storm; completion time flat or *worse* than rung 2 |
 | 4 | `-c 20` | Where the knee actually is | Non-linear degradation in p95 |
 
 > **The rung-1 diagnostic is the highest-value single measurement in this plan.** Run three
-> concurrent generations. If they finish in roughly the **same wall-clock time** as one
-> generation, gevent is working correctly. If they take roughly **3× as long** — i.e. they
-> serialised — then `psycogreen` is not patching `psycopg2`, DB calls are blocking the event
-> loop, and **R1 has fired**. That single cheap test at concurrency 3 catches the plan's biggest
-> risk, which would otherwise only surface as confusing slowness at concurrency 12.
+> concurrent generations immediately after a fresh worker start (three freshly forked child
+> processes). If all three complete cleanly, `worker_process_init`'s `engine.dispose()` (Step
+> 2.4) is correctly giving each forked child its own connections. If any of them throws a
+> `psycopg2` connection error, hangs, or returns data that looks like it crossed sessions —
+> **R6 has fired**: the children inherited the parent's live sockets. That single cheap test at
+> concurrency 3 catches the plan's biggest remaining risk, which would otherwise only surface as
+> confusing corruption at real concurrency.
 
 Do not skip rungs. Jumping straight to 12 conflates R1, R5 and R11 into one indistinguishable
 "it's slow" symptom.
@@ -569,7 +606,7 @@ Do **not** start these until Phase 5 is signed off.
 | Step | Description | Value |
 |---|---|---|
 | **6.1** | **Duplicate-job suppression.** Two students requesting the same worksheet simultaneously run two identical five-minute pipelines. A Redis `SETNX` lock on the normalized cache key would let the second request attach to the first job. | Meaningful cost saving; the key builder already exists in `cache_service.normalize_key`. |
-| **6.2** | **Parallelise the ingestion embedding loop.** `generate_embeddings_for_chunks` embeds chunks strictly one at a time in a Python `for` loop ([embedding_service.py:29](backend/services/embedding_service.py#L29)). Batching or a gevent pool would cut the longest task in the system by a large factor. | This is the single biggest latency win available anywhere in the codebase. |
+| **6.2** | **Parallelise the ingestion embedding loop.** `generate_embeddings_for_chunks` embeds chunks strictly one at a time in a Python `for` loop ([embedding_service.py:29](backend/services/embedding_service.py#L29)). Batching the API calls, or firing several concurrently with a thread pool, would cut the longest task in the system by a large factor. (Not a gevent pool — the worker pool is prefork now, §4.1; this would be `concurrent.futures.ThreadPoolExecutor` or similar, scoped inside the one task, unrelated to the Celery worker's own pool choice.) | This is the single biggest latency win available anywhere in the codebase. |
 | **6.3** | Structured JSON logging with `job_id` correlation, replacing `print()`. | Debugging a distributed system with `print` is painful. |
 | **6.4** | Dead-letter handling: route exhausted-retry tasks to a `failed` queue for inspection. | Prevents silent loss. |
 
@@ -583,8 +620,9 @@ The migration is complete when all of the following hold:
 2. `GET /jobs/{job_id}` reports accurate `status` and `progress_stage` throughout a run.
 3. Killing the **web** container mid-generation does not lose the job.
 4. Killing a **worker** mid-generation results in a retry, not a silent hang (`acks_late` proven).
-5. **Rung 1 of the ladder passes:** three concurrent generations complete in roughly the same
-   wall-clock time as one, proving gevent + `psycogreen` actually work (R1 proven).
+5. **Rung 1 of the ladder passes:** three concurrent generations, freshly forked, complete
+   cleanly with no `psycopg2` connection corruption — proving `worker_process_init`'s
+   `engine.dispose()` actually works (R6 proven).
 6. The full ladder (Step 5.3) has been climbed and the production concurrency is chosen from
    measurements, with the binding constraint named — worker pool, connection pool, or API quota
    (R5/R6/R11). "We are quota-bound at c=4" is a passing result.
@@ -624,7 +662,6 @@ members both need is `requirements.txt`, and Member A owns it — B and C reques
 **Exclusive files:**
 ```
 backend/core/celery_app.py          (new)
-backend/core/gevent_bootstrap.py    (new)
 backend/core/config.py              (modify)
 backend/main.py                     (modify)
 backend/models/db_models.py         (modify — append GenerationJob only)
@@ -827,9 +864,9 @@ Stating this explicitly prevents scope creep:
 
 Technical claims in the risk register were verified against current documentation:
 
-- Celery 5.6.3 (current stable, Python 3.9–3.13, gevent pool supported) — [Celery changelog](https://docs.celeryq.dev/en/stable/changelog.html), [Concurrency with gevent](https://docs.celeryq.dev/en/stable/userguide/concurrency/gevent.html)
+- Celery 5.6.3 (current stable, Python 3.9–3.13) — [Celery changelog](https://docs.celeryq.dev/en/stable/changelog.html)
+- `soft_time_limit`/`time_limit` are enforced only under the `prefork` pool — gevent/eventlet silently disable them (the finding that drove the Step 2.1 pool switch, §4.1), reproduced live against this project's own worker — [Concurrency — Celery docs](https://docs.celeryq.dev/en/latest/userguide/concurrency/index.html), [celery/celery#8395](https://github.com/celery/celery/issues/8395)
 - Redis broker visibility timeout defaults to 1 hour; long tasks are redelivered and re-executed — [Using Redis](https://docs.celeryq.dev/en/stable/getting-started/backends-and-brokers/redis.html), [celery#5935](https://github.com/celery/celery/issues/5935)
-- `psycopg2` is a C extension that cannot be monkey-patched; requires `psycogreen`'s wait callback — [psycogreen README](https://github.com/psycopg/psycogreen/blob/master/README.rst)
 - `google-genai` uses httpx (not gRPC) as its default transport — [Google Gen AI SDK docs](https://googleapis.github.io/python-genai/), [python-genai](https://github.com/googleapis/python-genai)
 - Neon pooled endpoints use PgBouncer in transaction mode via a `-pooler` hostname suffix — [Neon connection pooling](https://neon.com/docs/connect/connection-pooling)
 - Gemini free-tier rate limits (~10 RPM / 1,500 RPD for Flash; Pro removed from free tier) and the paid tier ladder — [Gemini API rate limits by tier](https://www.aifreeapi.com/en/posts/gemini-api-rate-limits-per-tier), [Free tier limits & quotas 2026](https://tinkerllm.com/blog/gemini-api-free-tier-limits-rate-quotas/), [Free tier rate limits by model](https://aipromptshub.co/blog/gemini-api-free-tier-rate-limits)
