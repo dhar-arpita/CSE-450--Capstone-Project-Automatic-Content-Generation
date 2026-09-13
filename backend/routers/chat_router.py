@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from google.genai import types
-from services.generation_service import generate_quiz
+from routers.jobs import dispatch_job
 
 from core.security import get_current_user_from_header  
 from core.config import (
@@ -835,74 +835,21 @@ def chat_quiz_generate(
     if current_user.role != "student":
         return {"questions": [], "message": "Quiz is for students only."}
 
-    student_id = current_user.user_id
-    s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    # tasks.generation_tasks imports this module's helpers, so import it here
+    # rather than at the top to avoid a circular import.
+    from tasks.generation_tasks import generate_chat_quiz_task
 
-    result = generate_quiz(
-        scope=s["scope"],
-        class_name=s["class_name"],
-        subject_name=s["subject_name"],
-        subject_id=s["subject_id"],
-        chapter_name=s["chapter_name"],
-        chapter_id=s["chapter_id"],
-        topic_name=s["topic_name"],
-        topic_id=s["topic_id"],
-        difficulty=req.difficulty,
-        language=req.language,
-        num_questions=5,       # chatbot quiz = 5 ta (static e 10/20/30 thakbe)
-        text_only=True,        # shudhu text proshno — tai 5 ta-i thakbe, kichu baad jabe na
+    # Step 3.9: the full quiz pipeline runs on a worker instead of inside this
+    # chat request. Returns 202 {job_id}; GET /jobs/{job_id} gives
+    # result = {"questions", "session_id"} (plus "message" if nothing was generated).
+    return dispatch_job(
+        db, generate_chat_quiz_task, "chat_quiz", current_user.user_id,
+        {
+            "subject_id": req.subject_id,
+            "chapter_id": req.chapter_id,
+            "topic_id": req.topic_id,
+            "difficulty": req.difficulty,
+            "language": req.language,
+            "session_id": req.session_id,
+        },
     )
-
-    if result.get("error"):
-        return {"questions": [], "session_id": req.session_id, "message": result["error"]}
-
-    quiz = result.get("quiz", {})
-    questions = quiz.get("questions", [])
-
-    session = _get_or_create_session(
-        db, student_id, s["topic_id"], req.session_id,
-        subject_id=s["subject_id"], chapter_id=s["chapter_id"],
-    )
-
-    # প্রতিটা প্রশ্ন আলাদা row হিসেবে save করছি, যাতে content_id দিয়ে
-    # existing hint endpoint (/practice/session/hint) reuse করা যায়।
-    # answer_key তে পুরো data (question_number/options/correct_option/correct_text)
-    # JSON হিসেবে রাখছি, যাতে /history থেকে quiz reconstruct করা যায়।
-    clean_questions = []
-    for q in questions:
-        # #1: chobi-wala proshno baad (chatbot e chobi dekhai na, tai "chobi dekho" lekha
-        #     proshno confusing) — needs_diagram true hole skip
-        if q.get("needs_diagram", False) or q.get("question_format") == "stimulus_based":
-            continue
-        options = q.get("options", [])
-        correct_label = q.get("correct_option")
-        correct_text = next((o["text"] for o in options if o.get("label") == correct_label), "")
-
-        answer_data = {
-            "question_number": q.get("question_number"),
-            "options": options,
-            "correct_option": correct_label,
-            "correct_text": correct_text,
-        }
-
-        content = _save_interaction(
-            db, session, s["topic_id"],
-            content_type="quiz_question",
-            display_body=q.get("question_text", ""),
-            answer_key=json.dumps(answer_data, ensure_ascii=False),
-            difficulty_level=req.difficulty,
-            language=req.language,
-        )
-
-        clean_questions.append({
-            "content_id": content.content_id,   # hint চাইতে লাগবে
-            "question_number": q.get("question_number"),
-            "question_text": q.get("question_text", ""),
-            "options": options,
-            "correct_option": correct_label,
-        })
-
-    return {
-        "questions": clean_questions,
-        "session_id": session.session_id,
-    }

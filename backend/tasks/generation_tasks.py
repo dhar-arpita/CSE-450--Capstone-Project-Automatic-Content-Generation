@@ -7,11 +7,12 @@
 # The pipelines themselves are called exactly as the synchronous endpoints used
 # to call them — services/generation_service.py and agents/ are not modified.
 # Because the agents run inside those service functions, progress_stage is
-# reported around the pipeline call (preparing → generating → saving), not
+# reported around the pipeline call (generating → saving), not
 # between individual agents. Refine is the exception: its steps were written
 # inline in the router, so they now live here and report each stage.
 
 import ast
+import json
 import time
 
 from celery.exceptions import SoftTimeLimitExceeded
@@ -49,10 +50,12 @@ from services.cache_service import (
 from agents.localization_agent import run_localization_agent
 from agents.visual_agent import run_visual_agent
 from agents.compiler_agent import run_compiler_agent
+# Module-level on purpose: a Celery worker only has /app on sys.path while it
+# loads the app, so a lazy import inside a task fails with ModuleNotFoundError.
+from routers.chat_router import _resolve_scope, _get_or_create_session, _save_interaction
 from tasks import uploads
 
 # progress_stage vocabulary written to generation_job.
-STAGE_PREPARING = "preparing"
 STAGE_GENERATING = "generating"
 STAGE_REFINING = "refining"          # refine only
 STAGE_LOCALIZATION = "localization"  # refine only
@@ -508,3 +511,82 @@ def _seed(db, job, user):
 @_generation_task("seed_task")
 def seed_task(self, job_id):
     _run_job(self, job_id, _seed)
+
+
+# ── Chatbot quiz ─────────────────────────────────────────────────────────────
+# Step 3.9. Same work the old POST /chat/quiz/generate did inside the request:
+# run the text-only quiz pipeline, save each question as its own row (so the
+# hint endpoint can find it by content_id), and return the questions. There is
+# no generated_content row for the job itself, so the output goes in `result`.
+
+def _chat_quiz(db, job, user):
+    params = job.params
+    s = _resolve_scope(db, params["subject_id"], params.get("chapter_id"), params.get("topic_id"))
+
+    _stage(db, job.job_id, STAGE_GENERATING)
+    result = generate_quiz(
+        scope=s["scope"],
+        class_name=s["class_name"],
+        subject_name=s["subject_name"],
+        subject_id=s["subject_id"],
+        chapter_name=s["chapter_name"],
+        chapter_id=s["chapter_id"],
+        topic_name=s["topic_name"],
+        topic_id=s["topic_id"],
+        difficulty=params["difficulty"],
+        language=params["language"],
+        num_questions=5,       # chatbot quiz = 5 ta (static e 10/20/30 thakbe)
+        text_only=True,        # shudhu text proshno — tai 5 ta-i thakbe, kichu baad jabe na
+    )
+
+    if result.get("error"):
+        # Not a failed job: the chat shows this message, exactly as before.
+        return None, {"questions": [], "session_id": params.get("session_id"), "message": result["error"]}
+
+    _stage(db, job.job_id, STAGE_SAVING)
+    questions = result.get("quiz", {}).get("questions", [])
+
+    session = _get_or_create_session(
+        db, user.user_id, s["topic_id"], params.get("session_id"),
+        subject_id=s["subject_id"], chapter_id=s["chapter_id"],
+    )
+
+    clean_questions = []
+    for q in questions:
+        # chobi-wala proshno baad (chatbot e chobi dekhai na)
+        if q.get("needs_diagram", False) or q.get("question_format") == "stimulus_based":
+            continue
+        options = q.get("options", [])
+        correct_label = q.get("correct_option")
+        correct_text = next((o["text"] for o in options if o.get("label") == correct_label), "")
+
+        answer_data = {
+            "question_number": q.get("question_number"),
+            "options": options,
+            "correct_option": correct_label,
+            "correct_text": correct_text,
+        }
+
+        content = _save_interaction(
+            db, session, s["topic_id"],
+            content_type="quiz_question",
+            display_body=q.get("question_text", ""),
+            answer_key=json.dumps(answer_data, ensure_ascii=False),
+            difficulty_level=params["difficulty"],
+            language=params["language"],
+        )
+
+        clean_questions.append({
+            "content_id": content.content_id,   # hint চাইতে লাগবে
+            "question_number": q.get("question_number"),
+            "question_text": q.get("question_text", ""),
+            "options": options,
+            "correct_option": correct_label,
+        })
+
+    return None, {"questions": clean_questions, "session_id": session.session_id}
+
+
+@_generation_task("generate_chat_quiz_task")
+def generate_chat_quiz_task(self, job_id):
+    _run_job(self, job_id, _chat_quiz)
