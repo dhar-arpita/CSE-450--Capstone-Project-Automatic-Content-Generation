@@ -107,6 +107,16 @@ def _run_job(task, job_id, body):
     """
     db = SessionLocal()
     try:
+        # Step 3.2 (R3): a redelivered message for a job that already finished
+        # must be a no-op, not a second pipeline run and a second content row.
+        existing = job_service.get_job(db, job_id)
+        if existing is None:
+            print(f"[Task] Job {job_id} not found — ignoring")
+            return
+        if existing.status == "SUCCESS":
+            print(f"[Task] Job {job_id} already SUCCESS — skipping redelivered message")
+            return
+
         job = job_service.mark_processing(db, job_id, task_id=task.request.id)
         user = _requesting_user(db, job)
         content_id, result = body(db, job, user)
