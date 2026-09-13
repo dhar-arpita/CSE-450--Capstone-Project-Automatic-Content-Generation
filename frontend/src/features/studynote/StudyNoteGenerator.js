@@ -1,12 +1,11 @@
 // features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
 import React, { useState } from "react";
-import { generateStudyNote, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
+import { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
 
 const TXT = {
   bangla: {
     generate: "📒 Study Note তৈরি করো",
     generating: "⌛ তৈরি হচ্ছে...",
-    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ খুঁজছি...",
     ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা ডাউনলোড করতে পারো।",
     print: "🖨️ Print",
     download: "📥 PDF ডাউনলোড করো",
@@ -20,7 +19,6 @@ const TXT = {
   english: {
     generate: "📒 Generate Study Note",
     generating: "⌛ Generating...",
-    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ Searching...",
     ready: "📒 Study note ready. Review below — print or download as PDF.",
     print: "🖨️ Print",
     download: "📥 Download PDF",
@@ -37,7 +35,6 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
   const t = TXT[language] || TXT.bangla;
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
-  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false); // 💡 Quick Answer Loading State
   const [error, setError] = useState(false);
   const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
@@ -54,8 +51,9 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     setContentId(null);
 
     try {
-      // refresh=true: Generate always builds fresh (see Quick Answer)
-      const { data } = await generateStudyNote(selectedTopicId, language, true);
+      // Cache first: the backend serves the cached note for this topic when one
+      // exists, and runs the full pipeline only when it does not.
+      const { data } = await generateStudyNote(selectedTopicId, language);
       const html = data?.html || data?.note_html || data?.content || "";
       if (html) {
         setNoteHTML(html);
@@ -108,39 +106,6 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     printWindow.print();
   };
 
-  const handleQuickAnswer = async () => {
-    if (!selectedTopicId) {
-      alert("Please select a Topic from the dropdowns above first!");
-      return;
-    }
-
-    setQuickAnswerLoading(true);
-    setError(false);
-    setNoteHTML("");
-
-    try {
-      const { data } = await quickAnswer({
-        topic_id: selectedTopicId,
-        content_type: "study_note",
-        language: language,
-      });
-      
-      if (data && data.found && data.html) {
-        setNoteHTML(data.html);
-        setContentId(data.content_id);
-        setQuickAnswerLoading(false);
-      } else {
-        console.log("No cache found, calling regular generator...");
-        setQuickAnswerLoading(false);
-        await onGenerate();
-      }
-    } catch (err) {
-      console.error("Quick Answer Error, falling back to general pipeline:", err);
-      setQuickAnswerLoading(false);
-      await onGenerate();
-    }
-  };
-
   return (
     <div>
       {/* Generate Button Row */}
@@ -153,13 +118,6 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
           {loading ? t.generating : t.generate}
         </button>
 
-        <button
-          onClick={handleQuickAnswer}
-          disabled={quickAnswerLoading || !selectedTopicId}
-          style={quickAnswerBtn(quickAnswerLoading || !selectedTopicId)}
-        >
-          {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
-        </button>
       </div>
 
       {/* Error UI with Dynamic Try Again Button */}
@@ -282,19 +240,6 @@ const downloadBtn = (disabled) => ({
   boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)",
   opacity: disabled ? 0.8 : 1,
   transition: "all 0.2s",
-});
-
-const quickAnswerBtn = (disabled) => ({
-  padding: "12px 24px",
-  borderRadius: "12px",
-  border: "none",
-  background: disabled ? "#fef3c7" : "linear-gradient(135deg, #f59e0b, #fbbf24)",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: "13.5px",
-  cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)",
-  transition: "all 0.15s",
 });
 
 const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };
