@@ -264,6 +264,96 @@ def inject_note_header(html: str, header_html: str) -> str:
     return header_html + "\n" + html
 
 
+SELF_CHECK_TOKEN = "[[SELF_CHECK]]"
+
+# (section heading, answers heading) per note language.
+SELF_CHECK_LABELS = {
+    "english": ("Check Yourself", "Answers"),
+    "bangla": ("যাচাই করে দেখি", "উত্তরমালা"),
+}
+
+SELF_CHECK_ANSWER_LINES = 3
+
+
+def build_self_check_section(self_check: list, language: str) -> str:
+    """
+    The Check Yourself section: numbered questions, each followed by ruled lines
+    for the student to write an answer on, then a separate Answers section in the
+    same order. Built here, not by the LLM, so an answer can never sit right
+    under its question. Styles are inline (like the note header) so it looks the
+    same in the preview, the browser print and the WeasyPrint PDF.
+    """
+    items = []
+    for entry in self_check or []:
+        if isinstance(entry, dict):
+            question = str(entry.get("question") or "").strip()
+            answer = str(entry.get("answer") or "").strip()
+        else:
+            question, answer = str(entry).strip(), ""
+        if question:
+            items.append((question, answer))
+    if not items:
+        return ""
+
+    esc = html_lib.escape
+    check_label, answers_label = SELF_CHECK_LABELS.get(
+        (language or "").strip().lower(), SELF_CHECK_LABELS["english"]
+    )
+    fonts = "'Georgia', 'Noto Sans Bengali', 'Kohinoor Bangla', 'Bangla MN', 'Segoe UI', Arial, sans-serif"
+    heading = (
+        f'font-family:{fonts}; font-size:16pt; font-weight:700; color:#1B2437; '
+        f'margin:8mm 0 4mm 0; break-after:avoid; page-break-after:avoid;'
+    )
+    ruled_line = '<div style="border-bottom:1px solid #9AA5B8; height:9mm;"></div>'
+
+    questions = "".join(
+        f'<div class="check-item" style="margin:0 0 5mm 0; break-inside:avoid; page-break-inside:avoid;">'
+        f'<p style="font-family:{fonts}; font-size:12pt; color:#1B2437; margin:0 0 1mm 0;">'
+        f'<strong>{n}.</strong> {esc(question)}</p>'
+        f'{ruled_line * SELF_CHECK_ANSWER_LINES}</div>'
+        for n, (question, _) in enumerate(items, start=1)
+    )
+    answers = "".join(
+        f'<p class="check-answer" style="font-family:{fonts}; font-size:11pt; color:#3B4A63; '
+        f'margin:0 0 3mm 0; break-inside:avoid; page-break-inside:avoid;">'
+        f'<strong>{n}.</strong> {esc(answer) or "—"}</p>'
+        for n, (_, answer) in enumerate(items, start=1)
+    )
+    # The wrapper deliberately has no class: normalize_note_layout's CSS makes
+    # anything whose class contains "check" unbreakable, and a whole section
+    # that cannot split leaves a near-empty page behind it.
+    return (
+        f'<section style="margin:6mm 0 0 0;">'
+        f'<h2 style="{heading}">{esc(check_label)}</h2>{questions}'
+        f'<h2 style="{heading}">{esc(answers_label)}</h2>{answers}'
+        f'</section>'
+    )
+
+
+def inject_self_check(html: str, section_html: str) -> str:
+    """
+    Replace the SELF_CHECK_TOKEN the prompt asks for with the built section.
+    If the model dropped the token, the section is added at the end of <body>
+    so the questions are never lost.
+    """
+    # A token the model wrapped in <p> would nest block elements inside a <p>.
+    html = re.sub(
+        r"<p\b[^>]*>\s*" + re.escape(SELF_CHECK_TOKEN) + r"\s*</p>",
+        SELF_CHECK_TOKEN, html, flags=re.IGNORECASE,
+    )
+    if SELF_CHECK_TOKEN in html:
+        html = html.replace(SELF_CHECK_TOKEN, section_html, 1)
+        return html.replace(SELF_CHECK_TOKEN, "")
+
+    if not section_html:
+        return html
+    print("[Study Note Compiler] WARNING: [[SELF_CHECK]] missing — appending the section to <body>")
+    idx = html.lower().rfind("</body>")
+    if idx != -1:
+        return html[:idx] + section_html + "\n" + html[idx:]
+    return html + "\n" + section_html
+
+
 def run_study_note_compiler(
     note_output: dict,
     visual_output: dict,
@@ -296,8 +386,13 @@ def run_study_note_compiler(
             "description": v.get("description", "")
         })
 
+    # self_check is withheld from the model: the Check Yourself section (questions
+    # with answer lines, then a separate answers list) is built in Python below,
+    # and the model cannot print answers next to questions it never sees.
+    note_for_prompt = {k: v for k, v in note_output.items() if k != "self_check"}
+
     prompt = template.format(
-        note_json=json.dumps(note_output, indent=2),
+        note_json=json.dumps(note_for_prompt, indent=2),
         visuals_json=json.dumps(visuals_for_prompt, indent=2),
         videos_json  = json.dumps(videos or [], indent=2),   # ← ADD
         class_name=class_name,
@@ -343,6 +438,10 @@ def run_study_note_compiler(
             html = html.replace(token, "")
         else:
             print(f"[Study Note Compiler] WARNING: {token} missing from HTML — diagram dropped")
+
+    html = inject_self_check(
+        html, build_self_check_section(note_output.get("self_check"), language)
+    )
 
     html = convert_math_notation(html)
 
