@@ -1,6 +1,22 @@
 // features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
 import React, { useState } from "react";
-import { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
+import api, { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
+
+// TEMPORARY — a cache miss now returns 202 {job_id}; wait for the job here
+// until Phase 4's shared polling hook (useJobPolling) replaces this.
+const POLL_MS = 3000;
+const POLL_LIMIT_MS = 15 * 60 * 1000;
+
+const waitForJob = async (jobId) => {
+  const started = Date.now();
+  while (Date.now() - started < POLL_LIMIT_MS) {
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+    const { data } = await api.get(`/jobs/${jobId}`);
+    if (data.status === "SUCCESS") return data.result || {};
+    if (data.status === "FAILED") throw new Error(data.error_message || "Study note job failed");
+  }
+  throw new Error("Timed out waiting for the study note job");
+};
 
 const TXT = {
   bangla: {
@@ -53,7 +69,8 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
     try {
       // Cache first: the backend serves the cached note for this topic when one
       // exists, and runs the full pipeline only when it does not.
-      const { data } = await generateStudyNote(selectedTopicId, language);
+      const response = await generateStudyNote(selectedTopicId, language);
+      const data = response.status === 202 ? await waitForJob(response.data.job_id) : response.data;
       const html = data?.html || data?.note_html || data?.content || "";
       if (html) {
         setNoteHTML(html);
