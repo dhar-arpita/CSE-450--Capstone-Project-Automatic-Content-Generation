@@ -101,14 +101,17 @@ def set_stage(db, job_id, stage) -> GenerationJob:
     return job
 
 
-def mark_success(db, job_id, content_id=None) -> GenerationJob:
+def mark_success(db, job_id, content_id=None, result=None) -> GenerationJob:
     """
     Transition a job to SUCCESS. content_id is nullable: a chat_quiz job may
-    never produce a generated_content row at all (Step 1.7).
+    never produce a generated_content row at all (Step 1.7). `result` is the
+    job's small JSON output (e.g. chat_quiz questions, session_id) — never
+    the generated HTML, which stays in generated_content.
     """
     job = _get_or_raise(db, job_id)
     job.status = "SUCCESS"
     job.content_id = content_id
+    job.result = result
     job.finished_at = datetime.utcnow()
     db.commit()
     db.refresh(job)

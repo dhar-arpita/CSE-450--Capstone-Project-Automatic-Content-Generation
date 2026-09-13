@@ -318,6 +318,11 @@ class GenerationJob(Base):
     created_at = Column(TIMESTAMP, server_default=func.now())
     started_at = Column(TIMESTAMP, nullable=True)
     finished_at = Column(TIMESTAMP, nullable=True)
+    # Small JSON output of a finished job that has no generated_content row to
+    # point at (chat_quiz questions), plus per-type response metadata such as
+    # session_id. Never the HTML itself — that stays in generated_content.
+    # Added by migrations/002_generation_job_result.sql.
+    result = Column(JSON, nullable=True)
 
     # Polling (`GET /jobs/{job_id}`) is a PK lookup, but a user's "my recent
     # jobs" list (`GET /jobs?mine=true`, Step 3.5) filters by status and
