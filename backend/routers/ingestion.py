@@ -3,13 +3,14 @@
 # Topics are auto-extracted from the PDF by Gemini and inserted into the DB.
 
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from core.config import get_db
 from services import rag_service
 from models.db_models import UploadRequest, IngestionJob, Chapter
-from services.ingestion_service import run_ingestion_pipeline
+from tasks import uploads
+from tasks.ingestion_tasks import ingest_curriculum_task
 from core.security import get_current_user_from_header
 from models.db_models import User
 
@@ -45,7 +46,6 @@ class JobStatusResponse(BaseModel):
 
 @router.post("/upload", response_model=UploadResponse)
 async def upload_curriculum(
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     # CHANGED: chapter_id instead of topic_id
     # Topics will be auto-extracted from the PDF by Gemini
@@ -117,17 +117,32 @@ async def upload_curriculum(
     request_id = upload_request.request_id
     db.commit()
 
-    # ── SCHEDULE BACKGROUND PIPELINE ─────────────────────────────────────────
-    # Pass chapter_id instead of topic_id — pipeline will auto-create topics
-    background_tasks.add_task(
-        run_ingestion_pipeline,
-        job_id=job_id,
-        chapter_id=chapter_id,       # CHANGED
-        file_bytes=file_bytes,
-        filename=file.filename,
-        file_size=file_size,
-        source_type=source_type,        # NEW
-    )
+    # ── HAND OFF TO THE INGESTION WORKER ─────────────────────────────────────
+    # Step 3.8: the pipeline runs on a Celery worker instead of in this web
+    # process, so a web restart no longer loses the upload. The worker gets a
+    # path to the saved file, not the bytes. chapter_id, not topic_id — the
+    # pipeline auto-creates topics.
+    file_path = None
+    try:
+        file_path = uploads.save(file_bytes, f"ingest_{job_id}", file.filename)
+        ingest_curriculum_task.apply_async(kwargs=dict(
+            job_id=job_id,
+            chapter_id=chapter_id,
+            file_path=file_path,
+            filename=file.filename,
+            file_size=file_size,
+            source_type=source_type,
+        ))
+    except Exception as e:
+        uploads.discard(file_path)
+        ingestion_job.job_status = "FAILED"
+        ingestion_job.error_message = f"Could not queue the ingestion job: {e}"
+        upload_request.status = "failed"
+        db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="The ingestion queue is unavailable right now. Please try again in a minute.",
+        )
 
     return UploadResponse(
         message="File received. Topics will be auto-extracted and ingested.",
