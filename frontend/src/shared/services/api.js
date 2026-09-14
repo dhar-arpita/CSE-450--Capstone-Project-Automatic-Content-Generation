@@ -1,7 +1,7 @@
 import axios from "axios";
 import axiosRetry from "axios-retry";
 
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = process.env.REACT_APP_API_URL || "http://127.0.0.1:8000";
 
 const api = axios.create({
   baseURL: API_URL,
@@ -16,12 +16,14 @@ axiosRetry(api, {
     console.log(`⚠️ Retrying API request... Attempt #${retryCount}`);
   },
   retryCondition: (error) => {
-    
-    return (
-      axiosRetry.isNetworkOrIdempotentRequestError(error) ||
-      (error.response && error.response.status >= 500)
-    );
-  },
+  const method = error.config?.method?.toLowerCase();
+  const isIdempotentMethod = method === "get" || method === "head" || method === "options";
+
+  return (
+    axiosRetry.isNetworkOrIdempotentRequestError(error) ||
+    (isIdempotentMethod && error.response && error.response.status >= 500)
+  );
+},
 });
 
 // ──── AXIOS INTERCEPTOR ────

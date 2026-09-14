@@ -10,6 +10,7 @@ import ProtectedRoute from "./shared/services/ProtectedRoute";
 import StudyNotePage from "./features/studynote/StudyNotePage";
 import QuizPage from "./features/quiz/QuizPage";
 
+
 function App() {
   return (
     <Router>

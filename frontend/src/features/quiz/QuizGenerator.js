@@ -1,6 +1,7 @@
 // features/quiz/QuizGenerator.js
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { generateQuiz, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
+import useJobPolling from "../../shared/services/useJobPolling";
 
 const TXT = {
   bangla: {
@@ -21,6 +22,9 @@ const TXT = {
     errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
     noCache: "⚠️ এই সিলেকশনের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
+    stageGenerating: "প্রশ্ন তৈরি হচ্ছে...",
+    stageSaving: "সংরক্ষণ করা হচ্ছে...",
+    stillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখো।",
   },
   english: {
     scope: "Scope",
@@ -40,10 +44,18 @@ const TXT = {
     errorMsg: "⚠️ Failed to generate quiz.",
     retry: "🔄 Try Again",
     noCache: "⚠️ No cached content found for this selection.",
+    stageGenerating: "Writing questions...",
+    stageSaving: "Saving...",
+    stillRunning: "⏳ Still running — check back in a moment.",
   },
 };
 
 const SCOPE_DEFAULT_QUESTIONS = { topic: 10, chapter: 20, subject: 30 };
+
+const stageLabel = (stage, t) => {
+  if (stage === "saving") return t.stageSaving;
+  return t.stageGenerating;
+};
 
 export default function QuizGenerator({
   selectedClass,
@@ -56,33 +68,43 @@ export default function QuizGenerator({
 
   const [scope, setScope] = useState("topic");
   const [numQuestions, setNumQuestions] = useState(SCOPE_DEFAULT_QUESTIONS.topic);
-  const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
-  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false); // 💡 Quick Answer Loading State
-  const [error, setError] = useState(false);
+  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [quizHTML, setQuizHTML] = useState("");
   const [contentId, setContentId] = useState(null);
 
-  React.useEffect(() => {
+  const [dispatchedJobId, setDispatchedJobId] = useState(null);
+  const { status, stage, result, error } = useJobPolling(
+    dispatchedJobId,
+    "activeJob:quiz"
+  );
+
+  const isGenerating = status === "QUEUED" || status === "PROCESSING";
+
+  useEffect(() => {
     if (selectedTopicId) setScope("topic");
     else if (selectedChapter) setScope("chapter");
     else if (selectedSubject) setScope("subject");
   }, [selectedTopicId, selectedChapter, selectedSubject]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     setNumQuestions(SCOPE_DEFAULT_QUESTIONS[scope] || 10);
   }, [scope]);
 
+  useEffect(() => {
+    if (status === "SUCCESS" && result) {
+      const html = result.html || result.quiz_html || result.content || "";
+      if (html) {
+        setQuizHTML(html);
+        setContentId(result.content_id || result.id || null);
+      }
+    }
+  }, [status, result]);
+
   const determineTarget = () => {
-    if (scope === "topic" && selectedTopicId) {
-      return { topic_id: selectedTopicId };
-    }
-    if (scope === "chapter" && selectedChapter) {
-      return { chapter_id: selectedChapter };
-    }
-    if (scope === "subject" && selectedSubject) {
-      return { subject_id: selectedSubject };
-    }
+    if (scope === "topic" && selectedTopicId) return { topic_id: selectedTopicId };
+    if (scope === "chapter" && selectedChapter) return { chapter_id: selectedChapter };
+    if (scope === "subject" && selectedSubject) return { subject_id: selectedSubject };
     if (selectedTopicId) return { topic_id: selectedTopicId };
     if (selectedChapter) return { chapter_id: selectedChapter };
     if (selectedSubject) return { subject_id: selectedSubject };
@@ -97,34 +119,26 @@ export default function QuizGenerator({
       return;
     }
 
-    setLoading(true);
-    setError(false);
     setQuizHTML("");
     setContentId(null);
+
     try {
       const payload = {
         scope,
         ...target,
         num_questions: parseInt(numQuestions, 10) || 5,
         language,
-        // Generate always builds fresh. The cache is reached through the Quick
-        // Answer button, which falls back here only after confirming a miss.
+        // Generate always builds fresh (202) per the job contract. The cache
+        // is reached through Quick Answer instead.
         refresh: true,
       };
 
       const { data } = await generateQuiz(payload);
-      const html = data?.html || data?.quiz_html || data?.content || "";
-      if (html) {
-        setQuizHTML(html);
-        setContentId(data?.content_id || data?.id || null);
-      } else {
-        setError(true);
-      }
+      setDispatchedJobId(data.job_id);
     } catch (err) {
-      console.error("Error generating quiz:", err);
-      setError(true);
-    } finally {
-      setLoading(false);
+      console.error("Dispatch failed:", err);
+      setDispatchedJobId(null);
+      alert(t.errorMsg);
     }
   };
 
@@ -134,10 +148,9 @@ export default function QuizGenerator({
       return;
     }
 
-    setDownloading(true); // 💡 ডাউনলোড শুরু
+    setDownloading(true);
     try {
       const response = await downloadWorksheetPDF(contentId);
-      
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -151,7 +164,7 @@ export default function QuizGenerator({
       console.error("Download failed:", err);
       alert("Download failed. Please try again.");
     } finally {
-      setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
+      setDownloading(false);
     }
   };
 
@@ -172,22 +185,17 @@ export default function QuizGenerator({
     }
 
     setQuickAnswerLoading(true);
-    setError(false);
     setQuizHTML("");
     setContentId(null);
 
     try {
-      // `target` already holds exactly the one id this scope is keyed on —
-      // topic_id, chapter_id or subject_id — and the backend keys quiz_topic /
-      // quiz_chapter / quiz_subject on the matching column. Same shape as
-      // onGenerate, so a cached and a generated quiz can never disagree.
       const { data } = await quickAnswer({
         ...target,
         content_type: `quiz_${scope}`,
         language: language,
         num_questions: parseInt(numQuestions, 10) || undefined,
       });
-      
+
       if (data && data.found && data.html) {
         setQuizHTML(data.html);
         setContentId(data.content_id);
@@ -208,14 +216,9 @@ export default function QuizGenerator({
     <div>
       {/* Config Row */}
       <div style={configRow}>
-        {/* Scope Selector */}
         <div style={fieldGroup}>
           <label style={labelStyle}>{t.scope}</label>
-          <select
-            value={scope}
-            onChange={(e) => setScope(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={scope} onChange={(e) => setScope(e.target.value)} style={selectStyle}>
             <option value="topic" disabled={!selectedTopicId}>
               {t.topicScope} {!selectedTopicId ? "(N/A)" : ""}
             </option>
@@ -228,14 +231,9 @@ export default function QuizGenerator({
           </select>
         </div>
 
-        {/* Questions Count */}
         <div style={fieldGroup}>
           <label style={labelStyle}>{t.questions}</label>
-          <select
-            value={numQuestions}
-            onChange={(e) => setNumQuestions(e.target.value)}
-            style={selectStyle}
-          >
+          <select value={numQuestions} onChange={(e) => setNumQuestions(e.target.value)} style={selectStyle}>
             <option value={5}>5</option>
             <option value={10}>10</option>
             <option value={15}>15</option>
@@ -245,31 +243,44 @@ export default function QuizGenerator({
           </select>
         </div>
 
-        {/* Generate Button */}
         <button
           onClick={onGenerate}
-          disabled={loading || quickAnswerLoading || !target}
-          style={generateBtn(loading || quickAnswerLoading || !target)}
+          disabled={isGenerating || quickAnswerLoading || !target}
+          style={generateBtn(isGenerating || quickAnswerLoading || !target)}
         >
-          {loading ? t.generating : t.generate}
+          {isGenerating ? t.generating : t.generate}
         </button>
 
-        {/* Quick Answer Button - available at topic, chapter and subject scope */}
         {target && (
           <button
             onClick={handleQuickAnswer}
-            disabled={quickAnswerLoading || loading}
-            style={quickAnswerBtn(quickAnswerLoading || loading)}
+            disabled={quickAnswerLoading || isGenerating}
+            style={quickAnswerBtn(quickAnswerLoading || isGenerating)}
           >
             {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
           </button>
         )}
       </div>
 
-      {/* Error UI with Dynamic Try Again Button */}
-      {error && (
+      {/* Progress indicator while the job is in flight */}
+      {isGenerating && (
+        <div style={progressCard}>
+          <span style={progressSpinner}>⏳</span>
+          <span style={progressText}>{stageLabel(stage, t)}</span>
+        </div>
+      )}
+
+      {/* Client-side timeout — distinct from a real FAILED */}
+      {error?.isTimeout && (
+        <div style={timeoutCard}>
+          <span style={errorText}>{t.stillRunning}</span>
+        </div>
+      )}
+
+      {/* Real FAILED — distinct from the timeout above, offers Retry */}
+      {error && !error.isTimeout && (
         <div style={errorCard}>
-          <span style={errorText}>{t.errorMsg}</span>
+          <span style={errorText}>{error.message || t.errorMsg}</span>
           <button onClick={onGenerate} style={retryBtn}>
             {t.retry}
           </button>
@@ -285,11 +296,7 @@ export default function QuizGenerator({
               <button onClick={handlePrint} style={outlineBtn}>
                 {t.print}
               </button>
-              <button
-                onClick={handleDownloadPDF}
-                disabled={downloading}
-                style={downloadBtn(downloading)}
-              >
+              <button onClick={handleDownloadPDF} disabled={downloading} style={downloadBtn(downloading)}>
                 {downloading ? t.downloading : t.download}
               </button>
             </div>
@@ -308,111 +315,68 @@ export default function QuizGenerator({
 
 /* ===== STYLES ===== */
 const configRow = {
-  display: "flex",
-  gap: "16px",
-  alignItems: "flex-end",
-  flexWrap: "wrap",
-  backgroundColor: "#f8fafc",
-  padding: "18px",
-  borderRadius: "16px",
-  border: "1px solid #e2e8f0",
+  display: "flex", gap: "16px", alignItems: "flex-end", flexWrap: "wrap",
+  backgroundColor: "#f8fafc", padding: "18px", borderRadius: "16px", border: "1px solid #e2e8f0",
 };
-
 const fieldGroup = { display: "flex", flexDirection: "column", gap: "6px" };
 const labelStyle = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" };
-
 const selectStyle = {
-  padding: "10px 14px",
-  borderRadius: "10px",
-  border: "1.5px solid #e2e8f0",
-  background: "#fff",
-  fontSize: "13.5px",
-  fontWeight: 600,
-  color: "#0f172a",
-  outline: "none",
+  padding: "10px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "#fff",
+  fontSize: "13.5px", fontWeight: 600, color: "#0f172a", outline: "none",
 };
-
 const generateBtn = (disabled) => ({
-  padding: "12px 24px",
-  borderRadius: "12px",
-  border: "none",
+  padding: "12px 24px", borderRadius: "12px", border: "none",
   background: disabled ? "#fbcfe8" : "linear-gradient(135deg, #db2777, #ec4899)",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: "13.5px",
+  color: "#fff", fontWeight: 800, fontSize: "13.5px",
   cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.35)",
-  transition: "all 0.15s",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.35)", transition: "all 0.15s",
 });
+
+/* Progress UI */
+const progressCard = {
+  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fdf2f8",
+  border: "1.5px solid #fbcfe8", borderRadius: "12px",
+  display: "flex", alignItems: "center", gap: "10px",
+};
+const progressSpinner = { fontSize: "16px" };
+const progressText = { fontSize: "13px", color: "#9d174d", fontWeight: 700 };
+
+/* Timeout UI */
+const timeoutCard = {
+  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fffbeb",
+  border: "1.5px solid #fde68a", borderRadius: "12px",
+};
 
 /* Error UI Styles */
 const errorCard = {
-  marginTop: "16px",
-  padding: "14px 18px",
-  backgroundColor: "#fef2f2",
-  border: "1.5px solid #fecaca",
-  borderRadius: "12px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
+  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca", borderRadius: "12px",
+  display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
 };
-
 const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
-
 const retryBtn = {
-  backgroundColor: "#dc2626",
-  color: "#fff",
-  border: "none",
-  padding: "8px 14px",
-  borderRadius: "8px",
-  cursor: "pointer",
-  fontWeight: 700,
-  fontSize: "12.5px",
+  backgroundColor: "#dc2626", color: "#fff", border: "none", padding: "8px 14px",
+  borderRadius: "8px", cursor: "pointer", fontWeight: 700, fontSize: "12.5px",
   boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
 };
 
 const previewCard = {
-  marginTop: "20px",
-  backgroundColor: "#fff",
-  padding: "28px",
-  border: "1px solid #e2e8f0",
-  borderRadius: "18px",
-  boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
-  maxWidth: "100%",
-  overflowX: "auto",
+  marginTop: "20px", backgroundColor: "#fff", padding: "28px", border: "1px solid #e2e8f0",
+  borderRadius: "18px", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", maxWidth: "100%", overflowX: "auto",
 };
-
 const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
-
 const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-
 const downloadBtn = (disabled) => ({
-  backgroundColor: disabled ? "#f472b6" : "#db2777",
-  color: "#fff",
-  padding: "10px 20px",
-  border: "none",
-  borderRadius: "10px",
-  cursor: disabled ? "not-allowed" : "pointer",
-  fontWeight: 700,
-  fontSize: "13px",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.3)",
-  opacity: disabled ? 0.8 : 1,
-  transition: "all 0.2s",
+  backgroundColor: disabled ? "#f472b6" : "#db2777", color: "#fff", padding: "10px 20px", border: "none",
+  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "13px",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.3)", opacity: disabled ? 0.8 : 1, transition: "all 0.2s",
 });
-
 const quickAnswerBtn = (disabled) => ({
-  padding: "12px 24px",
-  borderRadius: "12px",
-  border: "none",
+  padding: "12px 24px", borderRadius: "12px", border: "none",
   background: disabled ? "#fef3c7" : "linear-gradient(135deg, #f59e0b, #fbbf24)",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: "13.5px",
+  color: "#fff", fontWeight: 800, fontSize: "13.5px",
   cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)",
-  transition: "all 0.15s",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)", transition: "all 0.15s",
 });
-
 const quizRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

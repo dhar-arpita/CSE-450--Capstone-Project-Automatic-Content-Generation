@@ -34,6 +34,9 @@ const TXT = {
     solvedMsg: "🎉 দারুণ!", notSolvedMsg: "ঠিক আছে, পরের বার হবে।",
     newChat: "➕ নতুন কথোপকথন", history: "আগের সেশন", noSessions: "কোনো আগের সেশন নেই",
     loadingSessions: "⏳ লোড হচ্ছে...",
+    quizErrorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
+    quizRetry: "🔄 আবার চেষ্টা করুন",
+    quizStillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখো।",
   },
   english: {
     subtitle: "Ask questions or practice — in your language",
@@ -61,6 +64,9 @@ const TXT = {
     solvedMsg: "🎉 Great job!", notSolvedMsg: "That's okay — next time!",
     newChat: "➕ New conversation", history: "Past sessions", noSessions: "No past sessions",
     loadingSessions: "⏳ Loading...",
+    quizErrorMsg: "⚠️ Failed to generate quiz.",
+    quizRetry: "🔄 Try Again",
+    quizStillRunning: "⏳ Still running — check back in a moment.",
   },
 };
 
@@ -126,11 +132,12 @@ export default function ChatbotPage() {
   const feedEndRef = useRef(null);
   const prevCount = useRef(0);
   const [quizFeed, setQuizFeed] = useState([]);
+  const [quizError, setQuizError] = useState(null); // { blockId, message, isTimeout }
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const clearFeeds = () => {
     setSamples([]); setQuestion("");
-    setQaFeed([]); setSetFeed([]); setObFeed([]); setQuizFeed([]); setMode(null);
+    setQaFeed([]); setSetFeed([]); setObFeed([]); setQuizFeed([]); setQuizError(null); setMode(null);
   };
 
   const loadHistory = useCallback(async (uid, sid) => {
@@ -176,9 +183,6 @@ export default function ChatbotPage() {
   useEffect(() => {
     if (!user || didInitialLoad.current) return;
     didInitialLoad.current = true;
-    // Intentionally not auto-loading the last session's history here.
-    // History should only load when the user explicitly opens a session
-    // from the sidebar (openSession) or starts a new one via selections.
     setHistoryLoaded(true);
   }, [user]);
 
@@ -320,12 +324,25 @@ export default function ChatbotPage() {
   const addQuiz = async () => {
     if (busy) return; setBusy(true);
     const id = newId(); const wasNew = chat.getSessionId() == null;
+    setQuizError(null);
     setQuizFeed((f) => [...f.map((b) => ({ ...b, isLatest: false })), { id, questions: [], answers: {}, hints: {}, hintsUsed: {}, isLatest: true, loading: true }]);
     try {
       const d = await chat.quizSet("mixed");
       setQuizFeed((f) => f.map((b) => b.id === id ? { ...b, questions: d.questions || [], loading: false } : b));
       setActiveSid(chat.getSessionId()); if (wasNew) afterFirstContent();
-    } catch { setQuizFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b)); }
+    } catch (err) {
+      setQuizFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b));
+      // A cancelled poll (superseded by a newer quiz in the same session)
+      // isn't a real error worth showing the user — only surface genuine
+      // FAILED and client-side timeouts.
+      if (!err?.isCancelled) {
+        setQuizError({
+          blockId: id,
+          message: err?.message || t.quizErrorMsg,
+          isTimeout: err?.isTimeout || false,
+        });
+      }
+    }
     setBusy(false);
   };
   const selectQuizOption = (blockId, qnum, label) =>
@@ -486,6 +503,22 @@ export default function ChatbotPage() {
           {mode === "quiz" && (
             <div style={contentCard}>
               <h3 style={contentTitle}>📋 Quiz</h3>
+
+              {/* Client-side timeout — distinct from a real FAILED */}
+              {quizError?.isTimeout && (
+                <div style={quizTimeoutCard}>
+                  <span>{t.quizStillRunning}</span>
+                </div>
+              )}
+
+              {/* Real FAILED — distinct from the timeout above, offers Retry */}
+              {quizError && !quizError.isTimeout && (
+                <div style={quizErrorCard}>
+                  <span style={{ color: "#991b1b", fontWeight: 600, fontSize: "13px" }}>⚠️ {quizError.message}</span>
+                  <button onClick={addQuiz} style={quizRetryBtn}>{t.quizRetry}</button>
+                </div>
+              )}
+
               <div style={{display:"flex", flexDirection:"column", gap:"16px", marginTop:"12px"}}>
                 {quizFeed.map((b, idx) => {
                   const correctCount = b.questions.filter(q => b.answers[q.question_number] === q.correct_option).length;
@@ -813,3 +846,19 @@ const pillWrap = { display:"flex", alignItems:"center", gap:"8px", background:"#
 const pillWrapDisabled = { background:"#f1f5f9", opacity:0.6 };
 const pillSelect = { flex:1, border:"none", outline:"none", background:"transparent", fontSize:"13.5px", fontWeight:600, color:"#0f172a", appearance:"none", fontFamily:"inherit", cursor:"pointer", minWidth:0 };
 const pillCaret = { color:"#94a3b8", fontSize:"12px", flexShrink:0 };
+
+// QUIZ ERROR / TIMEOUT CARDS
+const quizTimeoutCard = {
+  marginTop: "12px", padding: "12px 16px", backgroundColor: "#fffbeb",
+  border: "1.5px solid #fde68a", borderRadius: "12px", fontSize: "13px",
+  color: "#92400e", fontWeight: 600,
+};
+const quizErrorCard = {
+  marginTop: "12px", padding: "12px 16px", backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca", borderRadius: "12px",
+  display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
+};
+const quizRetryBtn = {
+  backgroundColor: "#dc2626", color: "#fff", border: "none", padding: "8px 14px",
+  borderRadius: "8px", cursor: "pointer", fontWeight: 700, fontSize: "12.5px",
+};

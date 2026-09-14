@@ -67,7 +67,7 @@ async def create_worksheet(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
-    user_id = current_user.user_id  # token থেকে, form থেকে না
+    user_id = current_user.user_id 
 
     # ── STEP 1: Validate the curriculum chain (fast) ─────────────────────────
     topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()

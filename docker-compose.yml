@@ -15,11 +15,6 @@ services:
     container_name: capstone_init_db
     env_file:
       - ./backend/.env
-    # PYTHONPATH=/app: `python ops/init_db.py` puts ops/ itself (the SCRIPT's
-    # directory) on sys.path[0], not the cwd — so without this, `from
-    # core.config import ...` fails with ModuleNotFoundError even though core/
-    # is right there at /app/core. Verified by hitting exactly that error
-    # before adding this line.
     environment:
       - PYTHONPATH=/app
     volumes:
@@ -34,63 +29,60 @@ services:
       - "8000:8000"
     env_file:
       - ./backend/.env
-    # Step 1.4: the Celery broker/backend URLs. These live here rather than
-    # in backend/.env because the password they need (REDIS_PASSWORD) only
-    # exists in the ROOT .env — substituted by `docker compose` itself at
-    # parse time, not duplicated into a second secrets file. depends_on
-    # (below) only affects start ORDER, not a wait-for-ready check — fine
-    # here since Celery's own connection retry handles Redis not being ready
-    # for the first instant yet.
     environment:
       - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/0
       - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/1
-    # Step 1.5 (DEPLOYMENT_PLAN.md, R8): wait for init-db to actually FINISH
-    # (not just start) before accepting traffic — it creates the SQL tables
-    # and Qdrant collection this service reads from on its first request.
-    # Mixing the long (mapping) form for one entry means every entry under
-    # depends_on has to use it; redis only needs to be STARTED, not completed.
     depends_on:
       redis:
         condition: service_started
       init-db:
         condition: service_completed_successfully
-    # 1. Mount the local backend folder to /app in the container
     volumes:
       - ./backend:/app
-    # 2. Tell Uvicorn to watch for changes
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
+  # Phase 4 handover §2.3 — without this, nothing ever consumes the Redis
+  # queue, so every dispatched job stays QUEUED forever. Same image as
+  # backend (same requirements, same code); only the command differs, so it
+  # builds from ./backend rather than needing its own Dockerfile. The
+  # ./backend:/app bind mount matches backend's, since prompts/ is loaded by
+  # relative path against the working directory and must be the same /app
+  # in both containers.
+  worker:
+    build: ./backend
+    container_name: capstone_worker
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/1
+    depends_on:
+      redis:
+        condition: service_started
+      init-db:
+        condition: service_completed_successfully
+    volumes:
+      - ./backend:/app
+    command: celery -A core.celery_app worker --loglevel=info -Q generation,ingestion --concurrency=3
+
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_API_URL: "${REACT_APP_API_URL:-http://localhost:8000}"
     container_name: capstone_frontend
     ports:
-      - "3000:3000"
-    # 3. Mount the frontend, but protect node_modules!
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - "3000:80"
     depends_on:
-      - backend
+      - backend 
 
-  # Steps 1.1 + 1.2 (DEPLOYMENT_PLAN.md): message broker for Celery. No host
-  # port mapping — nothing outside the compose network needs to reach Redis;
-  # the backend/worker containers reach it by service name (redis:6379) once
-  # they exist. ops/redis.conf carries the non-secret hardening (AOF
-  # persistence, noeviction policy); the password is layered on top via
-  # --requirepass from REDIS_PASSWORD so the committed conf file never
-  # contains a secret. The ":?" fails the whole `docker compose up` fast and
-  # loud if REDIS_PASSWORD is unset, rather than silently starting an
-  # unprotected broker with an empty password.
   redis:
     image: redis:7-alpine
     container_name: capstone_redis
     volumes:
       - ./ops/redis.conf:/usr/local/etc/redis/redis.conf:ro
       - redis_data:/data
-    # List (exec) form deliberately, not a single command string: each
-    # argument is its own YAML item, so there is no shell-splitting step that
-    # could mis-handle the substituted password (e.g. if it ever contained a
-    # space or a quote character).
     command:
       - redis-server
       - /usr/local/etc/redis/redis.conf

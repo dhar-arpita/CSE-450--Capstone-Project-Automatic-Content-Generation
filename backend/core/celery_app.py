@@ -61,6 +61,7 @@ app = Celery(
     "capstone",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
+    include=["tasks.generation_tasks", "tasks.ingestion_tasks"],
 )
 
 # ── PER-QUEUE TIME LIMITS ──────────────────────────────────────────────────────

@@ -1,22 +1,7 @@
 // features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
-import React, { useState } from "react";
-import api, { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
-
-// TEMPORARY — a cache miss now returns 202 {job_id}; wait for the job here
-// until Phase 4's shared polling hook (useJobPolling) replaces this.
-const POLL_MS = 3000;
-const POLL_LIMIT_MS = 15 * 60 * 1000;
-
-const waitForJob = async (jobId) => {
-  const started = Date.now();
-  while (Date.now() - started < POLL_LIMIT_MS) {
-    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-    const { data } = await api.get(`/jobs/${jobId}`);
-    if (data.status === "SUCCESS") return data.result || {};
-    if (data.status === "FAILED") throw new Error(data.error_message || "Study note job failed");
-  }
-  throw new Error("Timed out waiting for the study note job");
-};
+import React, { useState, useEffect } from "react";
+import { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
+import useJobPolling from "../../shared/services/useJobPolling";
 
 const TXT = {
   bangla: {
@@ -31,6 +16,9 @@ const TXT = {
     errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
     retry: "🔄 আবার চেষ্টা করুন",
     noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
+    stageGenerating: "নোট লেখা হচ্ছে...",
+    stageSaving: "সংরক্ষণ করা হচ্ছে...",
+    stillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখো।",
   },
   english: {
     generate: "📒 Generate Study Note",
@@ -44,16 +32,43 @@ const TXT = {
     errorMsg: "⚠️ Failed to generate study note.",
     retry: "🔄 Try Again",
     noCache: "⚠️ No cached content found for this topic.",
+    stageGenerating: "Writing the note...",
+    stageSaving: "Saving...",
+    stillRunning: "⏳ Still running — check back in a moment.",
   },
+};
+
+const stageLabel = (stage, t) => {
+  if (stage === "saving") return t.stageSaving;
+  return t.stageGenerating;
 };
 
 export default function StudyNoteGenerator({ selectedTopicId, language = "bangla" }) {
   const t = TXT[language] || TXT.bangla;
-  const [loading, setLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false); // 💡 Download Loading State
-  const [error, setError] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
+
+  const [dispatchedJobId, setDispatchedJobId] = useState(null);
+  const { status, stage, result, error } = useJobPolling(
+    dispatchedJobId,
+    "activeJob:studyNote"
+  );
+
+  const isGenerating = status === "QUEUED" || status === "PROCESSING";
+
+  // A cache HIT still returns 200 with the html inline — handled directly in
+  // onGenerate below. This effect only fires for the cache-MISS / dispatched
+  // path, once the polled job reaches SUCCESS.
+  useEffect(() => {
+    if (status === "SUCCESS" && result) {
+      const html = result.html || result.note_html || result.content || "";
+      if (html) {
+        setNoteHTML(html);
+        setContentId(result.content_id || result.id || null);
+      }
+    }
+  }, [status, result]);
 
   const onGenerate = async () => {
     if (!selectedTopicId) {
@@ -61,28 +76,27 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       return;
     }
 
-    setLoading(true);
-    setError(false);
     setNoteHTML("");
     setContentId(null);
 
     try {
       // Cache first: the backend serves the cached note for this topic when one
-      // exists, and runs the full pipeline only when it does not.
+      // exists (200 inline), and dispatches to a worker (202 {job_id}) only
+      // when it does not.
       const response = await generateStudyNote(selectedTopicId, language);
-      const data = response.status === 202 ? await waitForJob(response.data.job_id) : response.data;
-      const html = data?.html || data?.note_html || data?.content || "";
-      if (html) {
-        setNoteHTML(html);
-        setContentId(data?.content_id || data?.id || null);
+      if (response.status === 202) {
+        setDispatchedJobId(response.data.job_id);
       } else {
-        setError(true);
+        const html = response.data?.html || response.data?.note_html || response.data?.content || "";
+        if (html) {
+          setNoteHTML(html);
+          setContentId(response.data?.content_id || response.data?.id || null);
+        }
       }
     } catch (err) {
-      console.error("Error:", err);
-      setError(true);
-    } finally {
-      setLoading(false);
+      console.error("Dispatch failed:", err);
+      setDispatchedJobId(null);
+      alert(t.errorMsg);
     }
   };
 
@@ -92,10 +106,9 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       return;
     }
 
-    setDownloading(true); // 💡 ডাউনলোড শুরু
+    setDownloading(true);
     try {
       const response = await downloadWorksheetPDF(contentId);
-
       const blob = new Blob([response.data], { type: "application/pdf" });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -109,7 +122,7 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       console.error("Download failed:", err);
       alert("Download failed. Please try again.");
     } finally {
-      setDownloading(false); // 💡 ডাউনলোড শেষ/ফেইল
+      setDownloading(false);
     }
   };
 
@@ -129,18 +142,32 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       <div style={configRow}>
         <button
           onClick={onGenerate}
-          disabled={loading || !selectedTopicId}
-          style={generateBtn(loading || !selectedTopicId)}
+          disabled={isGenerating || !selectedTopicId}
+          style={generateBtn(isGenerating || !selectedTopicId)}
         >
-          {loading ? t.generating : t.generate}
+          {isGenerating ? t.generating : t.generate}
         </button>
-
       </div>
 
-      {/* Error UI with Dynamic Try Again Button */}
-      {error && (
+      {/* Progress indicator while the job is in flight */}
+      {isGenerating && (
+        <div style={progressCard}>
+          <span style={progressSpinner}>⏳</span>
+          <span style={progressText}>{stageLabel(stage, t)}</span>
+        </div>
+      )}
+
+      {/* Client-side timeout — distinct from a real FAILED */}
+      {error?.isTimeout && (
+        <div style={timeoutCard}>
+          <span style={errorText}>{t.stillRunning}</span>
+        </div>
+      )}
+
+      {/* Real FAILED — distinct from the timeout above, offers Retry */}
+      {error && !error.isTimeout && (
         <div style={errorCard}>
-          <span style={errorText}>{t.errorMsg}</span>
+          <span style={errorText}>{error.message || t.errorMsg}</span>
           <button onClick={onGenerate} style={retryBtn}>
             {t.retry}
           </button>
@@ -179,84 +206,56 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
 
 /* ===== STYLES (mirrors WorksheetGenerator, cyan/teal theme) ===== */
 const configRow = {
-  display: "flex",
-  gap: "16px",
-  alignItems: "center",
-  flexWrap: "wrap",
-  backgroundColor: "#f8fafc",
-  padding: "18px",
-  borderRadius: "16px",
-  border: "1px solid #e2e8f0",
+  display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap",
+  backgroundColor: "#f8fafc", padding: "18px", borderRadius: "16px", border: "1px solid #e2e8f0",
 };
 
 const generateBtn = (disabled) => ({
-  padding: "12px 24px",
-  borderRadius: "12px",
-  border: "none",
+  padding: "12px 24px", borderRadius: "12px", border: "none",
   background: disabled ? "#a5f3fc" : "linear-gradient(135deg, #0891b2, #06b6d4)",
-  color: "#fff",
-  fontWeight: 800,
-  fontSize: "13.5px",
+  color: "#fff", fontWeight: 800, fontSize: "13.5px",
   cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.35)",
-  transition: "all 0.15s",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.35)", transition: "all 0.15s",
 });
+
+/* Progress UI */
+const progressCard = {
+  marginTop: "16px", padding: "14px 18px", backgroundColor: "#ecfeff",
+  border: "1.5px solid #a5f3fc", borderRadius: "12px",
+  display: "flex", alignItems: "center", gap: "10px",
+};
+const progressSpinner = { fontSize: "16px" };
+const progressText = { fontSize: "13px", color: "#0e7490", fontWeight: 700 };
+
+/* Timeout UI */
+const timeoutCard = {
+  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fffbeb",
+  border: "1.5px solid #fde68a", borderRadius: "12px",
+};
 
 /* Error UI Styles */
 const errorCard = {
-  marginTop: "16px",
-  padding: "14px 18px",
-  backgroundColor: "#fef2f2",
-  border: "1.5px solid #fecaca",
-  borderRadius: "12px",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "space-between",
-  gap: "12px",
+  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fef2f2",
+  border: "1.5px solid #fecaca", borderRadius: "12px",
+  display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
 };
-
 const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
-
 const retryBtn = {
-  backgroundColor: "#dc2626",
-  color: "#fff",
-  border: "none",
-  padding: "8px 14px",
-  borderRadius: "8px",
-  cursor: "pointer",
-  fontWeight: 700,
-  fontSize: "12.5px",
+  backgroundColor: "#dc2626", color: "#fff", border: "none", padding: "8px 14px",
+  borderRadius: "8px", cursor: "pointer", fontWeight: 700, fontSize: "12.5px",
   boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
 };
 
 const previewCard = {
-  marginTop: "20px",
-  backgroundColor: "#fff",
-  padding: "28px",
-  border: "1px solid #e2e8f0",
-  borderRadius: "18px",
-  boxShadow: "0 4px 20px rgba(0,0,0,0.06)",
-  maxWidth: "100%",
-  overflowX: "auto",
+  marginTop: "20px", backgroundColor: "#fff", padding: "28px", border: "1px solid #e2e8f0",
+  borderRadius: "18px", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", maxWidth: "100%", overflowX: "auto",
 };
-
 const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
 const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
-
 const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-
 const downloadBtn = (disabled) => ({
-  backgroundColor: disabled ? "#a5f3fc" : "#0891b2",
-  color: "#fff",
-  padding: "10px 20px",
-  border: "none",
-  borderRadius: "10px",
-  cursor: disabled ? "not-allowed" : "pointer",
-  fontWeight: 700,
-  fontSize: "13px",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)",
-  opacity: disabled ? 0.8 : 1,
-  transition: "all 0.2s",
+  backgroundColor: disabled ? "#a5f3fc" : "#0891b2", color: "#fff", padding: "10px 20px", border: "none",
+  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "13px",
+  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)", opacity: disabled ? 0.8 : 1, transition: "all 0.2s",
 });
-
 const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

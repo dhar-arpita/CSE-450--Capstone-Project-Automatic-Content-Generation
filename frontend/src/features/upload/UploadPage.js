@@ -3,8 +3,9 @@ import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   getClasses, getSubjects, getChapters,
-  uploadCurriculumFile, getIngestionStatus,
+  uploadCurriculumFile,
 } from "../../shared/services/api";
+import useJobPolling from "../../shared/services/useJobPolling";
 
 /* ---------- bilingual UI text ---------- */
 const TXT = {
@@ -178,7 +179,7 @@ function FileDropZone({ file, onFile, accept = ".pdf,.txt", disabled, t }) {
 }
 
 /* ---------- status banner ---------- */
-function StatusBanner({ status }) {
+function StatusBanner({ status, isTimeout }) {
   if (!status) return null;
   const isSuccess = status.includes("✅");
   const isError   = status.includes("❌");
@@ -188,13 +189,15 @@ function StatusBanner({ status }) {
     fontSize: "13px", fontWeight: 700,
     ...(isSuccess
       ? { background: "#ecfdf5", border: "1.5px solid #86efac", color: "#166534" }
-      : isError
-        ? { background: "#fef2f2", border: "1.5px solid #fecaca", color: "#dc2626" }
-        : { background: "#eef2ff", border: "1.5px solid #c7d2fe", color: "#4f46e5" }),
+      : isTimeout
+        ? { background: "#fffbeb", border: "1.5px solid #fde68a", color: "#92400e" }
+        : isError
+          ? { background: "#fef2f2", border: "1.5px solid #fecaca", color: "#dc2626" }
+          : { background: "#eef2ff", border: "1.5px solid #c7d2fe", color: "#4f46e5" }),
   };
   return (
     <div style={style}>
-      {!isSuccess && !isError && <span style={spinnerStyle} />}
+      {!isSuccess && !isError && !isTimeout && <span style={spinnerStyle} />}
       <span>{status}</span>
     </div>
   );
@@ -209,26 +212,41 @@ export default function UploadPage() {
   const [classList,    setClassList]    = useState([]);
   const [subjectList,  setSubjectList]  = useState([]);
   const [chapterList,  setChapterList]  = useState([]);
-  // const [topicList,    setTopicList]    = useState([]);
   const [selectedClass,   setSelectedClass]   = useState("");
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedChapter, setSelectedChapter] = useState("");
-  // const [selectedTopicId, setSelectedTopicId] = useState("");
 
   const [file,         setFile]         = useState(null);
-  const [loading,      setLoading]      = useState(false);
   const [status,       setStatus]       = useState("");
   const [uploadSuccess,setUploadSuccess]= useState(false);
   const [showSample,   setShowSample]   = useState(false);
   const [sampleFile,   setSampleFile]   = useState(null);
   const [error, setError] = useState(false);
 
+  // Which upload is in flight — "curriculum" or "sample" — since SUCCESS
+  // needs to update different UI depending on which one just finished.
+  const [activeUploadKind, setActiveUploadKind] = useState(null);
+  const [dispatchedJobId, setDispatchedJobId] = useState(null);
+
+  // IngestionJob uses a different endpoint and field name than the
+  // GenerationJob contract the other three generators poll — passed as
+  // overrides rather than forking the hook.
+  const { status: jobStatus, error: jobError } = useJobPolling(
+    dispatchedJobId,
+    "activeJob:ingestion",
+    {
+      buildUrl: (id) => `/ingest/status/${id}`,
+      statusField: "job_status",
+    }
+  );
+
+  const loading = jobStatus === "QUEUED" || jobStatus === "PROCESSING";
+
   // selection progress for stepper
   const selectionProgress = [
     !!selectedClass,
     !!selectedSubject,
     !!selectedChapter,
-    // !!selectedTopicId,
   ];
   const selectionDone = selectionProgress.filter(Boolean).length;
 
@@ -252,62 +270,67 @@ export default function UploadPage() {
     setSelectedChapter(v);
   };
 
-  const startPolling = (jobId, isSample) => { //[cite: 2]
-    const iv = setInterval(async () => { //[cite: 2]
-      try {
-        const { data } = await getIngestionStatus(jobId); //[cite: 2]
-        setStatus(`Processing: ${data.job_status}…`); //[cite: 2]
-        if (data.job_status === "SUCCESS") { //[cite: 2]
-          clearInterval(iv); //[cite: 2]
-          setLoading(false); //[cite: 2]
-          setError(false); // 👈 সাফল্য পাওয়া গেলে এরর ফলস করুন
-          if (!isSample) { //[cite: 2]
-            setStatus("✅ Curriculum ingested successfully!"); //[cite: 2]
-            setUploadSuccess(true); setFile(null); //[cite: 2]
-          } else {
-            setStatus("✅ Sample worksheet processed!"); //[cite: 2]
-            setShowSample(false); setSampleFile(null); //[cite: 2]
-          }
-        } else if (data.job_status === "FAILED") { //[cite: 2]
-          clearInterval(iv); //[cite: 2]
-          setStatus(`❌ Failed: ${data.error_message || "Unknown error"}`); //[cite: 2]
-          setError(true); // 👈 ফেইল করলে এরর ট্রু করুন
-          setLoading(false); //[cite: 2]
-        }
-      } catch {
-        clearInterval(iv); //[cite: 2]
-        setStatus("❌ Error checking status."); //[cite: 2]
-        setError(true); // 👈 ক্যাচ এররে এরর ট্রু করুন
-        setLoading(false); //[cite: 2]
-      }
-    }, 3000); //[cite: 2]
-  };
-
-  const handleIngest = async (isSample = false) => { //[cite: 2]
-    const f = isSample ? sampleFile : file; //[cite: 2]
-    if (!f || !selectedChapter) { //[cite: 2]
-      alert("Please select a topic and a file first!"); return; //[cite: 2]
+  const handleIngest = async (isSample = false) => {
+    const f = isSample ? sampleFile : file;
+    if (!f || !selectedChapter) {
+      alert("Please select a topic and a file first!");
+      return;
     }
-    setLoading(true); //[cite: 2]
-    setError(false); // 👈 নতুন ট্রাইয়ের শুরুতে আগের এরর ক্লিয়ার করুন
-    setStatus("Uploading file…"); //[cite: 2]
+    setError(false);
+    setStatus("Uploading file…");
+    setActiveUploadKind(isSample ? "sample" : "curriculum");
+
     try {
-      const res = await uploadCurriculumFile(f, selectedChapter, user?.user_id || 1); //[cite: 2]
-      if (res.data?.job_id) { //[cite: 2]
-        setStatus("Job queued — processing…"); //[cite: 2]
-        startPolling(res.data.job_id, isSample); //[cite: 2]
+      const res = await uploadCurriculumFile(f, selectedChapter, user?.user_id || 1);
+      if (res.data?.job_id) {
+        setStatus("Job queued — processing…");
+        setDispatchedJobId(res.data.job_id);
       } else {
-        setStatus(isSample ? "✅ Sample uploaded!" : "✅ Uploaded successfully!"); //[cite: 2]
-        setLoading(false); //[cite: 2]
-        if (!isSample) { setUploadSuccess(true); setFile(null); } //[cite: 2]
-        else { setShowSample(false); setSampleFile(null); } //[cite: 2]
+        // No job_id: some deployments may still respond synchronously.
+        setStatus(isSample ? "✅ Sample uploaded!" : "✅ Uploaded successfully!");
+        setActiveUploadKind(null);
+        if (!isSample) { setUploadSuccess(true); setFile(null); }
+        else { setShowSample(false); setSampleFile(null); }
       }
     } catch (err) {
-      setStatus(`❌ Upload failed! ${err.response?.data?.detail || ""}`); //[cite: 2]
-      setError(true); // 👈 আপলোড ফেইল হলে এরর ট্রু করুন
-      setLoading(false); //[cite: 2]
+      setStatus(`❌ Upload failed! ${err.response?.data?.detail || ""}`);
+      setError(true);
+      setActiveUploadKind(null);
     }
   };
+
+  // Fires once the polled job reaches SUCCESS.
+  useEffect(() => {
+    if (jobStatus === "SUCCESS" && activeUploadKind) {
+      if (activeUploadKind === "sample") {
+        setStatus("✅ Sample worksheet processed!");
+        setShowSample(false);
+        setSampleFile(null);
+      } else {
+        setStatus("✅ Curriculum ingested successfully!");
+        setUploadSuccess(true);
+        setFile(null);
+      }
+      setError(false);
+      setActiveUploadKind(null);
+      setDispatchedJobId(null);
+    }
+  }, [jobStatus, activeUploadKind]);
+
+  // Fires on a real FAILED or a client-side timeout.
+  useEffect(() => {
+    if (jobError && activeUploadKind) {
+      setStatus(
+        jobError.isTimeout
+          ? "⏳ Still running — check back in a moment."
+          : `❌ Failed: ${jobError.message}`
+      );
+      if (!jobError.isTimeout) {
+        setError(true);
+        setActiveUploadKind(null);
+      }
+    }
+  }, [jobError, activeUploadKind]);
 
   return (
     <div style={pageStyle}>
@@ -365,14 +388,6 @@ export default function UploadPage() {
               options={chapterList.map(ch => ({ key: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
               placeholder={t.selectChapter}
             />
-            {/* <SelectField
-              label="Topic"
-              value={selectedTopicId}
-              onChange={setSelectedTopicId}
-              disabled={!selectedChapter}
-              options={topicList.map(tp => ({ key: tp.topic_id, label: tp.name }))}
-              placeholder="Select Topic"
-            /> */}
           </div>
 
           <div style={divider} />
@@ -380,7 +395,7 @@ export default function UploadPage() {
           {/* STATUS */}
           {status && (
             <div style={{ marginBottom: "20px" }}>
-              <StatusBanner status={status} />
+              <StatusBanner status={status} isTimeout={jobError?.isTimeout || false} />
             </div>
           )}
 
@@ -395,7 +410,6 @@ export default function UploadPage() {
                 </div>
               </div>
 
-              {/* <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedTopicId} t={t} /> */}
               <FileDropZone file={file} onFile={setFile} disabled={loading || !selectedChapter} t={t} />
 
               {/* 💡 Upload ফেইল হলে এই এরর কার্ডটি দেখাবে */}
@@ -403,7 +417,7 @@ export default function UploadPage() {
                 <div style={errorCardStyle}>
                   <span style={errorTextStyle}>
                     {language === "bangla" 
-                      ? "⚠️ আপলোড করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।" 
+                      ? "⚠️ আপলোড করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।" 
                       : "⚠️ Upload failed. Please try again."}
                   </span>
                   <button onClick={() => handleIngest(false)} style={retryBtnStyle}>
@@ -415,7 +429,6 @@ export default function UploadPage() {
               <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "20px" }}>
                 <button
                   onClick={() => handleIngest(false)}
-                  // disabled={loading || !file || !selectedTopicId}
                   disabled={loading || !file || !selectedChapter}
                   style={primaryBtn(loading || !file || !selectedChapter)}
                 >
@@ -572,7 +585,6 @@ const sampleCard = { border:"1.5px solid #e2e8f0", borderRadius:"16px", padding:
 const tipsCard = { background:"#fff", border:"1px solid #e2e8f0", borderRadius:"18px", padding:"22px 24px", marginTop:"20px", boxShadow:"0 4px 16px rgba(0,0,0,0.05)" };
 const tipsTitle = { fontSize:"12.5px", fontWeight:800, color:"#475569", marginBottom:"12px", marginTop:0, textTransform:"uppercase", letterSpacing:"0.06em" };
 const tipItem = { display:"flex", gap:"8px", fontSize:"13px", color:"#475569", fontWeight:500 };
-
 
 const errorCardStyle = {
   marginTop: "16px",
