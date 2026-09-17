@@ -1,0 +1,31 @@
+# ops/Caddyfile — Step 5.1 (DEPLOYMENT_PLAN.md)
+#
+# Automatic HTTPS for the Step-1.9 Azure VM's DNS label. Caddy provisions
+# and renews the Let's Encrypt certificate on its own — just naming the
+# domain as the site address (below) is enough; no separate `tls` directive
+# needed unless that default ever needs overriding.
+#
+# {$DNS_LABEL} is Caddy's own environment-variable substitution (distinct
+# from docker compose's ${VAR} substitution in docker-compose.prod.yml) —
+# it reads the DNS_LABEL env var docker-compose.prod.yml's `caddy` service
+# passes into this container, so the same file works without editing
+# regardless of whose Azure DNS label is actually in use.
+#
+# Routing: ONE public domain, split by path —
+#   /api/*  -> backend (path prefix stripped before proxying, so the
+#              backend's own routes — /users, /jobs, /generate, etc. — never
+#              need to know this prefix exists at all)
+#   everything else -> frontend (the built React app)
+# frontend/src/shared/services/api.js's REACT_APP_API_URL is set to
+# "https://<label>/api" at build time (docker-compose.prod.yml) specifically
+# to match this split — every axios call already includes /api, so Caddy's
+# strip-then-forward here is the other half of that contract.
+{$DNS_LABEL} {
+	handle_path /api/* {
+		reverse_proxy backend:8000
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+}

@@ -1,0 +1,259 @@
+# docker-compose.prod.yml — Step 5.1 (DEPLOYMENT_PLAN.md)
+#
+# Production compose for the Step-1.9 Azure VM. Differences from the dev
+# docker-compose.yml, deliberately:
+#   - No bind mounts of application code, no --reload: the built image IS
+#     the deployed artifact. A code change means `docker compose build`, not
+#     an edit taking effect live.
+#   - Two worker services, one per queue (§4.1), each at its Phase-1
+#     starting concurrency (generation c=3, ingestion c=2) — not one worker
+#     listening to both queues like dev's single `worker` service. This
+#     matters in production: a slow ingestion job can no longer starve
+#     generation's workers of capacity, since they're now separate processes
+#     with separate concurrency budgets.
+#   - Caddy is the only service with a host port mapping (80/443). Every
+#     other service — backend, frontend, both workers, redis — is reachable
+#     only over the internal compose network. This isn't redundant with the
+#     Step 1.9 NSG rules (which already block 6379/8000 at the Azure network
+#     level): it's a second, independent layer — even a misconfigured NSG
+#     couldn't expose them, because nothing here publishes those ports to
+#     the host at all.
+#   - restart: unless-stopped everywhere long-running, so a crashed
+#     container (the exact "worker silently exited, jobs stuck in QUEUED"
+#     failure mode Phase 4's testing hit — see docs/PHASE5_HANDOFF.md §5.1)
+#     comes back on its own instead of needing someone to notice and
+#     manually restart it.
+#   - Healthchecks, so `depends_on: condition: service_healthy` means what
+#     it says, and `docker compose ps` actually reflects real service state.
+
+services:
+  # Same rationale as dev (docker-compose.yml): run once per `docker compose
+  # up`, not inside every backend replica's lifespan. ops/init_db.py must
+  # still be bind-mounted in even here — it lives outside the backend build
+  # context (root ops/, not backend/), so the image alone doesn't contain
+  # it. This is a structural necessity, not a dev convenience, so it stays
+  # even though every other bind mount in this file is gone.
+  init-db:
+    build: ./backend
+    container_name: capstone_init_db
+    env_file:
+      - ./backend/.env
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./ops/init_db.py:/app/ops/init_db.py:ro
+    command: python ops/init_db.py
+
+  backend:
+    build: ./backend
+    container_name: capstone_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+    # tasks/uploads.py writes ingestion uploads under /app/uploads and hands
+    # a PATH (not the file bytes) to the Celery task — that path has to
+    # resolve to the same file in whichever container reads it. In dev this
+    # falls out for free from the ./backend:/app bind mount both backend and
+    # worker already share; in prod, with no bind mounts, it needs an
+    # explicit named volume mounted into both places that actually touch it
+    # (backend writes, worker-ingestion reads).
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      # No extra dependency: urllib is stdlib, unlike curl (not installed in
+      # this image — see backend/Dockerfile).
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    # No --reload: a production process shouldn't be watching the
+    # filesystem for changes that, with no bind mount, can never happen.
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  # §4.1 — generation queue's own worker, at Phase-1's starting concurrency.
+  # Separate service from worker-ingestion below so the two queues have
+  # independently sized, independently restartable processes.
+  worker-generation:
+    build: ./backend
+    container_name: capstone_worker_generation
+    restart: unless-stopped
+    # Docker's default stop_grace_period is 10s — far shorter than this
+    # queue's own 1200s hard time limit (celery_app.py). Without raising it,
+    # any ordinary `docker compose up -d --build` during a deploy would
+    # SIGKILL an in-flight task after just 10s of SIGTERM's "warm shutdown"
+    # (Celery stops pulling new tasks, tries to finish what's running) —
+    # not a graceful wait, a hard kill mid-pipeline. Costly here
+    # specifically: task_acks_late (celery_app.py) means a killed task's
+    # message stays unacked until Redis's own 14400s visibility timeout
+    # redelivers it — a killed task isn't retried in seconds, it can sit in
+    # limbo for up to 4 hours. Set comfortably above the hard limit so a
+    # deploy always waits for genuinely in-flight work to finish on its own
+    # rather than killing and losing it. The real fix — checking a queue is
+    # actually empty before deploying at all — is Step 5.8's "drain workers
+    # before deploy" runbook procedure; this is the safety net under it.
+    stop_grace_period: 1260s
+    env_file:
+      - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+    healthcheck:
+      # CMD-SHELL, not CMD: $$HOSTNAME only expands because this runs
+      # through a shell (/bin/sh -c) — plain CMD (exec form) never invokes
+      # a shell, so the variable would be passed through completely
+      # unexpanded. Docker sets $HOSTNAME to the container's own hostname
+      # automatically; `-d celery@$HOSTNAME` scopes the ping to THIS
+      # container's worker specifically, not "any worker answering on the
+      # shared broker" (which a bare `inspect ping` would accept — useless
+      # for telling worker-generation and worker-ingestion apart).
+      #
+      # Known limitation, not a bug: `inspect ping` does not respond while
+      # a worker is busy running a task. With this queue's soft/hard limits
+      # up to 900s/1200s (celery_app.py), a container mid-task can show
+      # "unhealthy" here for good reason — that's expected, not a failure.
+      # Harmless either way: nothing in this file gates on worker health via
+      # depends_on, so a flapping status here is informational only (visible
+      # in `docker compose ps`), never a cause of an actual restart.
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    command: celery -A core.celery_app worker --loglevel=info -Q generation --concurrency=3
+
+  # §4.1 — ingestion queue's own worker. Lower concurrency (2, not 3):
+  # each ingestion job already fires hundreds of sequential embedding calls
+  # on its own, so high worker-level concurrency here buys little and mostly
+  # just multiplies how many of those sequential-call jobs compete for the
+  # Gemini quota at once (R11).
+  worker-ingestion:
+    build: ./backend
+    container_name: capstone_worker_ingestion
+    restart: unless-stopped
+    # Same reasoning as worker-generation above, sized to THIS queue's own
+    # hard limit instead (4200s, celery_app.py) — comfortably above it so a
+    # deploy waits out a real in-flight ingestion job rather than killing it
+    # and leaving it stuck unacked for up to 4 hours (R3's visibility
+    # timeout) before Redis redelivers it.
+    stop_grace_period: 4260s
+    env_file:
+      - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+      init-db:
+        condition: service_completed_successfully
+    volumes:
+      - uploads_data:/app/uploads
+    healthcheck:
+      # Same CMD-SHELL note as worker-generation above. Ingestion's limits
+      # run up to 3600s/4200s, so "unhealthy" during a real job is even more
+      # expected here — same reasoning, still informational-only.
+      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    command: celery -A core.celery_app worker --loglevel=info -Q ingestion --concurrency=2
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked in at build time (CRA convention) — everything goes through
+        # Caddy's single public domain, under /api (see ops/Caddyfile), so
+        # the frontend never needs to know the backend's real internal
+        # address. DNS_LABEL is the same value set on the Public IP in
+        # Step 1.9 (see ops/azure-setup.md).
+        REACT_APP_API_URL: "https://${DNS_LABEL:?Set DNS_LABEL in .env to the Step-1.9 DNS name}/api"
+    container_name: capstone_frontend
+    restart: unless-stopped
+    healthcheck:
+      # busybox wget, bundled in nginx:alpine — no extra install needed.
+      # 127.0.0.1, NOT localhost: caught this one by actually running it —
+      # Alpine resolves "localhost" to ::1 (IPv6) first, but nginx.conf only
+      # has `listen 80;` (IPv4-only, no `listen [::]:80;`), so wget's IPv6
+      # attempt gets "connection refused" even though nginx is completely
+      # healthy on IPv4. A well-documented Alpine/Docker gotcha, not a real
+      # service failure — confirmed by nginx's own logs showing it started
+      # and is serving fine, purely a wget-picked-the-wrong-address issue.
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  redis:
+    image: redis:7-alpine
+    container_name: capstone_redis
+    restart: unless-stopped
+    # Needed so the healthcheck below (which runs INSIDE this container) can
+    # read the same password already passed to `command:` at parse time by
+    # docker compose itself — two different substitution mechanisms, see
+    # Step 1.2's original notes in docker-compose.yml.
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}
+    volumes:
+      - ./ops/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    command:
+      - redis-server
+      - /usr/local/etc/redis/redis.conf
+      - --requirepass
+      - "${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # Step 5.1 — automatic HTTPS via Let's Encrypt, using the Step-1.9 DNS
+  # label. This is the ONLY service with a host port mapping; everything
+  # else is reachable exclusively over the compose network (see the header
+  # comment above for why that's a second, independent layer on top of the
+  # Step 1.9 NSG rules, not redundant with them).
+  caddy:
+    image: caddy:2-alpine
+    container_name: capstone_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DNS_LABEL=${DNS_LABEL:?Set DNS_LABEL in .env to the Step-1.9 DNS name}
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+
+volumes:
+  redis_data:
+  uploads_data:
+  caddy_data:
+  caddy_config:
