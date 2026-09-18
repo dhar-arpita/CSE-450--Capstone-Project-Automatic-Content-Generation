@@ -187,6 +187,48 @@ services:
       start_period: 20s
     command: celery -A core.celery_app worker --loglevel=info -Q ingestion --concurrency=2
 
+  # Step 5.5 (DEPLOYMENT_PLAN.md) — queue introspection (depth, active
+  # tasks, failure counts) needed *before* Step 5.3's concurrency ladder;
+  # without it, a failed rung just looks like generic slowness with no way
+  # to tell whether it was the worker pool, the DB pool, or the Gemini
+  # quota (R11) that actually bound. Same backend image as everything else
+  # — `flower` is already in requirements.txt (Step 1.3), only the command
+  # differs, exactly like init-db/workers. No `uploads_data` mount and no
+  # init-db dependency: Flower only ever talks to Redis, never the DB or
+  # the filesystem.
+  flower:
+    build: ./backend
+    container_name: capstone_flower
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - CELERY_BROKER_URL=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env — see .env.example}@redis:6379/1
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      # python urllib, not wget/curl: this image is python:3.12-slim-bookworm
+      # (backend/Dockerfile), which has neither installed — same reasoning
+      # as backend's own healthcheck. 127.0.0.1 explicitly, not localhost,
+      # learned from the frontend/nginx IPv6 gotcha — cheaper to always
+      # write it this way than to re-hit that bug on every new image family.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5555/flower/')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    # --url_prefix=flower: Flower is reached at /flower/* through Caddy
+    # (ops/Caddyfile), not at the domain root — this makes Flower generate
+    # and expect all its own internal links under that same prefix, so
+    # Caddy's route for it must NOT strip the prefix (contrast with /api/*,
+    # which DOES get stripped, because backend's own routes know nothing
+    # about that prefix). --xheaders: trust the X-Real-Ip / X-Scheme headers
+    # a reverse proxy sets, so Flower's UI shows real client info instead of
+    # Caddy's own internal address for every request.
+    command: celery -A core.celery_app flower --port=5555 --url_prefix=flower --xheaders=true
+
   frontend:
     build:
       context: ./frontend
@@ -256,6 +298,13 @@ services:
       - "443:443"
     environment:
       - DNS_LABEL=${DNS_LABEL:?Set DNS_LABEL in .env to the Step-1.9 DNS name}
+      # Step 5.5 — Flower's HTTP basic-auth credentials, read by Caddy's
+      # `{$FLOWER_BASIC_AUTH_USER}` / `{$FLOWER_BASIC_AUTH_HASH}`
+      # placeholders in ops/Caddyfile. HASH is a bcrypt hash (from `caddy
+      # hash-password`), never the plaintext password — generate with:
+      #   docker run --rm caddy:2-alpine caddy hash-password --plaintext '<your password>'
+      - FLOWER_BASIC_AUTH_USER=${FLOWER_BASIC_AUTH_USER:?Set FLOWER_BASIC_AUTH_USER in .env}
+      - FLOWER_BASIC_AUTH_HASH=${FLOWER_BASIC_AUTH_HASH:?Set FLOWER_BASIC_AUTH_HASH in .env — see .env.example}
     volumes:
       - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
@@ -264,6 +313,8 @@ services:
       backend:
         condition: service_healthy
       frontend:
+        condition: service_healthy
+      flower:
         condition: service_healthy
 
 volumes:

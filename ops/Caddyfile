@@ -12,9 +12,10 @@
 # regardless of whose Azure DNS label is actually in use.
 #
 # Routing: ONE public domain, split by path —
-#   /api/*  -> backend (path prefix stripped before proxying, so the
-#              backend's own routes — /users, /jobs, /generate, etc. — never
-#              need to know this prefix exists at all)
+#   /api/*    -> backend (path prefix stripped before proxying, so the
+#                backend's own routes — /users, /jobs, /generate, etc. —
+#                never need to know this prefix exists at all)
+#   /flower/* -> Flower (Step 5.5), password-protected, prefix NOT stripped
 #   everything else -> frontend (the built React app)
 # frontend/src/shared/services/api.js's REACT_APP_API_URL is set to
 # "https://<label>/api" at build time (docker-compose.prod.yml) specifically
@@ -23,6 +24,29 @@
 {$DNS_LABEL} {
 	handle_path /api/* {
 		reverse_proxy backend:8000
+	}
+
+	# Step 5.5 — unlike /api/*, this uses `handle` (not `handle_path`), so
+	# the /flower prefix is forwarded AS-IS, not stripped. That's
+	# deliberate: Flower itself was started with --url_prefix=flower
+	# (docker-compose.prod.yml), so it already expects to see /flower/...
+	# in every request it receives, and generates its own internal links
+	# with that same prefix baked in. Stripping it here would break
+	# Flower's own navigation the moment you clicked anything.
+	#
+	# basic_auth: Flower has zero built-in access control of its own — this
+	# is the only thing standing between "anyone who guesses the URL" and
+	# full visibility into every queue, task, and worker in the system.
+	# {$FLOWER_BASIC_AUTH_USER} / {$FLOWER_BASIC_AUTH_HASH} are Caddy's own
+	# env-var placeholders (same mechanism as {$DNS_LABEL} above), read
+	# from docker-compose.prod.yml's `caddy` service — HASH is a bcrypt
+	# hash, generated with `caddy hash-password`, never the plaintext
+	# password itself.
+	handle /flower/* {
+		basic_auth {
+			{$FLOWER_BASIC_AUTH_USER} {$FLOWER_BASIC_AUTH_HASH}
+		}
+		reverse_proxy flower:5555
 	}
 
 	handle {
