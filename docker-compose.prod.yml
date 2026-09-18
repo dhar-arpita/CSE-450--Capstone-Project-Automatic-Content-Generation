@@ -121,6 +121,19 @@ services:
       # shared broker" (which a bare `inspect ping` would accept — useless
       # for telling worker-generation and worker-ingestion apart).
       #
+      # -b (broker URL) rather than -A (app), and this is load-bearing, not
+      # style: `-A core.celery_app` makes the CLI import our whole
+      # application on EVERY check — core.celery_app pulls in core.config
+      # (Step 2.4), which imports google-genai, qdrant-client and sqlalchemy
+      # and constructs the Gemini and Qdrant clients at import time. Measured
+      # on the Step-1.9 VM (2 vCPU): 9.1s per check against a 10s timeout, so
+      # any incidental load tipped it over and the container sat permanently
+      # "unhealthy" while the worker itself was provably fine (connected,
+      # mingled, ready). `-b "$CELERY_BROKER_URL"` skips the app import
+      # entirely — same broker-mediated ping, same liveness signal, measured
+      # 2.0s. It also stops burning a full heavyweight Python startup every
+      # 30s per worker on a 2-vCPU box that has real generation work to do.
+      #
       # Known limitation, not a bug: `inspect ping` does not respond while
       # a worker is busy running a task. With this queue's soft/hard limits
       # up to 900s/1200s (celery_app.py), a container mid-task can show
@@ -128,7 +141,7 @@ services:
       # Harmless either way: nothing in this file gates on worker health via
       # depends_on, so a flapping status here is informational only (visible
       # in `docker compose ps`), never a cause of an actual restart.
-      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME"]
+      test: ["CMD-SHELL", "celery -b \"$$CELERY_BROKER_URL\" inspect ping -d celery@$$HOSTNAME"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -163,10 +176,11 @@ services:
     volumes:
       - uploads_data:/app/uploads
     healthcheck:
-      # Same CMD-SHELL note as worker-generation above. Ingestion's limits
-      # run up to 3600s/4200s, so "unhealthy" during a real job is even more
-      # expected here — same reasoning, still informational-only.
-      test: ["CMD-SHELL", "celery -A core.celery_app inspect ping -d celery@$$HOSTNAME"]
+      # Same CMD-SHELL and -b-not-A notes as worker-generation above.
+      # Ingestion's limits run up to 3600s/4200s, so "unhealthy" during a
+      # real job is even more expected here — same reasoning, still
+      # informational-only.
+      test: ["CMD-SHELL", "celery -b \"$$CELERY_BROKER_URL\" inspect ping -d celery@$$HOSTNAME"]
       interval: 30s
       timeout: 10s
       retries: 5
