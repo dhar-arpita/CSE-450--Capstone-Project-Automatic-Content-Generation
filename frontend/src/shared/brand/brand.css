@@ -1,0 +1,69 @@
+.dhi-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  font-family: var(--dhi-sans);
+  color: var(--dhi-ink);
+  -webkit-tap-highlight-color: transparent;
+}
+.dhi-logo:focus-visible {
+  outline: 2px solid var(--dhi-bloom);
+  outline-offset: 5px;
+  border-radius: 12px;
+}
+
+.dhi-logo-mark {
+  display: block;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  object-fit: cover;
+  box-shadow: var(--dhi-shadow-sm);
+  transition: transform .35s cubic-bezier(.2, .8, .2, 1);
+}
+.dhi-logo:hover .dhi-logo-mark { transform: translateY(-1px) rotate(-3deg); }
+
+.dhi-logo-word {
+  font-size: 1.16rem;
+  font-weight: 700;
+  letter-spacing: -.015em;
+  line-height: 1;
+  white-space: nowrap;
+}
+/* Bengali conjuncts break when tracked, and ধী sits lower than Latin caps. */
+html[lang="bn"] .dhi-logo-word { letter-spacing: 0; line-height: 1.45; }
+
+.dhi-logo-suffix {
+  margin-left: .3em;
+  font-size: .74em;
+  font-weight: 800;
+  letter-spacing: .04em;
+  color: var(--dhi-forest);
+}
+
+/* sizes */
+.dhi-logo-sm .dhi-logo-mark { width: 30px; height: 30px; border-radius: 9px; }
+.dhi-logo-sm .dhi-logo-word { font-size: 1rem; }
+.dhi-logo-lg { gap: 14px; }
+.dhi-logo-lg .dhi-logo-mark { width: 54px; height: 54px; border-radius: 16px; }
+.dhi-logo-lg .dhi-logo-word { font-size: 1.6rem; }
+
+/* tone: pin the wordmark when the surface under it does not follow the theme.
+   "invert" for a permanently dark panel, "light" for the legacy pages whose
+   navbars are still hardcoded white — without this the wordmark turns pale and
+   vanishes for anyone whose OS is set to dark. */
+.dhi-logo-invert { color: #fff; }
+.dhi-logo-invert .dhi-logo-suffix { color: var(--dhi-leaf); }
+
+.dhi-logo-light { color: #0b1f15; }
+.dhi-logo-light .dhi-logo-suffix { color: #1b5138; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dhi-logo .dhi-logo-mark { transition: none; }
+  .dhi-logo:hover .dhi-logo-mark { transform: none; }
+}

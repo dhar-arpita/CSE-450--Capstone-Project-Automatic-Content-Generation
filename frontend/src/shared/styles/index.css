@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@600;700;800&display=swap');
+/* Inter and Poppins carry no Bengali glyphs, so Bangla text needs real faces of
+   its own: Hind Siliguri for UI, Tiro Bangla for display. Loaded in one request
+   together with the Latin families. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Poppins:wght@600;700;800&family=Hind+Siliguri:wght@300;400;500;600;700&family=Tiro+Bangla:ital@0;1&family=Instrument+Serif:ital@0;1&display=swap');
+
+/* Semantic, theme-aware tokens for every page built after the redesign. */
+@import './tokens.css';
 
 /* ===== GLOBAL RESET & TOKENS ===== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,12 +42,18 @@
 html { scroll-behavior: smooth; }
 
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Inter', 'Hind Siliguri', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--bg);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
+}
+
+/* Bangla leads with its own typeface; Latin words inside Bangla copy still
+   fall through to Inter. */
+html[lang="bn"] body {
+  font-family: 'Hind Siliguri', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
 }
 
 code {

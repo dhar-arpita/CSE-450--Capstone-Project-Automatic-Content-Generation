@@ -1,0 +1,539 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Auth pages — three doors, one design language.
+
+   student : split screen, night panel, scalloped seam, bubblegum button
+   teacher : centred card on cream, line-art frieze, forest button
+   admin   : console frame, hairline grid, squared-off ink button
+
+   All three share the top bar, the fields and the copy scale below, so the
+   difference between them is composition and accent — never a second design
+   system. Colours come from shared/styles/tokens.css and flip with the theme.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.au-reveal {
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity .62s ease .04s, transform .62s cubic-bezier(.2, .8, .2, 1) .04s;
+}
+.au-reveal.is-in { opacity: 1; transform: none; }
+
+.au {
+  min-height: 100svh;
+  font-family: var(--dhi-sans);
+  color: var(--dhi-ink);
+  background: var(--dhi-surface);
+  -webkit-font-smoothing: antialiased;
+}
+.au button { font-family: inherit; }
+
+/* ── top bar ───────────────────────────────────────────────────────────── */
+.au-top {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px clamp(20px, 4vw, 46px);
+}
+.au-top-tools { display: flex; align-items: center; gap: 10px; }
+
+.au-top-link {
+  color: var(--dhi-muted);
+  text-decoration: none;
+  font-size: .87rem;
+  font-weight: 500;
+  margin-right: 4px;
+  transition: color .2s ease;
+}
+.au-top-link:hover { color: var(--dhi-ink); }
+
+.au-chip {
+  height: 36px;
+  min-width: 40px;
+  padding: 0 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 999px;
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-ink);
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+  cursor: pointer;
+  transition: border-color .2s ease, background .2s ease;
+}
+.au-chip:hover { border-color: var(--dhi-forest); }
+.au-chip-icon { padding: 0; }
+
+.au-top-cta {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: var(--dhi-solid-bg);
+  color: var(--dhi-solid-fg);
+  text-decoration: none;
+  font-size: .84rem;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: transform .2s ease;
+}
+.au-top-cta:hover { transform: translateY(-1px); }
+
+@media (max-width: 620px) {
+  .au-top-link { display: none; }
+}
+
+/* ── copy ──────────────────────────────────────────────────────────────── */
+.au-copy { max-width: 46ch; }
+.au-eyebrow {
+  margin: 0 0 12px;
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .15em;
+  text-transform: uppercase;
+  color: var(--dhi-bloom-deep);
+}
+/* Bengali must not be tracked or uppercased: both break conjuncts. */
+html[lang="bn"] .au-eyebrow {
+  text-transform: none;
+  letter-spacing: .01em;
+  font-size: .84rem;
+  font-weight: 600;
+}
+
+.au-title {
+  margin: 0;
+  font-family: var(--dhi-display);
+  font-weight: 400;
+  font-size: clamp(2.05rem, 3.2vw, 2.65rem);
+  line-height: 1.06;
+  letter-spacing: -.02em;
+  text-wrap: balance;
+}
+html[lang="bn"] .au-title { line-height: 1.34; letter-spacing: 0; }
+
+.au-lede {
+  margin: 14px 0 0;
+  color: var(--dhi-muted);
+  font-size: .97rem;
+  line-height: 1.64;
+  max-width: 40ch;
+}
+
+/* ── form ──────────────────────────────────────────────────────────────── */
+.au-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  margin-top: 28px;
+  width: 100%;
+  max-width: 430px;
+}
+.au-field { display: flex; flex-direction: column; gap: 7px; }
+.au-label-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.au-label {
+  font-size: .79rem;
+  font-weight: 600;
+  color: var(--dhi-ink-soft);
+  padding: 0;
+}
+
+.au-input-wrap { position: relative; display: flex; align-items: center; }
+.au-input-icon {
+  position: absolute;
+  left: 15px;
+  display: flex;
+  color: var(--dhi-muted);
+  pointer-events: none;
+}
+.au-input {
+  width: 100%;
+  height: 51px;
+  padding: 0 46px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 13px;
+  background: var(--dhi-field);
+  color: var(--dhi-ink);
+  font-family: inherit;
+  font-size: .95rem;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.au-input::placeholder { color: var(--dhi-muted); opacity: .72; }
+.au-input:focus {
+  outline: none;
+  border-color: var(--dhi-bloom);
+  box-shadow: 0 0 0 4px rgba(255, 79, 154, .16);
+}
+
+.au-reveal-btn {
+  position: absolute;
+  right: 12px;
+  display: flex;
+  padding: 6px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--dhi-muted);
+  cursor: pointer;
+}
+.au-reveal-btn:hover { color: var(--dhi-ink); }
+
+.au-roles { border: 0; padding: 0; margin: 0; min-width: 0; }
+.au-roles-row { display: flex; gap: 8px; margin-top: 8px; }
+.au-role {
+  flex: 1;
+  height: 43px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 12px;
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-muted);
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease, color .18s ease;
+}
+.au-role:hover { color: var(--dhi-ink); }
+.au-role.is-on {
+  border-color: var(--dhi-forest);
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-ink);
+}
+
+.au-alert {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0;
+  padding: 11px 13px;
+  border: 1px solid var(--dhi-danger);
+  border-radius: 12px;
+  background: var(--dhi-danger-wash);
+  color: var(--dhi-danger);
+  font-size: .86rem;
+  line-height: 1.5;
+}
+.au-alert svg { flex: 0 0 auto; margin-top: 1px; }
+.au-alert-link {
+  display: inline-block;
+  margin-left: 8px;
+  color: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.au-submit {
+  height: 52px;
+  margin-top: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--dhi-solid-bg);
+  color: var(--dhi-solid-fg);
+  font-size: .96rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform .18s ease, filter .18s ease;
+}
+.au-submit:hover:not(:disabled) { transform: translateY(-1px); }
+.au-submit:disabled { opacity: .68; cursor: progress; }
+
+.au-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: au-spin .7s linear infinite;
+}
+@keyframes au-spin { to { transform: rotate(360deg); } }
+
+/* ── footers ───────────────────────────────────────────────────────────── */
+.au-foot {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-width: 430px;
+  font-size: .88rem;
+  color: var(--dhi-muted);
+}
+.au-foot p { margin: 0; }
+.au-foot a { color: var(--dhi-ink); font-weight: 600; text-underline-offset: 3px; }
+.au-switch { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; font-size: .83rem; }
+.au-switch-sep { opacity: .5; }
+
+/* ═══ student ══════════════════════════════════════════════════════════ */
+.au-student {
+  display: grid;
+  grid-template-columns: minmax(0, 47fr) minmax(0, 53fr);
+}
+.au-stage {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--dhi-surface);
+}
+.au-stage-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 8px clamp(24px, 5vw, 78px) 56px;
+}
+
+/* The seam. Half-discs of the light panel's own colour, tiled down the edge,
+   so the light side reads as a cut-out cloud pressed into the night side. */
+.au-stage::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 100%;
+  width: 54px;
+  background: var(--dhi-surface);
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(circle 54px at 0 54px, #000 98%, transparent 100%);
+          mask-image: radial-gradient(circle 54px at 0 54px, #000 98%, transparent 100%);
+  -webkit-mask-size: 54px 108px;
+          mask-size: 54px 108px;
+  -webkit-mask-repeat: repeat-y;
+          mask-repeat: repeat-y;
+}
+
+.au-panel {
+  position: relative;
+  overflow: hidden;
+  /* depth for a night sky, not decoration: one soft source, top right */
+  background: radial-gradient(118% 88% at 76% 16%, #2d1657 0%, #140b29 58%, #0a0617 100%);
+}
+.au-scene-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* A legibility scrim under the points, so the copy holds up no matter which
+   part of the sky the panel's aspect ratio happens to crop to. */
+.au-panel::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 46%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(to top, rgba(8, 5, 20, .88), rgba(8, 5, 20, 0));
+}
+
+.au-panel-points {
+  position: absolute;
+  z-index: 2;
+  left: clamp(52px, 7vw, 92px);
+  right: clamp(28px, 4vw, 56px);
+  bottom: clamp(36px, 6vh, 66px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  color: rgba(255, 255, 255, .84);
+  font-size: .93rem;
+  line-height: 1.5;
+}
+.au-panel-points li { position: relative; padding-left: 24px; }
+.au-panel-points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: .5em;
+  width: 10px;
+  height: 11px;
+  background: var(--dhi-leaf);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}
+
+.au-student .au-submit { background: var(--dhi-bloom-deep); color: #fff; }
+[data-theme="dark"] .au-student .au-submit { color: #2a0714; }
+
+@media (max-width: 900px) {
+  .au-student { grid-template-columns: 1fr; }
+  .au-panel { order: -1; min-height: 228px; }
+  .au-panel .au-scene-svg { transform: translateY(-8%); }
+  .au-panel-points { display: none; }
+  .au-stage::after {
+    top: -44px;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 44px;
+    -webkit-mask-image: radial-gradient(circle 44px at 44px 100%, #000 98%, transparent 100%);
+            mask-image: radial-gradient(circle 44px at 44px 100%, #000 98%, transparent 100%);
+    -webkit-mask-size: 88px 44px;
+            mask-size: 88px 44px;
+    -webkit-mask-repeat: repeat-x;
+            mask-repeat: repeat-x;
+  }
+  .au-stage-inner { padding-top: 16px; }
+}
+
+/* ═══ teacher ══════════════════════════════════════════════════════════ */
+.au-teacher {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.au-center {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 16px clamp(20px, 4vw, 40px) 70px;
+}
+.au-card {
+  position: relative;
+  width: 100%;
+  max-width: 486px;
+  padding: clamp(30px, 4vw, 44px);
+  border: 1px solid var(--dhi-line);
+  border-radius: 28px;
+  background: var(--dhi-surface-raised);
+  box-shadow: var(--dhi-shadow-lg);
+}
+.au-card .au-form, .au-card .au-foot { max-width: none; }
+.au-card-sticker {
+  position: absolute;
+  top: -30px;
+  right: 30px;
+  width: 78px;
+  height: auto;
+  transform: rotate(-9deg);
+  filter: drop-shadow(0 12px 22px rgba(11, 31, 21, .22));
+}
+
+.au-frieze {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 300px;
+  color: var(--dhi-forest);
+  opacity: .16;
+  pointer-events: none;
+}
+.au-frieze-svg { width: 100%; height: 100%; }
+[data-theme="dark"] .au-frieze { opacity: .11; }
+.au-frieze-l { left: max(8px, calc(50vw - 660px)); }
+.au-frieze-r { right: max(8px, calc(50vw - 660px)); transform: scaleX(-1) translateY(58px); }
+@media (max-width: 1120px) { .au-frieze { display: none; } }
+@media (max-width: 520px) {
+  .au-card { border-radius: 22px; padding: 26px 22px 30px; }
+  .au-card-sticker { width: 58px; top: -22px; right: 20px; }
+}
+
+/* ═══ admin ════════════════════════════════════════════════════════════ */
+.au-admin {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--dhi-surface-sunken);
+}
+.au-admin::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: .55;
+  background-image:
+    linear-gradient(var(--dhi-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--dhi-line) 1px, transparent 1px);
+  background-size: 58px 58px;
+}
+.au-frame {
+  width: 100%;
+  max-width: 1020px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  border: 1px solid var(--dhi-line);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--dhi-surface-raised);
+  box-shadow: var(--dhi-shadow-lg);
+}
+.au-frame-visual {
+  position: relative;
+  min-height: 496px;
+  padding: clamp(32px, 3.6vw, 52px);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 40px;
+  background: var(--dhi-surface-invert);
+  color: #fff;
+}
+.au-frame-visual::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: .12;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, .5) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, .5) 1px, transparent 1px);
+  background-size: 58px 58px;
+}
+.au-frame-mark { position: relative; z-index: 1; width: 132px; height: auto; }
+.au-frame-note {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0;
+  max-width: 34ch;
+  color: rgba(255, 255, 255, .74);
+  font-size: .86rem;
+  line-height: 1.58;
+}
+.au-frame-note svg { flex: 0 0 auto; margin-top: 2px; color: var(--dhi-leaf); }
+
+.au-frame-form {
+  padding: clamp(32px, 3.6vw, 52px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.au-frame-form .au-form, .au-frame-form .au-foot { max-width: none; }
+.au-admin .au-input { border-radius: 10px; }
+.au-admin .au-submit { border-radius: 10px; }
+
+@media (max-width: 880px) {
+  .au-frame { grid-template-columns: 1fr; }
+  .au-frame-visual {
+    min-height: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 22px;
+    padding: 24px 26px;
+  }
+  .au-frame-mark { width: 82px; }
+  .au-frame-note { font-size: .8rem; }
+}
+@media (max-width: 560px) {
+  .au-frame-note { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .au-reveal { transition: none; }
+  .au-submit:hover:not(:disabled), .au-top-cta:hover { transform: none; }
+  .au-spinner { animation-duration: 1.6s; }
+}

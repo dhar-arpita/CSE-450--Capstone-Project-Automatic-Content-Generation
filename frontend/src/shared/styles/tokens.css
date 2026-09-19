@@ -1,0 +1,101 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Dhi design tokens — app-wide.
+
+   Everything is semantic (--dhi-surface, --dhi-ink) rather than literal
+   (--white, --green-500), so the dark theme is a single block of overrides
+   instead of a hunt through every component. `[data-theme="dark"]` is written
+   onto <html> by shared/theme and by the no-flash script in public/index.html.
+
+   The palette is sampled straight from the logo the team drew: the tangram
+   bird sits on #4E2780, and its six pieces supply the accents. Forest greens
+   carry structure, bubblegum pink carries emphasis.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* brand constants — identical in both themes, they are the logo */
+  --dhi-violet:      #4e2780;
+  --dhi-violet-deep: #35195b;
+  --dhi-leaf:        #7ed957;
+  --dhi-petal:       #ef94ca;
+  --dhi-sky:         #5ce7ff;
+  --dhi-sun:         #ffe533;
+  --dhi-coral:       #fc6467;
+
+  /* surfaces */
+  --dhi-surface:        #fdfaf4;
+  --dhi-surface-raised: #ffffff;
+  --dhi-surface-sunken: #f2f0e9;
+  --dhi-surface-tint:   #e2f0e6;
+  --dhi-surface-invert: #0f2c1e;
+
+  /* type */
+  --dhi-ink:        #0b1f15;
+  --dhi-ink-soft:   #3c5448;
+  --dhi-muted:      #5d7367;
+  --dhi-on-invert:  #f2f7f3;
+
+  /* structure */
+  --dhi-line:        #e7ede8;
+  --dhi-line-strong: #d3dfd7;
+  --dhi-field:       #ffffff;
+
+  /* accents */
+  --dhi-forest:     #1b5138;
+  --dhi-forest-lit: #2a6b4b;
+  --dhi-bloom:      #ff4f9a;
+  --dhi-bloom-deep: #e83b86;
+  --dhi-bloom-wash: #ffe4ef;
+  --dhi-danger:     #c0362c;
+  --dhi-danger-wash:#fdecea;
+
+  /* a solid block that must read as "filled" in either theme */
+  --dhi-solid-bg: #0f2c1e;
+  --dhi-solid-fg: #ffffff;
+
+  --dhi-shadow-sm: 0 1px 2px rgba(11, 31, 21, .06);
+  --dhi-shadow-md: 0 10px 30px -14px rgba(11, 31, 21, .28);
+  --dhi-shadow-lg: 0 34px 80px -34px rgba(11, 31, 21, .40);
+
+  --dhi-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --dhi-display: 'Instrument Serif', Georgia, serif;
+}
+
+[data-theme="dark"] {
+  --dhi-surface:        #0a130e;
+  --dhi-surface-raised: #101c15;
+  --dhi-surface-sunken: #070f0b;
+  --dhi-surface-tint:   #13231a;
+  --dhi-surface-invert: #050c08;
+
+  --dhi-ink:        #e9f1eb;
+  --dhi-ink-soft:   #b9cdc0;
+  --dhi-muted:      #8ba396;
+  --dhi-on-invert:  #eef5f0;
+
+  --dhi-line:        #1e2f25;
+  --dhi-line-strong: #2b4034;
+  --dhi-field:       #0d1a13;
+
+  --dhi-forest:     #7ed3a3;
+  --dhi-forest-lit: #a5e5c1;
+  --dhi-bloom:      #ff7ab4;
+  --dhi-bloom-deep: #ff4f9a;
+  --dhi-bloom-wash: #2a1520;
+  --dhi-danger:     #ff8f84;
+  --dhi-danger-wash:#2a1512;
+
+  /* inverted so a "solid" button stays visible against a dark page */
+  --dhi-solid-bg: #e4f0e8;
+  --dhi-solid-fg: #0b1f15;
+
+  --dhi-shadow-sm: 0 1px 2px rgba(0, 0, 0, .5);
+  --dhi-shadow-md: 0 10px 30px -14px rgba(0, 0, 0, .75);
+  --dhi-shadow-lg: 0 34px 80px -34px rgba(0, 0, 0, .9);
+}
+
+/* Bengali needs its own faces — Inter and Instrument Serif have no Bengali
+   glyphs at all — and more leading, because matras sit above the x-height. */
+html[lang="bn"] {
+  --dhi-sans:    'Hind Siliguri', 'Inter', system-ui, sans-serif;
+  --dhi-display: 'Tiro Bangla', 'Instrument Serif', Georgia, serif;
+}

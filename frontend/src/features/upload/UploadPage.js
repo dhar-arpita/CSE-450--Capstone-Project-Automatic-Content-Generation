@@ -1,6 +1,7 @@
 // features/upload/UploadPage.js — Redesigned to match ChatbotPage's visual language
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import BrandLogo from "../../shared/brand/BrandLogo";
 import {
   getClasses, getSubjects, getChapters,
   uploadCurriculumFile,
@@ -69,10 +70,7 @@ function Navbar({ user, onBack, breadcrumb, language, onLanguage }) {
     <nav style={navStyle}>
       <div style={navInner}>
         {/* Left: logo */}
-        <div style={navLogo} onClick={onBack}>
-          <div style={logoIcon}>🎓</div>
-          <span style={logoText}>EduAI <span style={{color:"#4f46e5"}}>Hub</span></span>
-        </div>
+        <BrandLogo onClick={onBack} tone="light" />
 
         {/* Center: breadcrumb */}
         <div style={navCenter}>
@@ -526,9 +524,6 @@ const navInner = { maxWidth:"1000px", margin:"0 auto", padding:"0 24px", height:
 const navRight = { display:"flex", alignItems:"center", gap:"12px", flexShrink:0 };
 const langToggle = { display:"flex", background:"#f1f5f9", borderRadius:"999px", padding:"3px" };
 const langBtn = (active) => ({ padding:"5px 12px", borderRadius:"999px", border:"none", background:active?"#4f46e5":"transparent", color:active?"#fff":"#64748b", fontSize:"12px", fontWeight:700, cursor:"pointer", transition:"all 0.15s" });
-const navLogo = { display:"flex", alignItems:"center", gap:"10px", flexShrink:0, cursor:"pointer" };
-const logoIcon = { width:"36px", height:"36px", borderRadius:"10px", background:"linear-gradient(135deg, #4f46e5, #6366f1)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px" };
-const logoText = { fontSize:"18px", fontWeight:800, color:"#0f172a", fontFamily:"'Poppins', sans-serif" };
 const navCenter = { flex:1, display:"flex", justifyContent:"center" };
 const navBreadcrumb = { fontSize:"13px", fontWeight:600, color:"#94a3b8" };
 const userBadge = { display:"flex", alignItems:"center", gap:"8px" };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import BrandLogo from "../../shared/brand/BrandLogo";
 // import { getClasses } from "./api";
 import { getClasses } from "../../shared/services/api";
 
@@ -142,7 +143,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    if (!storedUser) { navigate("/"); return; }
+    if (!storedUser) { navigate("/login"); return; }
     setUser(JSON.parse(storedUser));
 
     // time-based greeting
@@ -154,7 +155,7 @@ export default function Dashboard() {
     getClasses().then(({ data }) => setClassList(data || [])).catch(() => {});
   }, [navigate]);
 
-  const handleLogout = () => { localStorage.clear(); navigate("/"); };
+  const handleLogout = () => { localStorage.clear(); navigate("/login"); };
 
   const features = [
     {
@@ -228,19 +229,7 @@ export default function Dashboard() {
           padding: "0 24px", height: "64px",
           display: "flex", alignItems: "center", justifyContent: "space-between",
         }}>
-          {/* logo */}
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <div style={{
-              width: "36px", height: "36px", borderRadius: "10px",
-              background: "linear-gradient(135deg, #4f46e5, #6366f1)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "18px",
-            }}>🎓</div>
-            <span style={{
-              fontFamily: "'Poppins', sans-serif",
-              fontWeight: "700", fontSize: "17px", color: "#0f172a",
-            }}>EduAI <span style={{ color: "#4f46e5" }}>Hub</span></span>
-          </div>
+          <BrandLogo to="/dashboard" tone="light" />
 
           {/* breadcrumb */}
           <div style={{
@@ -450,7 +439,7 @@ export default function Dashboard() {
         color: "#94a3b8", fontSize: "12px",
         marginTop: "20px",
       }}>
-        EduAI Content Hub · Automated Educational Content Generation · CSE 450 Capstone
+        ধী · Dhi — Curriculum-aligned content for Bangladeshi classrooms · CSE 450 Capstone
       </footer>
     </div>
   );

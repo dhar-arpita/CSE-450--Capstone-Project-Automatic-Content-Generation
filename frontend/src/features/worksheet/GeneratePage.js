@@ -1,6 +1,7 @@
 // features/generate/GeneratePage.js — Updated to Emerald Green (#059669) Theme
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import BrandLogo from "../../shared/brand/BrandLogo";
 
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
 import WorksheetGenerator from "../worksheet/WorksheetGenerator";
@@ -50,10 +51,7 @@ function Navbar({ user, onBack, breadcrumb, language, onLanguage }) {
   return (
     <nav style={navStyle}>
       <div style={navInner}>
-        <div style={navLogo} onClick={onBack}>
-          <div style={logoIcon}>🎓</div>
-          <span style={logoText}>EduAI <span style={{ color: "#059669" }}>Hub</span></span>
-        </div>
+        <BrandLogo onClick={onBack} tone="light" />
 
         <div style={navCenter}>
           <span style={navBreadcrumb}>
@@ -124,7 +122,7 @@ export default function GeneratePage() {
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) {
-      navigate("/");
+      navigate("/login");
     } else {
       setUser(JSON.parse(storedUser));
       loadClasses();
@@ -321,9 +319,6 @@ const pageStyle = { minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Seg
 /* NAV */
 const navStyle = { background: "#fff", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.08)", borderBottom: "1px solid #e2e8f0" };
 const navInner = { maxWidth: "1100px", margin: "0 auto", padding: "0 24px", height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" };
-const navLogo = { display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, cursor: "pointer" };
-const logoIcon = { width: "36px", height: "36px", borderRadius: "10px", background: "linear-gradient(135deg, #059669, #10b981)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" };
-const logoText = { fontSize: "18px", fontWeight: 800, color: "#0f172a", fontFamily: "'Poppins', sans-serif" };
 const navCenter = { flex: 1, display: "flex", justifyContent: "center" };
 const navBreadcrumb = { fontSize: "13px", fontWeight: 600, color: "#94a3b8" };
 const navRight = { display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 };

@@ -1,6 +1,7 @@
 // features/chatbot/ChatbotPage.js — Redesigned with 10MS-inspired UI
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import BrandLogo from "../../shared/brand/BrandLogo";
 import {
   getClasses, getSubjects, getChapters, getTopics, chatHistory, chatSessions,
 } from "../../shared/services/api";
@@ -172,7 +173,7 @@ export default function ChatbotPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("user");
-    if (!stored) { navigate("/"); return; }
+    if (!stored) { navigate("/login"); return; }
     const u = JSON.parse(stored);
     setUser(u);
     getClasses().then(({ data }) => setClassList(data || [])).catch(() => { });
@@ -367,10 +368,7 @@ export default function ChatbotPage() {
       <nav style={navStyle}>
         <div style={navInner}>
           {/* Logo */}
-          <div style={navLogo} onClick={() => navigate(-1)}>
-            <div style={logoIcon}>🎓</div>
-            <span style={logoText}>EduAI <span style={{color:"#7c3aed"}}>Hub</span></span>
-          </div>
+          <BrandLogo onClick={() => navigate(-1)} tone="light" />
 
           {/* Center - Breadcrumb */}
           <div style={navCenter}>
@@ -750,9 +748,6 @@ const navStyle = { background:"#fff", position:"sticky", top:0, zIndex:100, boxS
 const navInner = { maxWidth:"1300px", margin:"0 auto", padding:"0 24px", height:"64px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"16px" };
 
 // Logo
-const navLogo = { display:"flex", alignItems:"center", gap:"10px", flexShrink:0, cursor:"pointer" };
-const logoIcon = { width:"36px", height:"36px", borderRadius:"10px", background:"linear-gradient(135deg, #7c3aed, #9333ea)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"18px" };
-const logoText = { fontSize:"18px", fontWeight:800, color:"#0f172a", fontFamily:"'Poppins', sans-serif" };
 
 // Center
 const navCenter = { flex:1, display:"flex", justifyContent:"center" };
