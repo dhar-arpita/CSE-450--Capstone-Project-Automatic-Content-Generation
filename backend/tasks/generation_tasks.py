@@ -270,6 +270,9 @@ def _quiz(db, job, user):
         topic_name=topic.name if topic else None,
         topic_id=topic_id,
         language=params["language"],
+        # Defaulted rather than indexed: jobs queued before the difficulty
+        # parameter existed have no such key in their params.
+        difficulty=params.get("difficulty", "mixed"),
         num_questions=params.get("num_questions"),
     )
     if result.get("error"):
@@ -281,7 +284,7 @@ def _quiz(db, job, user):
         chapter_id=chapter_id,
         subject_id=subject.subject_id,
         content_type=f"quiz_{scope}",
-        difficulty_level="mixed",
+        difficulty_level=params.get("difficulty", "mixed"),
         display_body=result["html"],
         answer_key=str(result.get("quiz", "")),
         explanation=str(result.get("visuals", "")),

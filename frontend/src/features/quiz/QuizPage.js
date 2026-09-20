@@ -1,25 +1,39 @@
-import React, { useState, useEffect } from "react";
+// features/quiz/QuizPage.js — the quiz studio.
+//
+// Same shell, same rhythm and the same rail as the worksheet studio, so the two
+// read as one product. Wording is the team's own apart from the rail, which is
+// new UI and needed new strings.
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import BrandLogo from "../../shared/brand/BrandLogo";
-
+import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
+import AppShell from "../../shared/ui/AppShell";
+import SavedContentList from "../../shared/ui/SavedContentList";
+import { IconCheck, IconQuiz, IconSpark } from "../../shared/ui/icons";
 import QuizGenerator from "./QuizGenerator";
+import "../../shared/ui/studio.css";
 
 /* ---------- bilingual UI text ---------- */
 const TXT = {
   bangla: {
     breadcrumb: "Quiz Studio",
     pageTitle: "AI Quiz স্টুডিও",
-    pageSub: "যেকোনো Subject, Chapter বা Topic-এর ওপর কাস্টম Quiz তৈরি করো।",
+    pageSub: "যেকোনো Subject, Chapter বা Topic-এর ওপর কাস্টম Quiz তৈরি করুন।",
     setupLabel: "সেটআপ",
     step1Title: "কারিকুলাম সিলেকশন",
     step1Sub: "কমপক্ষে Subject সিলেক্ট করুন। টপিক সিলেক্ট করলে স্পেসিফিক কুইজ তৈরি হবে।",
     classL: "ক্লাস", subjectL: "বিষয়", chapterL: "অধ্যায়", topicL: "টপিক (ঐচ্ছিক)",
-    selectClass: "ক্লাস বেছে নাও", selectSubject: "বিষয় বেছে নাও",
-    selectChapter: "অধ্যায় বেছে নাও", selectTopic: "টপিক বেছে নাও (ঐচ্ছিক)",
-    hintDone: "চমৎকার। তোমার সিলেক্ট করা লেভেলে Quiz তৈরি করতে নিচে যাও।",
-    hintPending: "Quiz তৈরি করতে অন্তত একটি Subject বেছে নাও।",
+    selectClass: "ক্লাস বেছে নিন", selectSubject: "বিষয় বেছে নিন",
+    selectChapter: "অধ্যায় বেছে নিন", selectTopic: "টপিক বেছে নিন (ঐচ্ছিক)",
+    hintDone: "চমৎকার। আপনার সিলেক্ট করা লেভেলে Quiz তৈরি করতে নিচে যান।",
+    hintPending: "Quiz তৈরি করতে অন্তত একটি Subject বেছে নিন।",
     step2Title: "Quiz কনফিগারেশন ও জেনারেট",
+    savedTitle: "আপনার তৈরি কুইজ",
+    savedEmpty: "এখনো কোনো কুইজ তৈরি হয়নি — প্রথমটা বানিয়ে ফেলুন!",
+    savedLoading: "লোড হচ্ছে…",
+    savedFailed: "আপনার কুইজগুলো আনা গেল না।",
+    levels: { mixed: "মিক্সড", easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
+    languages: { bangla: "বাংলা", english: "ইংরেজি" },
   },
   english: {
     breadcrumb: "Quiz Studio",
@@ -34,58 +48,34 @@ const TXT = {
     hintDone: "Perfect. Your context is ready. Generate quiz below.",
     hintPending: "Select at least a Subject to enable quiz generation.",
     step2Title: "Quiz Configuration & Generate",
+    savedTitle: "Your generated quizzes",
+    savedEmpty: "No quiz generated yet, get your first one!",
+    savedLoading: "Loading…",
+    savedFailed: "Could not load your quizzes.",
+    levels: { mixed: "Mixed", easy: "Easy", medium: "Medium", hard: "Hard" },
+    languages: { bangla: "Bangla", english: "English" },
   },
 };
 
-/* ---------- top navbar ---------- */
-function Navbar({ user, onBack, breadcrumb, language, onLanguage }) {
+// Quizzes are stored under one content type per scope, so the rail asks for all
+// three at once rather than showing only topic quizzes.
+const QUIZ_TYPES = "quiz_topic,quiz_chapter,quiz_subject";
+
+function SelectField({ label, value, onChange, options, placeholder, disabled }) {
   return (
-    <nav style={navStyle}>
-      <div style={navInner}>
-        <BrandLogo onClick={onBack} tone="light" />
-
-        <div style={navCenter}>
-          <span style={navBreadcrumb}>
-            🏠 Dashboard / <span style={{ color: "#db2777", fontWeight: 700, marginLeft: "4px" }}>{breadcrumb}</span>
-          </span>
-        </div>
-
-        <div style={navRight}>
-          <div style={langToggle}>
-            {[["bangla", "BN"], ["english", "EN"]].map(([v, l]) => (
-              <button key={v} onClick={() => onLanguage(v)} style={langBtn(language === v)}>{l}</button>
-            ))}
-          </div>
-          <div style={userBadge}>
-            <div style={userAvatar}>{(user?.name || "S")[0].toUpperCase()}</div>
-            <span style={userName}>{user?.name || "Test Student"}</span>
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
-}
-
-/* ---------- styled select field ---------- */
-function SelectField({ label, icon, value, onChange, disabled, options, placeholder }) {
-  return (
-    <div>
-      <label style={fieldLabel}><span style={{ fontSize: "14px" }}>{icon}</span><span>{label}</span></label>
-      <div style={{ ...pillWrap, ...(disabled ? pillWrapDisabled : {}) }}>
-        <select
-          value={value}
-          disabled={disabled}
-          onChange={(e) => onChange(e.target.value)}
-          style={pillSelect}
-        >
+    <div className="gw-field">
+      <label className="gw-label">{label}</label>
+      <div className="gw-select">
+        <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
           <option value="">{placeholder}</option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <span style={pillCaret}>▾</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </div>
     </div>
   );
@@ -94,7 +84,9 @@ function SelectField({ label, icon, value, onChange, disabled, options, placehol
 export default function QuizPage() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
-  const [language, setLanguage] = useState("bangla");
+
+  const { lang } = useI18n();
+  const language = lang === "bn" ? "bangla" : "english";
   const t = TXT[language] || TXT.bangla;
 
   const [classList, setClassList] = useState([]);
@@ -107,23 +99,30 @@ export default function QuizPage() {
   const [selectedChapter, setSelectedChapter] = useState("");
   const [selectedTopicId, setSelectedTopicId] = useState("");
 
+  const [openRequest, setOpenRequest] = useState(null);
+  const [activeContentId, setActiveContentId] = useState(null);
+  const [listVersion, setListVersion] = useState(0);
+
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) {
       navigate("/login");
-    } else {
-      setUser(JSON.parse(storedUser));
-      loadClasses();
+      return;
     }
+    setUser(JSON.parse(storedUser));
+    getClasses()
+      .then(({ data }) => setClassList(data || []))
+      .catch((err) => console.error("Classes load failed", err));
   }, [navigate]);
 
-  const loadClasses = async () => {
-    try {
-      const { data } = await getClasses();
-      setClassList(data || []);
-    } catch (err) {
-      console.error("Classes load failed", err);
-    }
+  const handleLogout = () => {
+    ["access_token", "refresh_token", "user", "chatbot_session_id"].forEach((k) =>
+      localStorage.removeItem(k)
+    );
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("activeJob:"))
+      .forEach((k) => localStorage.removeItem(k));
+    navigate("/", { state: { splash: true } });
   };
 
   const handleClassChange = async (className) => {
@@ -133,9 +132,7 @@ export default function QuizPage() {
     try {
       const { data } = await getSubjects(className);
       setSubjectList(data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleSubjectChange = async (subjectId) => {
@@ -145,171 +142,129 @@ export default function QuizPage() {
     try {
       const { data } = await getChapters(subjectId);
       setChapterList(data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleChapterChange = async (chapterId) => {
     setSelectedChapter(chapterId);
-    setTopicList([]);
-    setSelectedTopicId("");
+    setTopicList([]); setSelectedTopicId("");
     try {
       const { data } = await getTopics(chapterId);
       setTopicList(data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const setupProgress = [selectedClass, selectedSubject, selectedChapter, selectedTopicId].filter(Boolean).length;
+  // A quiz needs a subject at minimum; topic and chapter only narrow it.
+  const chosen = [selectedClass, selectedSubject, selectedChapter, selectedTopicId].filter(Boolean).length;
+  const ready = Boolean(selectedSubject);
 
   return (
-    <div style={pageStyle}>
-      <Navbar user={user} onBack={() => navigate(-1)} breadcrumb={t.breadcrumb} language={language} onLanguage={setLanguage} />
-
-      <main style={mainWrap}>
-        {/* PAGE TITLE */}
-        <div style={pageTitleRow}>
-          <div style={pageTitleIcon}>🎯</div>
-          <div>
-            <h1 style={pageTitleStyle}>{t.pageTitle}</h1>
-            <p style={pageSub}>{t.pageSub}</p>
-          </div>
+    <AppShell
+      breadcrumb={t.breadcrumb}
+      user={user}
+      onLogout={handleLogout}
+      tone="quiz"
+      rail={
+        <SavedContentList
+          contentType={QUIZ_TYPES}
+          version={listVersion}
+          activeId={activeContentId}
+          locale={lang === "bn" ? "bn-BD" : "en-GB"}
+          onPick={(id) => setOpenRequest({ contentId: id, nonce: Date.now() })}
+          labels={{
+            title: t.savedTitle,
+            empty: t.savedEmpty,
+            loading: t.savedLoading,
+            failed: t.savedFailed,
+            levels: t.levels,
+            languages: t.languages,
+          }}
+        />
+      }
+    >
+      <section className="gw-head">
+        <span className="gw-head-icon"><IconQuiz /></span>
+        <div>
+          <h1>{t.pageTitle}</h1>
+          <p>{t.pageSub}</p>
         </div>
+      </section>
 
-        {/* SETUP PROGRESS CARD */}
-        <div style={setupCard}>
-          <span style={setupLabel}>{t.setupLabel}</span>
-          <strong style={setupValue}>{setupProgress}/4</strong>
-          <div style={setupTrack}>
-            <div style={{ ...setupFill, width: `${(setupProgress / 4) * 100}%` }} />
+      <section className="as-panel gw-step">
+        <header className="gw-step-head">
+          <span className={`gw-step-no${ready ? " is-done" : ""}`}>
+            {ready ? <IconCheck /> : "1"}
+          </span>
+          <div className="gw-step-text">
+            <h2>{t.step1Title}</h2>
+            <p>{t.step1Sub}</p>
           </div>
-        </div>
-
-        {/* MAIN CARD */}
-        <div style={card}>
-          {/* STEP 1 */}
-          <div style={stepHeaderRow}>
-            <div style={stepCircle(setupProgress >= 2)}>{setupProgress >= 2 ? "✓" : "1"}</div>
-            <div style={{ flex: 1 }}>
-              <h3 style={stepTitle}>{t.step1Title}</h3>
-              <p style={stepSub}>{t.step1Sub}</p>
-            </div>
-            <div style={progressDots}>
-              {[selectedClass, selectedSubject, selectedChapter, selectedTopicId].map((done, i) => (
-                <div key={i} style={progressDot(!!done)} />
-              ))}
-            </div>
-          </div>
-
-          <div style={fieldGrid}>
-            <SelectField
-              label={t.classL} icon="🏫"
-              value={selectedClass} onChange={handleClassChange}
-              placeholder={t.selectClass}
-              options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
-            />
-
-            <SelectField
-              label={t.subjectL} icon="📚"
-              value={selectedSubject} onChange={handleSubjectChange}
-              disabled={!selectedClass} placeholder={t.selectSubject}
-              options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
-            />
-
-            <SelectField
-              label={t.chapterL} icon="🧩"
-              value={selectedChapter} onChange={handleChapterChange}
-              disabled={!selectedSubject} placeholder={t.selectChapter}
-              options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
-            />
-
-            <SelectField
-              label={t.topicL} icon="🎯"
-              value={selectedTopicId} onChange={setSelectedTopicId}
-              disabled={!selectedChapter} placeholder={t.selectTopic}
-              options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
-            />
-          </div>
-
-          <div style={hintBox}>
-            <span style={{ fontSize: "16px" }}>💡</span>
-            <span style={hintText}>
-              {selectedSubject ? t.hintDone : t.hintPending}
-            </span>
-          </div>
-
-          <div style={divider} />
-
-          {/* STEP 2 */}
-          <div style={stepHeaderRow}>
-            <div style={stepCircle(false)}>2</div>
-            <div style={{ flex: 1 }}>
-              <h3 style={stepTitle}>{t.step2Title}</h3>
+          <div className="gw-tally">
+            <span className="gw-tally-count">{t.setupLabel} <strong>{chosen}/4</strong></span>
+            <div className="gw-tally-track">
+              <div className="gw-tally-fill" style={{ width: `${(chosen / 4) * 100}%` }} />
             </div>
           </div>
+        </header>
 
-          <div style={{ marginTop: "8px" }}>
-            <QuizGenerator
-              selectedClass={selectedClass}
-              selectedSubject={selectedSubject}
-              selectedChapter={selectedChapter}
-              selectedTopicId={selectedTopicId}
-              language={language}
-            />
-          </div>
+        <div className="gw-fields">
+          <SelectField
+            label={t.classL}
+            value={selectedClass}
+            onChange={handleClassChange}
+            placeholder={t.selectClass}
+            options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
+          />
+          <SelectField
+            label={t.subjectL}
+            value={selectedSubject}
+            onChange={handleSubjectChange}
+            disabled={!selectedClass}
+            placeholder={t.selectSubject}
+            options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
+          />
+          <SelectField
+            label={t.chapterL}
+            value={selectedChapter}
+            onChange={handleChapterChange}
+            disabled={!selectedSubject}
+            placeholder={t.selectChapter}
+            options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
+          />
+          <SelectField
+            label={t.topicL}
+            value={selectedTopicId}
+            onChange={setSelectedTopicId}
+            disabled={!selectedChapter}
+            placeholder={t.selectTopic}
+            options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
+          />
         </div>
-      </main>
-    </div>
+
+        <p className={`gw-hint${ready ? " is-done" : ""}`}>
+          <IconSpark />
+          {ready ? t.hintDone : t.hintPending}
+        </p>
+      </section>
+
+      <section className="as-panel gw-step">
+        <header className="gw-step-head">
+          <span className="gw-step-no">2</span>
+          <div className="gw-step-text">
+            <h2>{t.step2Title}</h2>
+          </div>
+        </header>
+
+        <QuizGenerator
+          selectedSubject={selectedSubject}
+          selectedChapter={selectedChapter}
+          selectedTopicId={selectedTopicId}
+          language={language}
+          openRequest={openRequest}
+          onContentChange={setActiveContentId}
+          onGenerated={() => setListVersion((v) => v + 1)}
+        />
+      </section>
+    </AppShell>
   );
 }
-
-/* ===== STYLES (Pink Theme: #db2777) ===== */
-const pageStyle = { minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Segoe UI', system-ui, sans-serif" };
-
-const navStyle = { background: "#fff", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.08)", borderBottom: "1px solid #e2e8f0" };
-const navInner = { maxWidth: "1100px", margin: "0 auto", padding: "0 24px", height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" };
-const navCenter = { flex: 1, display: "flex", justifyContent: "center" };
-const navBreadcrumb = { fontSize: "13px", fontWeight: 600, color: "#94a3b8" };
-const navRight = { display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 };
-const langToggle = { display: "flex", background: "#f1f5f9", borderRadius: "999px", padding: "3px" };
-const langBtn = (active) => ({ padding: "5px 12px", borderRadius: "999px", border: "none", background: active ? "#db2777" : "transparent", color: active ? "#fff" : "#64748b", fontSize: "12px", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" });
-const userBadge = { display: "flex", alignItems: "center", gap: "8px" };
-const userAvatar = { width: "34px", height: "34px", borderRadius: "50%", background: "#db2777", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "14px" };
-const userName = { fontSize: "14px", fontWeight: 600, color: "#0f172a" };
-
-const mainWrap = { maxWidth: "1000px", margin: "0 auto", padding: "32px 20px 60px", display: "flex", flexDirection: "column", gap: "18px" };
-
-const pageTitleRow = { display: "flex", alignItems: "center", gap: "14px" };
-const pageTitleIcon = { width: "48px", height: "48px", borderRadius: "14px", background: "linear-gradient(135deg, #db2777, #ec4899)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", flexShrink: 0, boxShadow: "0 4px 14px rgba(219,39,119,0.3)" };
-const pageTitleStyle = { margin: 0, fontFamily: "'Poppins', sans-serif", fontSize: "24px", fontWeight: 800, color: "#0f172a" };
-const pageSub = { margin: "4px 0 0", color: "#64748b", fontSize: "13.5px", fontWeight: 500 };
-
-const setupCard = { background: "#fff", borderRadius: "18px", border: "1px solid #fbcfe8", boxShadow: "0 4px 16px rgba(219,39,119,0.06)", padding: "16px 22px", display: "flex", alignItems: "center", gap: "14px" };
-const setupLabel = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" };
-const setupValue = { fontSize: "18px", fontWeight: 800, color: "#db2777" };
-const setupTrack = { flex: 1, height: "7px", borderRadius: "999px", background: "#e2e8f0", overflow: "hidden" };
-const setupFill = { height: "100%", borderRadius: "999px", background: "linear-gradient(90deg, #db2777, #ec4899)", transition: "width 0.35s ease" };
-
-const card = { background: "#fff", borderRadius: "20px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", border: "1px solid #e2e8f0", padding: "28px" };
-
-const stepHeaderRow = { display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" };
-const stepCircle = (done) => ({ width: "30px", height: "30px", borderRadius: "50%", background: done ? "#db2777" : "#fdf2f8", color: done ? "#fff" : "#db2777", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "13px", flexShrink: 0 });
-const stepTitle = { margin: 0, fontSize: "15px", fontWeight: 800, color: "#0f172a" };
-const stepSub = { margin: "2px 0 0", fontSize: "12px", color: "#94a3b8", fontWeight: 600 };
-const progressDots = { display: "flex", gap: "5px", flexShrink: 0 };
-const progressDot = (done) => ({ width: "26px", height: "5px", borderRadius: "4px", background: done ? "#db2777" : "#e2e8f0", transition: "background 0.3s" });
-
-const fieldGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", marginBottom: "18px" };
-const fieldLabel = { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" };
-
-const divider = { height: "1px", background: "#e2e8f0", margin: "24px 0" };
-
-const pillWrap = { display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: "12px", padding: "11px 14px" };
-const pillWrapDisabled = { background: "#f1f5f9", opacity: 0.6 };
-const pillSelect = { flex: 1, border: "none", outline: "none", background: "transparent", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", appearance: "none", fontFamily: "inherit", cursor: "pointer", minWidth: 0 };
-const pillCaret = { color: "#94a3b8", fontSize: "12px", flexShrink: 0 };
-
-const hintBox = { display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px" };
-const hintText = { fontSize: "12.5px", color: "#475569", fontWeight: 600 };

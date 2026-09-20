@@ -1,0 +1,471 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Worksheet studio — the page and the generator inside it.
+
+   Chrome comes from shared/ui/AppShell.css. Type is set a step larger than the
+   first pass of the dashboard: labels .88rem, body .95rem, controls .95rem.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── page header ───────────────────────────────────────────────────────── */
+.gw-head { display: flex; align-items: flex-start; gap: 16px; }
+.gw-head-icon {
+  flex: 0 0 auto;
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  /* Solid tone with a white glyph: on the lighter page washes a tinted tile
+     with a tinted icon lost almost all its contrast. In dark mode the tone
+     itself is the light colour, so the glyph flips to the page's own dark. */
+  background: var(--tone);
+  color: #fff;
+}
+[data-theme="dark"] .gw-head-icon { color: var(--dhi-surface); }
+.gw-head-icon svg { width: 26px; height: 26px; stroke-width: 1.9; }
+.gw-head h1 {
+  margin: 0 0 6px;
+  font-family: var(--dhi-display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 2.8vw, 2.2rem);
+  line-height: 1.12;
+  letter-spacing: -.02em;
+}
+html[lang="bn"] .gw-head h1 { line-height: 1.35; letter-spacing: 0; }
+.gw-head p { margin: 0; font-size: 1rem; line-height: 1.6; color: var(--dhi-muted); max-width: 62ch; }
+
+/* ── numbered step panels ──────────────────────────────────────────────── */
+.gw-step { padding: clamp(20px, 2.4vw, 28px); }
+.gw-step-head { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 20px; }
+.gw-step-no {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tone-wash);
+  color: var(--tone);
+  font-size: .95rem;
+  font-weight: 700;
+}
+.gw-step-no.is-done { background: var(--tone); color: #fff; }
+[data-theme="dark"] .gw-step-no.is-done { color: var(--dhi-surface); }
+.gw-step-text { flex: 1; min-width: 0; }
+.gw-step-text h2 { margin: 4px 0 4px; font-size: 1.12rem; font-weight: 700; line-height: 1.35; }
+.gw-step-text p { margin: 0; font-size: .95rem; line-height: 1.6; color: var(--dhi-muted); }
+
+.gw-tally {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+  padding-top: 6px;
+}
+.gw-tally-count { font-size: .88rem; font-weight: 700; color: var(--dhi-muted); }
+.gw-tally-count strong { color: var(--dhi-ink); }
+.gw-tally-track {
+  width: 112px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--dhi-line);
+  overflow: hidden;
+}
+.gw-tally-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--tone);
+  transition: width .35s cubic-bezier(.2, .8, .2, 1);
+}
+
+/* ── curriculum selects ────────────────────────────────────────────────── */
+/* Two even rows rather than auto-fit: with the brand panel taking the right
+   column, auto-fit landed on three and left "Topic" stranded on its own. */
+.gw-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (min-width: 1560px) {
+  .gw-fields { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .gw-fields { grid-template-columns: minmax(0, 1fr); }
+}
+.gw-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.gw-label { font-size: .88rem; font-weight: 600; color: var(--dhi-ink-soft); }
+
+.gw-select, .wg-select { position: relative; display: flex; align-items: center; }
+.gw-select select, .wg-select select {
+  width: 100%;
+  height: 50px;
+  padding: 0 42px 0 15px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 13px;
+  background: var(--dhi-field);
+  color: var(--dhi-ink);
+  font-family: inherit;
+  font-size: .95rem;
+  font-weight: 500;
+  appearance: none;
+  cursor: pointer;
+  transition: border-color .18s ease, box-shadow .18s ease;
+}
+.gw-select select:focus, .wg-select select:focus {
+  outline: none;
+  border-color: var(--dhi-bloom);
+  box-shadow: 0 0 0 4px rgba(255, 79, 154, .16);
+}
+.gw-select select:disabled, .wg-select select:disabled {
+  color: var(--dhi-muted);
+  cursor: not-allowed;
+  opacity: .62;
+}
+.gw-select svg, .wg-select svg {
+  position: absolute;
+  right: 15px;
+  color: var(--dhi-muted);
+  pointer-events: none;
+}
+
+/* Scoped to .gw-step on purpose: the hint is a direct child of .as-panel, and
+   AppShell's generic `.as-panel > p` rule (0,1,1) outranks a bare `.gw-hint`
+   (0,1,0) and was flattening this margin to zero — which is why the box sat
+   glued to the dropdowns. Two classes (0,2,0) wins it back. */
+.gw-step .gw-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 28px 0 0;
+  padding: 13px 16px;
+  border-radius: 13px;
+  background: var(--dhi-surface-sunken);
+  color: var(--dhi-ink-soft);
+  font-size: .92rem;
+  line-height: 1.55;
+}
+.gw-hint svg { flex: 0 0 auto; margin-top: 1px; color: var(--dhi-muted); }
+.gw-hint.is-done { background: var(--tone-wash); }
+.gw-hint.is-done svg { color: var(--tone); }
+
+/* ── optional style sample ─────────────────────────────────────────────── */
+.gw-sample-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 18px;
+  border: 1px dashed var(--dhi-line-strong);
+  border-radius: 13px;
+  background: none;
+  color: var(--dhi-ink-soft);
+  font-family: inherit;
+  font-size: .92rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color .18s ease, color .18s ease;
+}
+.gw-sample-open:hover { border-color: var(--tone); color: var(--dhi-ink); }
+
+.gw-sample {
+  padding: 18px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 14px;
+  background: var(--dhi-surface-sunken);
+}
+.gw-sample-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.gw-sample-head strong { font-size: .95rem; font-weight: 650; }
+.gw-sample-cancel {
+  border: 0;
+  background: none;
+  color: var(--dhi-danger);
+  font-family: inherit;
+  font-size: .88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gw-sample input[type="file"] { font-family: inherit; font-size: .9rem; color: var(--dhi-ink-soft); max-width: 100%; }
+.gw-sample-help { margin: 12px 0 0; font-size: .88rem; line-height: 1.55; color: var(--dhi-muted); }
+.gw-sample-picked {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--tone);
+}
+
+/* ── generator controls ────────────────────────────────────────────────── */
+.wg { display: flex; flex-direction: column; gap: 18px; }
+.wg-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 16px;
+  background: var(--dhi-surface-sunken);
+}
+.wg-field { display: flex; flex-direction: column; gap: 7px; }
+.wg-label { font-size: .88rem; font-weight: 600; color: var(--dhi-ink-soft); }
+.wg-select { min-width: 168px; }
+.wg-number {
+  width: 110px;
+  height: 50px;
+  padding: 0 15px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 13px;
+  background: var(--dhi-field);
+  color: var(--dhi-ink);
+  font-family: inherit;
+  font-size: .95rem;
+  font-weight: 500;
+}
+.wg-number:focus {
+  outline: none;
+  border-color: var(--dhi-bloom);
+  box-shadow: 0 0 0 4px rgba(255, 79, 154, .16);
+}
+
+.wg-generate {
+  height: 50px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 0 26px;
+  border: 0;
+  border-radius: 13px;
+  background: var(--dhi-solid-bg);
+  color: var(--dhi-solid-fg);
+  font-family: inherit;
+  font-size: .97rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease;
+}
+.wg-generate:hover:not(:disabled) { transform: translateY(-1px); }
+.wg-generate:disabled { opacity: .5; cursor: not-allowed; }
+.wg-generate:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 3px; }
+
+.wg-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: wg-spin .7s linear infinite;
+}
+@keyframes wg-spin { to { transform: rotate(360deg); } }
+
+/* ── notes: live, waiting, failed ──────────────────────────────────────── */
+.wg-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 13px 16px;
+  border-radius: 13px;
+  font-size: .93rem;
+  line-height: 1.5;
+}
+.wg-note svg { flex: 0 0 auto; }
+.wg-note-live { background: var(--tone-wash); color: var(--tone); font-weight: 600; }
+.wg-note-wait { background: var(--acc-4-wash); color: var(--acc-4); font-weight: 600; }
+.wg-note-bad {
+  background: var(--dhi-danger-wash);
+  border: 1px solid var(--dhi-danger);
+  color: var(--dhi-danger);
+}
+.wg-note-bad span { flex: 1; }
+.wg-retry {
+  flex: 0 0 auto;
+  padding: 7px 14px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: .86rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+/* ── the finished worksheet ────────────────────────────────────────────── */
+.wg-preview {
+  border: 1px solid var(--dhi-line);
+  border-radius: 18px;
+  background: var(--dhi-surface-raised);
+  overflow: hidden;
+}
+.wg-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--dhi-line);
+}
+.wg-preview-hint { margin: 0; font-size: .92rem; color: var(--dhi-muted); line-height: 1.5; }
+.wg-preview-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.wg-ghost, .wg-solid {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 20px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: .93rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform .18s ease;
+}
+.wg-ghost {
+  border: 1px solid var(--dhi-line-strong);
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-ink);
+}
+.wg-ghost:hover { border-color: var(--tone); }
+.wg-solid {
+  border: 0;
+  background: var(--dhi-solid-bg);
+  color: var(--dhi-solid-fg);
+}
+.wg-solid:hover { transform: translateY(-1px); }
+
+/* The generated HTML is print-oriented and carries its own markup, so it gets
+   a literal sheet of paper to sit on rather than inheriting the app's theme —
+   it is a preview of something that will come out of a printer. */
+.wg-paper {
+  margin: 22px;
+  padding: clamp(20px, 3vw, 38px);
+  border: 1px solid var(--dhi-line);
+  border-radius: 10px;
+  background: #ffffff;
+  color: #111111;
+  font-family: 'Times New Roman', Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.65;
+  overflow-x: auto;
+}
+.wg-paper * { color: inherit; }
+
+@media (max-width: 620px) {
+  .wg-controls { align-items: stretch; }
+  .wg-generate { margin-left: 0; width: 100%; }
+  .wg-number { width: 100%; }
+  .gw-tally { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wg-generate, .wg-solid, .gw-tally-fill { transition: none; }
+  .wg-spinner { animation-duration: 1.6s; }
+}
+
+/* ── file drop zone (upload studio) ────────────────────────────────────── */
+.gw-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 36px 24px;
+  border: 2px dashed var(--dhi-line-strong);
+  border-radius: 16px;
+  background: var(--dhi-surface-sunken);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+}
+.gw-drop.is-over { border-color: var(--tone); background: var(--tone-wash); }
+.gw-drop.is-set { border-style: solid; border-color: var(--tone); background: var(--tone-wash); }
+.gw-drop.is-off { opacity: .55; cursor: not-allowed; }
+.gw-drop-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  background: var(--tone);
+  color: #fff;
+}
+[data-theme="dark"] .gw-drop-mark { color: var(--dhi-surface); }
+.gw-drop-mark svg { width: 24px; height: 24px; }
+.gw-drop-main { font-size: 1rem; font-weight: 650; line-height: 1.45; }
+.gw-drop-main button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--tone);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.gw-drop-sub { font-size: .88rem; color: var(--dhi-muted); line-height: 1.5; }
+
+/* ── ingestion finished ────────────────────────────────────────────────── */
+.gw-done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px 26px;
+  border: 1px solid var(--tone);
+  border-radius: 18px;
+  background: var(--tone-wash);
+  text-align: center;
+}
+.gw-done-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: #fff;
+}
+[data-theme="dark"] .gw-done-mark { color: var(--dhi-surface); }
+.gw-done h3 { margin: 0; font-size: 1.2rem; font-weight: 700; line-height: 1.35; }
+.gw-done p { margin: 0; font-size: .95rem; line-height: 1.6; color: var(--dhi-ink-soft); max-width: 46ch; }
+.gw-done-ask { font-weight: 650; color: var(--dhi-ink); }
+
+/* ── tips ──────────────────────────────────────────────────────────────── */
+.gw-tips { margin-top: 4px; }
+.gw-tips h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.gw-tips h3 svg { color: var(--tone); }
+.gw-tips ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; }
+.gw-tips li {
+  position: relative;
+  padding-left: 22px;
+  font-size: .92rem;
+  line-height: 1.6;
+  color: var(--dhi-muted);
+}
+.gw-tips li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: .62em;
+  width: 8px;
+  height: 9px;
+  background: var(--tone);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+}

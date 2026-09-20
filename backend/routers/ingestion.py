@@ -3,12 +3,13 @@
 # Topics are auto-extracted from the PDF by Gemini and inserted into the DB.
 
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from core.config import get_db
 from services import rag_service
-from models.db_models import UploadRequest, IngestionJob, Chapter
+from models.db_models import UploadRequest, IngestionJob, Chapter, Subject, ContentEmbedding
 from tasks import uploads
 from tasks.ingestion_tasks import ingest_curriculum_task
 from core.security import get_current_user_from_header
@@ -184,6 +185,68 @@ def list_all_jobs(db: Session = Depends(get_db),
             "error_message": job.error_message
         })
     return {"jobs": result, "total": len(result)}
+
+
+@router.get("/my/uploads")
+def list_my_uploads(
+    limit: int = Query(40, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(_require_teacher_admin),
+):
+    """What this teacher has uploaded, newest first.
+
+    upload_request stores the subject but not the chapter — the upload endpoint
+    derives subject_id from the chapter and keeps only that. The chapter is
+    still recoverable: the ingestion job writes content_embedding rows that each
+    carry chapter_id, so one row per request is enough to name it. A failed
+    ingestion produced no embeddings, so its chapter comes back empty, which is
+    the truth rather than a guess.
+    """
+    per_request_chapter = (
+        db.query(
+            IngestionJob.request_id.label("request_id"),
+            func.min(ContentEmbedding.chapter_id).label("chapter_id"),
+        )
+        .join(ContentEmbedding, ContentEmbedding.job_id == IngestionJob.job_id)
+        .group_by(IngestionJob.request_id)
+        .subquery()
+    )
+
+    rows = (
+        db.query(
+            UploadRequest.request_id,
+            UploadRequest.file_name,
+            UploadRequest.status,
+            UploadRequest.requested_at,
+            Subject.name.label("subject_name"),
+            Subject.class_name,
+            Chapter.chapter_no,
+            Chapter.name.label("chapter_name"),
+        )
+        .outerjoin(per_request_chapter, per_request_chapter.c.request_id == UploadRequest.request_id)
+        .outerjoin(Chapter, Chapter.chapter_id == per_request_chapter.c.chapter_id)
+        .outerjoin(Subject, Subject.subject_id == UploadRequest.subject_id)
+        .filter(UploadRequest.user_id == current_user.user_id)
+        .order_by(UploadRequest.requested_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "items": [
+            {
+                "request_id": r.request_id,
+                "file_name": r.file_name,
+                "status": r.status,
+                "subject_name": r.subject_name,
+                "class_name": r.class_name,
+                "chapter_no": r.chapter_no,
+                "chapter_name": r.chapter_name,
+                "requested_at": r.requested_at.isoformat() if r.requested_at else None,
+            }
+            for r in rows
+        ]
+    }
 
 
 @router.delete("/delete-file/{filename}")

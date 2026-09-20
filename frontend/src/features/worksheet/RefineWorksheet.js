@@ -1,12 +1,40 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-// import { getWorksheetDetails, refineWorksheet } from "./api";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { getWorksheetDetails, refineWorksheet } from "../../shared/services/api";
+import useJobPolling from "../../shared/services/useJobPolling";
+import {
+  IconAlert, IconChart, IconClose, IconMinus, IconPlus, IconPuzzle,
+  IconSliders, IconSpark,
+} from "../../shared/ui/icons";
+import "./refine.css";
+
+/* Refinement dialog.
+
+   The bug this fixes: POST /generate/refine returns 202 {job_id} like every
+   other long pipeline, but this component was written against the older
+   synchronous contract and handed that envelope straight to onUpdate(). The
+   parent then read `.html` off it, got undefined, and blanked the preview —
+   while the worker went on to spend two and a half minutes producing a
+   worksheet nobody ever collected. It now polls the job like the rest of the
+   app and only reports back on SUCCESS.
+
+   Because a refine really does take minutes, the dialog stays open and shows
+   progress while it runs, and refuses to close mid-flight: closing would
+   orphan the result all over again. */
+
+const OPTION_ICONS = {
+  add: IconPlus,
+  remove: IconMinus,
+  difficulty: IconSliders,
+  visuals: IconChart,
+  simplify: IconSpark,
+};
 
 export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
-  const [loading, setLoading] = useState(false);
   const [problems, setProblems] = useState([]);
   const [existingVisualIds, setExistingVisualIds] = useState(new Set());
   const [difficultySelectedIds, setDifficultySelectedIds] = useState(new Set());
+  const [dispatchError, setDispatchError] = useState(null);
+  const [dispatching, setDispatching] = useState(false);
   const initialDifficultyMap = useRef({});
   const [selectedRefinements, setSelectedRefinements] = useState({
     add_more: false,
@@ -18,6 +46,10 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
     visuals_map: [],    // [problem_id, ...]
     simplify: false
   });
+
+  const [jobId, setJobId] = useState(null);
+  const { status, stage, result, error } = useJobPolling(jobId, "activeJob:refine");
+  const running = dispatching || status === "QUEUED" || status === "PROCESSING";
 
   const hasAnyChange =
     selectedRefinements.add_more ||
@@ -31,14 +63,13 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
     try {
       const { data } = await getWorksheetDetails(contentId);
       setProblems(data.problems || []);
-      
-      // ডিফল্ট ডিফিকাল্টি ম্যাপ সেট করা
+
       const initialDiff = {};
       data.problems?.forEach(p => {
         initialDiff[p.id] = p.difficulty || "Medium";
       });
       initialDifficultyMap.current = { ...initialDiff };
-      setSelectedRefinements(prev => ({...prev, difficulty_map: initialDiff}));
+      setSelectedRefinements(prev => ({ ...prev, difficulty_map: initialDiff }));
 
       const visualIds = new Set();
       const pv = data.visuals?.problem_visuals;
@@ -49,7 +80,7 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
       }
       setExistingVisualIds(visualIds);
     } catch (err) {
-      console.error("Failed to load problems");
+      console.error("Failed to load problems", err);
     }
   }, [contentId]);
 
@@ -57,27 +88,40 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
     loadCurrentWorksheet();
   }, [loadCurrentWorksheet]);
 
+  // Escape closes, but never while a refinement is in flight.
   useEffect(() => {
     const onEsc = (e) => {
-      if (e.key === "Escape") onClose?.();
+      if (e.key === "Escape" && !running) onClose?.();
     };
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
-  }, [onClose]);
+  }, [onClose, running]);
+
+  // The finished worksheet arrives here, not from the dispatch response.
+  useEffect(() => {
+    if (status === "SUCCESS" && result) {
+      onUpdate({
+        html: result.html || "",
+        content_id: result.content_id ?? contentId,
+        problems: result.problems,
+      });
+      onClose?.();
+    }
+  }, [status, result, contentId, onUpdate, onClose]);
 
   const handleRefine = async () => {
-    setLoading(true);
+    setDispatchError(null);
+    setDispatching(true);
     const refinementPayload = [];
 
     if (selectedRefinements.add_more) {
       refinementPayload.push({ type: "add_problems", count: Number(selectedRefinements.add_count) });
     }
-    
+
     if (selectedRefinements.remove_problems.length > 0) {
       refinementPayload.push({ type: "remove_problem", problem_ids: selectedRefinements.remove_problems });
     }
 
-    // Difficulty Change Logic
     if (selectedRefinements.change_difficulty) {
       const changes = Object.entries(selectedRefinements.difficulty_map)
         .filter(([pid]) => difficultySelectedIds.has(Number(pid)))
@@ -87,11 +131,10 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
       }
     }
 
-    // Visuals Logic
     if (selectedRefinements.add_visuals) {
-      refinementPayload.push({ 
-        type: "add_visuals", 
-        problem_ids: selectedRefinements.visuals_map.length > 0 ? selectedRefinements.visuals_map : "all" 
+      refinementPayload.push({
+        type: "add_visuals",
+        problem_ids: selectedRefinements.visuals_map.length > 0 ? selectedRefinements.visuals_map : "all"
       });
     }
 
@@ -101,383 +144,265 @@ export default function RefineWorksheet({ contentId, onClose, onUpdate }) {
 
     try {
       const { data } = await refineWorksheet(contentId, problems, refinementPayload);
-      onUpdate(data);
-      onClose();
+      if (!data?.job_id) throw new Error("No job id in the refine response");
+      setJobId(data.job_id);
     } catch (err) {
-      alert("Error: " + (err.response?.data?.detail || "Refinement failed"));
+      console.error("Refine dispatch failed:", err);
+      setDispatchError(err.response?.data?.detail || "Refinement failed. Please try again.");
+    } finally {
+      setDispatching(false);
     }
-    setLoading(false);
   };
 
+  const shownError =
+    dispatchError || (error && !error.isTimeout ? error.message || "Refinement failed. Please try again." : null);
+
+  const Option = ({ id, checked, onToggle, title, desc, readOnly, children }) => {
+    const Icon = OPTION_ICONS[id];
+    return (
+      <section className={`rf-option${checked ? " is-on" : ""}`}>
+        <label className="rf-option-head">
+          <input
+            type="checkbox"
+            className="rf-check"
+            checked={checked}
+            readOnly={readOnly}
+            onChange={readOnly ? undefined : (e) => onToggle(e.target.checked)}
+          />
+          <span className="rf-option-icon"><Icon /></span>
+          <span className="rf-option-title">{title}</span>
+        </label>
+        <p className="rf-option-desc">{desc}</p>
+        {children}
+      </section>
+    );
+  };
+
+  const shortLabel = (p) => (p.localized_question || p.question)?.substring(0, 40);
+
   return (
-    <div style={modalOverlayStyle} onClick={onClose}>
-      <div style={refineCardStyle} onClick={(e) => e.stopPropagation()}>
-        <div style={topGlowStyle} />
-        <div style={bottomGlowStyle} />
-
-        <div style={headerStyle}>
+    <div className="rf-overlay" onClick={running ? undefined : onClose}>
+      <div className="rf-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+        <header className="rf-head">
           <div>
-            <p style={eyebrowStyle}>AI Worksheet Editor</p>
-            <h2 style={titleStyle}>Refinement Options</h2>
-            <p style={subtitleStyle}>Tune question set, difficulty and language without regenerating from scratch.</p>
+            <p className="rf-eyebrow">AI Worksheet Editor</p>
+            <h2 className="rf-title">Refinement Options</h2>
+            <p className="rf-sub">Tune question set, difficulty and language without regenerating from scratch.</p>
           </div>
-          <button onClick={onClose} style={closeButtonStyle} aria-label="Close refine dialog">✕</button>
-        </div>
+          <button
+            type="button"
+            className="rf-close"
+            onClick={onClose}
+            disabled={running}
+            aria-label="Close refine dialog"
+          >
+            <IconClose />
+          </button>
+        </header>
 
-        <div style={metaStripStyle}>
-          <span style={metaBadgeStyle}>🧩 Problems loaded: <strong>{problems.length}</strong></span>
-          <span style={{ ...metaBadgeStyle, background: hasAnyChange ? "#ecfdf5" : "#fff", borderColor: hasAnyChange ? "#86efac" : "#e2e8f0", color: hasAnyChange ? "#15803d" : "#64748b" }}>
-            {hasAnyChange ? "✅ Changes selected" : "ℹ️ No changes selected yet"}
+        <div className="rf-meta">
+          <span className="rf-chip">
+            <IconPuzzle />
+            Problems loaded: <strong>{problems.length}</strong>
+          </span>
+          <span className={`rf-chip${hasAnyChange ? " is-on" : ""}`}>
+            {hasAnyChange ? <IconSpark /> : <IconAlert />}
+            {hasAnyChange ? "Changes selected" : "No changes selected yet"}
           </span>
         </div>
 
-        <div style={optionSectionStyle}>
-
-        {/* 1. Add More */}
-        <div style={optionBoxStyle}>
-          <div style={headerGap}>
-            <input
-              type="checkbox"
-              checked={selectedRefinements.add_more}
-              onChange={(e) => setSelectedRefinements({ ...selectedRefinements, add_more: e.target.checked })}
-            />
-            <label style={labelStyle}>➕ Add more problems</label>
-          </div>
-          <p style={descStyle}>Increase worksheet length by generating additional questions aligned with this topic.</p>
-          {selectedRefinements.add_more && (
-            <div style={subOptionStyle}>
-              <span style={{ fontSize: "12px", color: "#475569", fontWeight: "600" }}>How many to add?</span>
-              <input
-                type="number"
-                min="1"
-                value={selectedRefinements.add_count}
-                onChange={(e) => setSelectedRefinements({ ...selectedRefinements, add_count: e.target.value })}
-                style={inputSmall}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* 2. Remove Problems */}
-        <div style={optionBoxStyle}>
-          <div style={headerGap}><input type="checkbox" checked={selectedRefinements.remove_problems.length > 0} readOnly /><label style={labelStyle}>➖ Remove specific problems</label></div>
-          <p style={descStyle}>Select questions that should be excluded from the final worksheet.</p>
-          <div style={scrollListStyle}>
-            {problems.map((p, idx) => (
-              <div key={`rem-${p.id}`} style={itemRowStyle}>
-                <input type="checkbox" checked={selectedRefinements.remove_problems.includes(p.id)} onChange={(e) => {
-                  const list = e.target.checked ? [...selectedRefinements.remove_problems, p.id] : selectedRefinements.remove_problems.filter(id => id !== p.id);
-                  setSelectedRefinements({...selectedRefinements, remove_problems: list});
-                }} />
-                <span style={itemTextStyle}>#{idx+1}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
+        <div className="rf-options">
+          <Option
+            id="add"
+            checked={selectedRefinements.add_more}
+            onToggle={(v) => setSelectedRefinements({ ...selectedRefinements, add_more: v })}
+            title="Add more problems"
+            desc="Increase worksheet length by generating additional questions aligned with this topic."
+          >
+            {selectedRefinements.add_more && (
+              <div className="rf-sub-row">
+                <span>How many to add?</span>
+                <input
+                  type="number"
+                  min="1"
+                  className="rf-number"
+                  value={selectedRefinements.add_count}
+                  onChange={(e) => setSelectedRefinements({ ...selectedRefinements, add_count: e.target.value })}
+                />
               </div>
-            ))}
-          </div>
-        </div>
+            )}
+          </Option>
 
-        {/* 3. Change Difficulty (Now Added) */}
-        <div style={optionBoxStyle}>
-          <div style={headerGap}><input type="checkbox" checked={selectedRefinements.change_difficulty} onChange={(e) => setSelectedRefinements({...selectedRefinements, change_difficulty: e.target.checked})} /><label style={labelStyle}>🎚️ Change problem difficulty</label></div>
-          <p style={descStyle}>Adjust challenge level per question without changing the overall worksheet context.</p>
-          {selectedRefinements.change_difficulty && (
-            <div style={scrollListStyle}>
+          <Option
+            id="remove"
+            readOnly
+            checked={selectedRefinements.remove_problems.length > 0}
+            title="Remove specific problems"
+            desc="Select questions that should be excluded from the final worksheet."
+          >
+            <ul className="rf-list">
               {problems.map((p, idx) => (
-                <div key={`diff-${p.id}`} style={{...itemRowStyle, justifyContent: "space-between"}}>
-                  <div style={{display: "flex", alignItems: "center"}}>
-                    <input type="checkbox" checked={difficultySelectedIds.has(p.id)} onChange={() => {
-                      setDifficultySelectedIds(prev => {
-                        const next = new Set(prev);
-                        if (next.has(p.id)) next.delete(p.id);
-                        else next.add(p.id);
-                        return next;
-                      });
-                    }} />
-                    <span style={itemTextStyle}>#{idx+1}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
-                  </div>
-                  <select 
-                    value={selectedRefinements.difficulty_map[p.id] || "Medium"}
-                    onChange={(e) => setSelectedRefinements({
-                      ...selectedRefinements, 
-                      difficulty_map: {...selectedRefinements.difficulty_map, [p.id]: e.target.value}
-                    })}
-                    style={{...inputSmall, width: "80px"}}
-                  >
-                    <option value="Easy">Easy</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Hard">Hard</option>
-                  </select>
-                </div>
+                <li key={`rem-${p.id}`}>
+                  <label className="rf-row">
+                    <input
+                      type="checkbox"
+                      className="rf-check"
+                      checked={selectedRefinements.remove_problems.includes(p.id)}
+                      onChange={(e) => {
+                        const list = e.target.checked
+                          ? [...selectedRefinements.remove_problems, p.id]
+                          : selectedRefinements.remove_problems.filter(id => id !== p.id);
+                        setSelectedRefinements({ ...selectedRefinements, remove_problems: list });
+                      }}
+                    />
+                    <span className="rf-row-text">#{idx + 1}: {shortLabel(p)}…</span>
+                  </label>
+                </li>
               ))}
-            </div>
-          )}
-        </div>
+            </ul>
+          </Option>
 
-        {/* 4. Add Visuals */}
-        <div style={optionBoxStyle}>
-          <div style={headerGap}><input type="checkbox" checked={selectedRefinements.add_visuals} onChange={(e) => setSelectedRefinements({...selectedRefinements, add_visuals: e.target.checked})} /><label style={labelStyle}>📊 Add diagrams / visuals</label></div>
-          <p style={descStyle}>Request visual aids for selected questions, or leave all unchecked to apply visuals across all.</p>
-          {selectedRefinements.add_visuals && (() => {
-            const visualCandidates = problems
-              .filter(p => !existingVisualIds.has(p.id))
-              .filter(p => !selectedRefinements.remove_problems.includes(p.id));
-            return (
-              <div style={scrollListStyle}>
-                {visualCandidates.length > 0 ? (
-                  visualCandidates.map((p) => (
-                    <div key={`vis-${p.id}`} style={itemRowStyle}>
-                      <input type="checkbox" checked={selectedRefinements.visuals_map.includes(p.id)} onChange={(e) => {
-                        const list = e.target.checked ? [...selectedRefinements.visuals_map, p.id] : selectedRefinements.visuals_map.filter(id => id !== p.id);
-                        setSelectedRefinements({...selectedRefinements, visuals_map: list});
-                      }} />
-                      <span style={itemTextStyle}>#{p.id}: {(p.localized_question || p.question)?.substring(0, 40)}...</span>
+          <Option
+            id="difficulty"
+            checked={selectedRefinements.change_difficulty}
+            onToggle={(v) => setSelectedRefinements({ ...selectedRefinements, change_difficulty: v })}
+            title="Change problem difficulty"
+            desc="Adjust challenge level per question without changing the overall worksheet context."
+          >
+            {selectedRefinements.change_difficulty && (
+              <ul className="rf-list">
+                {problems.map((p, idx) => (
+                  <li key={`diff-${p.id}`}>
+                    <div className="rf-row rf-row-split">
+                      <label className="rf-row">
+                        <input
+                          type="checkbox"
+                          className="rf-check"
+                          checked={difficultySelectedIds.has(p.id)}
+                          onChange={() => {
+                            setDifficultySelectedIds(prev => {
+                              const next = new Set(prev);
+                              if (next.has(p.id)) next.delete(p.id);
+                              else next.add(p.id);
+                              return next;
+                            });
+                          }}
+                        />
+                        <span className="rf-row-text">#{idx + 1}: {shortLabel(p)}…</span>
+                      </label>
+                      <select
+                        className="rf-mini-select"
+                        value={selectedRefinements.difficulty_map[p.id] || "Medium"}
+                        onChange={(e) => setSelectedRefinements({
+                          ...selectedRefinements,
+                          difficulty_map: { ...selectedRefinements.difficulty_map, [p.id]: e.target.value }
+                        })}
+                      >
+                        <option value="Easy">Easy</option>
+                        <option value="Medium">Medium</option>
+                        <option value="Hard">Hard</option>
+                      </select>
                     </div>
-                  ))
-                ) : problems.length > 0 ? (
-                  <p style={{ fontSize: "12px", color: "#64748b", fontStyle: "italic" }}>All problems already have visuals.</p>
-                ) : null}
-              </div>
-            );
-          })()}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Option>
+
+          <Option
+            id="visuals"
+            checked={selectedRefinements.add_visuals}
+            onToggle={(v) => setSelectedRefinements({ ...selectedRefinements, add_visuals: v })}
+            title="Add diagrams / visuals"
+            desc="Request visual aids for selected questions, or leave all unchecked to apply visuals across all."
+          >
+            {selectedRefinements.add_visuals && (() => {
+              const visualCandidates = problems
+                .filter(p => !existingVisualIds.has(p.id))
+                .filter(p => !selectedRefinements.remove_problems.includes(p.id));
+              return (
+                <ul className="rf-list">
+                  {visualCandidates.length > 0 ? (
+                    visualCandidates.map((p) => (
+                      <li key={`vis-${p.id}`}>
+                        <label className="rf-row">
+                          <input
+                            type="checkbox"
+                            className="rf-check"
+                            checked={selectedRefinements.visuals_map.includes(p.id)}
+                            onChange={(e) => {
+                              const list = e.target.checked
+                                ? [...selectedRefinements.visuals_map, p.id]
+                                : selectedRefinements.visuals_map.filter(id => id !== p.id);
+                              setSelectedRefinements({ ...selectedRefinements, visuals_map: list });
+                            }}
+                          />
+                          <span className="rf-row-text">#{p.id}: {shortLabel(p)}…</span>
+                        </label>
+                      </li>
+                    ))
+                  ) : problems.length > 0 ? (
+                    <li className="rf-empty">All problems already have visuals.</li>
+                  ) : null}
+                </ul>
+              );
+            })()}
+          </Option>
+
+          <Option
+            id="simplify"
+            checked={selectedRefinements.simplify}
+            onToggle={(v) => setSelectedRefinements({ ...selectedRefinements, simplify: v })}
+            title="Simplify language"
+            desc="Reword instructions and questions for clearer, student-friendly readability."
+          />
         </div>
 
-        {/* 5. Simplify */}
-        <div style={optionBoxStyle}><div style={headerGap}><input type="checkbox" checked={selectedRefinements.simplify} onChange={(e) => setSelectedRefinements({...selectedRefinements, simplify: e.target.checked})} /><label style={labelStyle}>🪄 Simplify language</label></div><p style={descStyle}>Reword instructions and questions for clearer, student-friendly readability.</p></div>
+        {running && (
+          <p className="rf-note rf-note-live" role="status">
+            <span className="rf-spinner" aria-hidden="true" />
+            {stage ? `Refining — ${stage}…` : "Refining…"} This usually takes a couple of minutes.
+          </p>
+        )}
 
-        </div>
+        {error?.isTimeout && !running && (
+          <p className="rf-note rf-note-wait" role="status">
+            <IconAlert />
+            Still running — check back in a moment.
+          </p>
+        )}
 
-        <div style={footerBarStyle}>
-          <button onClick={onClose} style={secondaryButtonStyle}>Cancel</button>
-          <button onClick={handleRefine} disabled={loading} style={{ ...sendButtonStyle, opacity: loading ? 0.75 : 1 }}>
-            {loading ? "⌛ Refining..." : "Send Refinement Request"}
+        {shownError && (
+          <p className="rf-note rf-note-bad" role="alert">
+            <IconAlert />
+            <span>{shownError}</span>
+          </p>
+        )}
+
+        <footer className="rf-foot">
+          <button type="button" className="rf-ghost" onClick={onClose} disabled={running}>
+            Cancel
           </button>
-        </div>
+          <button
+            type="button"
+            className="rf-send"
+            onClick={handleRefine}
+            disabled={running || !hasAnyChange}
+          >
+            {running ? (
+              <>
+                <span className="rf-spinner" aria-hidden="true" />
+                Refining…
+              </>
+            ) : (
+              <>
+                <IconSpark />
+                Send Refinement Request
+              </>
+            )}
+          </button>
+        </footer>
       </div>
     </div>
   );
 }
-
-// Styles
-const modalOverlayStyle = {
-  position: "fixed",
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100%",
-  backgroundColor: "rgba(15, 23, 42, 0.55)",
-  backdropFilter: "blur(4px)",
-  display: "flex",
-  justifyContent: "center",
-  alignItems: "center",
-  zIndex: 2000,
-  padding: "20px",
-};
-
-const refineCardStyle = {
-  backgroundColor: "#ffffff",
-  border: "1px solid #e2e8f0",
-  boxShadow: "0 30px 80px rgba(15,23,42,0.33)",
-  padding: "26px",
-  borderRadius: "22px",
-  width: "min(980px, 100%)",
-  maxHeight: "94vh",
-  overflowY: "auto",
-  position: "relative",
-};
-
-const topGlowStyle = {
-  position: "absolute",
-  top: "-60px",
-  right: "-20px",
-  width: "280px",
-  height: "280px",
-  borderRadius: "50%",
-  background: "radial-gradient(circle, rgba(99,102,241,0.17) 0%, rgba(99,102,241,0) 70%)",
-  pointerEvents: "none",
-};
-
-const bottomGlowStyle = {
-  position: "absolute",
-  bottom: "-80px",
-  left: "-30px",
-  width: "320px",
-  height: "320px",
-  borderRadius: "50%",
-  background: "radial-gradient(circle, rgba(16,185,129,0.10) 0%, rgba(16,185,129,0) 72%)",
-  pointerEvents: "none",
-};
-
-const headerStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "flex-start",
-  gap: "12px",
-  marginBottom: "14px",
-  position: "relative",
-  zIndex: 1,
-};
-
-const eyebrowStyle = {
-  margin: 0,
-  fontSize: "11px",
-  letterSpacing: "0.08em",
-  textTransform: "uppercase",
-  color: "#6366f1",
-  fontWeight: "800",
-};
-
-const titleStyle = {
-  margin: "4px 0 6px",
-  color: "#0f172a",
-  fontSize: "28px",
-  lineHeight: 1.1,
-  fontWeight: "900",
-  letterSpacing: "-0.02em",
-};
-
-const subtitleStyle = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: "13px",
-  maxWidth: "520px",
-  lineHeight: 1.6,
-};
-
-const closeButtonStyle = {
-  cursor: "pointer",
-  border: "1px solid #e2e8f0",
-  background: "#f8fafc",
-  color: "#475569",
-  width: "38px",
-  height: "38px",
-  borderRadius: "10px",
-  fontSize: "18px",
-  fontWeight: "700",
-};
-
-const metaStripStyle = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "8px",
-  marginBottom: "18px",
-};
-
-const optionSectionStyle = {
-  display: "grid",
-  gridTemplateColumns: "repeat(12, minmax(0, 1fr))",
-  gap: "12px",
-};
-
-const metaBadgeStyle = {
-  fontSize: "12px",
-  color: "#334155",
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  borderRadius: "999px",
-  padding: "6px 10px",
-  fontWeight: "600",
-};
-
-const optionBoxStyle = {
-  border: "1px solid #e2e8f0",
-  padding: "14px",
-  borderRadius: "14px",
-  background: "linear-gradient(180deg, #ffffff 0%, #fbfdff 100%)",
-  boxShadow: "0 8px 24px rgba(15,23,42,0.05)",
-  gridColumn: "span 12",
-};
-
-const headerGap = { display: "flex", alignItems: "center", gap: "10px" };
-
-const labelStyle = {
-  fontWeight: "700",
-  fontSize: "15px",
-  color: "#1e293b",
-};
-
-const descStyle = {
-  margin: "6px 0 0 24px",
-  color: "#64748b",
-  fontSize: "12px",
-  lineHeight: 1.45,
-};
-
-const subOptionStyle = {
-  marginTop: "10px",
-  marginLeft: "25px",
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "8px",
-  background: "#f8fafc",
-  border: "1px solid #e2e8f0",
-  borderRadius: "10px",
-  padding: "8px 10px",
-};
-
-const scrollListStyle = {
-  marginTop: "8px",
-  maxHeight: "160px",
-  overflowY: "auto",
-  marginLeft: "24px",
-  paddingLeft: "10px",
-  paddingTop: "4px",
-  borderLeft: "2px solid #e2e8f0",
-};
-
-const itemRowStyle = {
-  marginBottom: "8px",
-  display: "flex",
-  alignItems: "center",
-  borderRadius: "8px",
-  padding: "5px 6px",
-  background: "#f8fafc",
-  border: "1px solid #eef2f7",
-};
-
-const itemTextStyle = {
-  fontSize: "12px",
-  marginLeft: "8px",
-  color: "#475569",
-  fontWeight: "500",
-};
-
-const inputSmall = {
-  padding: "5px 7px",
-  width: "60px",
-  borderRadius: "8px",
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-};
-
-const footerBarStyle = {
-  position: "sticky",
-  bottom: "-26px",
-  marginTop: "16px",
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: "10px",
-  background: "linear-gradient(180deg, rgba(255,255,255,0.8) 0%, #fff 35%)",
-  paddingTop: "16px",
-};
-
-const secondaryButtonStyle = {
-  border: "1px solid #cbd5e1",
-  background: "#fff",
-  color: "#475569",
-  padding: "12px 16px",
-  borderRadius: "10px",
-  fontWeight: "700",
-  cursor: "pointer",
-};
-
-const sendButtonStyle = {
-  minWidth: "260px",
-  background: "linear-gradient(135deg, #4f46e5, #6366f1)",
-  color: "white",
-  padding: "12px 18px",
-  border: "none",
-  borderRadius: "10px",
-  cursor: "pointer",
-  fontWeight: "800",
-  fontSize: "14px",
-  boxShadow: "0 8px 24px rgba(79,70,229,0.32)",
-};

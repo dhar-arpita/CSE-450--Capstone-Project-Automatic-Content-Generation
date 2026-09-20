@@ -1,85 +1,99 @@
-// features/quiz/QuizGenerator.js
-import React, { useState, useEffect } from "react";
-import { generateQuiz, downloadWorksheetPDF, quickAnswer } from "../../shared/services/api";
+import React, { useEffect, useState } from "react";
+import { generateQuiz, downloadWorksheetPDF, getWorksheetDetails } from "../../shared/services/api";
 import useJobPolling from "../../shared/services/useJobPolling";
+import { IconAlert, IconBolt, IconDownload, IconSheet } from "../../shared/ui/icons";
+import "../../shared/ui/studio.css";
 
+/* Wording is the team's own, minus the emoji. Three settings are new — the
+   content language, the difficulty and the single Generate button — and are
+   worded to match the worksheet studio so the two read as one product. */
 const TXT = {
   bangla: {
     scope: "স্কোপ (Scope)",
     questions: "প্রশ্ন সংখ্যা",
-    generate: "🎯 Quiz তৈরি করো",
-    generating: "⌛ তৈরি হচ্ছে...",
-    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ খুঁজছি...",
-    ready: "🎯 Quiz তৈরি শেষ। নিচে প্রশ্নগুলো দেখুন এবং প্র্যাকটিস করুন।",
-    print: "🖨️ Print",
-    download: "📥 PDF ডাউনলোড করো",
-    downloading: "⌛ ডাউনলোড হচ্ছে...",
-    selectFirst: "প্রথমে অন্তত একটি Scope (Topic/Chapter/Subject) সিলেক্ট করুন!",
+    contentLanguage: "কনটেন্টের ভাষা", langBangla: "বাংলা", langEnglish: "ইংরেজি",
+    difficulty: "ডিফিকাল্টি",
+    mixed: "মিক্সড", easy: "সহজ", medium: "মাঝারি", hard: "কঠিন",
+    generate: "Quiz তৈরি করুন",
+    generating: "তৈরি হচ্ছে...",
+    ready: "Quiz তৈরি শেষ। নিচে প্রশ্নগুলো দেখুন এবং প্র্যাকটিস করুন।",
+    print: "প্রিন্ট",
+    download: "PDF ডাউনলোড করুন",
     empty: "Quiz তৈরি হয়েছে কিন্তু কোনো কন্টেন্ট পাওয়া যায়নি।",
     topicScope: "Topic Scope",
     chapterScope: "Chapter Scope",
     subjectScope: "Subject Scope",
-    errorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
-    retry: "🔄 আবার চেষ্টা করুন",
-    noCache: "⚠️ এই সিলেকশনের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
+    errorMsg: "কুইজ তৈরি করতে সমস্যা হয়েছে।",
+    retry: "আবার চেষ্টা করুন",
     stageGenerating: "প্রশ্ন তৈরি হচ্ছে...",
     stageSaving: "সংরক্ষণ করা হচ্ছে...",
-    stillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখো।",
+    stillRunning: "এখনো চলছে — একটু পরে আবার দেখুন।",
   },
   english: {
     scope: "Scope",
     questions: "Questions Count",
-    generate: "🎯 Generate Quiz",
-    generating: "⌛ Generating...",
-    quickAnswer: "⚡ Quick Answer", quickAnswerLoading: "⚡ Searching...",
-    ready: "🎯 Quiz is ready. Review and practice below.",
-    print: "🖨️ Print",
-    download: "📥 Download PDF",
-    downloading: "⌛ Downloading...",
-    selectFirst: "Please select at least a Topic, Chapter or Subject first!",
+    contentLanguage: "Content language", langBangla: "Bangla", langEnglish: "English",
+    difficulty: "Difficulty",
+    mixed: "Mixed", easy: "Easy", medium: "Medium", hard: "Hard",
+    generate: "Generate Quiz",
+    generating: "Generating...",
+    ready: "Quiz is ready. Review and practice below.",
+    print: "Print",
+    download: "Download PDF",
     empty: "Quiz generated but content is empty.",
     topicScope: "Topic Scope",
     chapterScope: "Chapter Scope",
     subjectScope: "Subject Scope",
-    errorMsg: "⚠️ Failed to generate quiz.",
-    retry: "🔄 Try Again",
-    noCache: "⚠️ No cached content found for this selection.",
+    errorMsg: "Failed to generate the quiz.",
+    retry: "Try Again",
     stageGenerating: "Writing questions...",
     stageSaving: "Saving...",
-    stillRunning: "⏳ Still running — check back in a moment.",
+    stillRunning: "Still running — check back in a moment.",
   },
 };
 
+// Mirrors agents/quiz_agent.py::QUESTION_COUNT_MAP.
 const SCOPE_DEFAULT_QUESTIONS = { topic: 10, chapter: 20, subject: 30 };
 
-const stageLabel = (stage, t) => {
-  if (stage === "saving") return t.stageSaving;
-  return t.stageGenerating;
-};
+const stageLabel = (stage, t) => (stage === "saving" ? t.stageSaving : t.stageGenerating);
+
+const Chevron = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="m6 9 6 6 6-6" />
+  </svg>
+);
 
 export default function QuizGenerator({
-  selectedClass,
-  selectedSubject,
-  selectedChapter,
-  selectedTopicId,
-  language = "bangla",
+  selectedSubject, selectedChapter, selectedTopicId, language = "bangla",
+  openRequest = null, onContentChange, onGenerated,
 }) {
   const t = TXT[language] || TXT.bangla;
 
   const [scope, setScope] = useState("topic");
   const [numQuestions, setNumQuestions] = useState(SCOPE_DEFAULT_QUESTIONS.topic);
-  const [quickAnswerLoading, setQuickAnswerLoading] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+  const [difficulty, setDifficulty] = useState("mixed");
   const [quizHTML, setQuizHTML] = useState("");
   const [contentId, setContentId] = useState(null);
+  const [dispatchError, setDispatchError] = useState(null);
+  const [waitingOnCache, setWaitingOnCache] = useState(false);
+  const [openingSaved, setOpeningSaved] = useState(false);
+
+  /* The language the quiz is written in, which is not the language of the app.
+     Follows the interface until the teacher picks one, then stays put. */
+  const [contentLanguage, setContentLanguage] = useState(language);
+  const [languagePinned, setLanguagePinned] = useState(false);
+  useEffect(() => {
+    if (!languagePinned) setContentLanguage(language);
+  }, [language, languagePinned]);
 
   const [dispatchedJobId, setDispatchedJobId] = useState(null);
-  const { status, stage, result, error } = useJobPolling(
-    dispatchedJobId,
-    "activeJob:quiz"
-  );
+  const { status, stage, result, error } = useJobPolling(dispatchedJobId, "activeJob:quiz");
 
-  const isGenerating = status === "QUEUED" || status === "PROCESSING";
+  const isGenerating =
+    waitingOnCache || openingSaved || status === "QUEUED" || status === "PROCESSING";
+
+  useEffect(() => { onContentChange?.(contentId); }, [contentId, onContentChange]);
 
   useEffect(() => {
     if (selectedTopicId) setScope("topic");
@@ -97,9 +111,32 @@ export default function QuizGenerator({
       if (html) {
         setQuizHTML(html);
         setContentId(result.content_id || result.id || null);
+        onGenerated?.();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, result]);
+
+  /* Reopening one of the teacher's earlier quizzes from the rail. */
+  useEffect(() => {
+    if (!openRequest?.contentId) return undefined;
+    let cancelled = false;
+    setDispatchError(null);
+    setOpeningSaved(true);
+    getWorksheetDetails(openRequest.contentId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setQuizHTML(data?.html || "");
+        setContentId(data?.content_id ?? openRequest.contentId);
+      })
+      .catch((err) => {
+        console.error("Could not open saved quiz:", err);
+        if (!cancelled) setDispatchError(t.errorMsg);
+      })
+      .finally(() => { if (!cancelled) setOpeningSaved(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
 
   const determineTarget = () => {
     if (scope === "topic" && selectedTopicId) return { topic_id: selectedTopicId };
@@ -110,45 +147,46 @@ export default function QuizGenerator({
     if (selectedSubject) return { subject_id: selectedSubject };
     return null;
   };
-
   const target = determineTarget();
 
+  /* One button. POST /generate/quiz looks for a cache seed first and returns
+     the finished quiz inline on a hit, or a job id to poll on a miss — so the
+     teacher never has to choose between a fast path and a slow one. */
   const onGenerate = async () => {
-    if (!target) {
-      alert(t.selectFirst);
-      return;
-    }
+    if (!target) return;
 
     setQuizHTML("");
     setContentId(null);
+    setDispatchError(null);
+    setDispatchedJobId(null);
+    setWaitingOnCache(true);
 
     try {
-      const payload = {
+      const { data } = await generateQuiz({
         scope,
         ...target,
         num_questions: parseInt(numQuestions, 10) || 5,
-        language,
-        // Generate always builds fresh (202) per the job contract. The cache
-        // is reached through Quick Answer instead.
-        refresh: true,
-      };
+        language: contentLanguage,
+        difficulty,
+      });
 
-      const { data } = await generateQuiz(payload);
-      setDispatchedJobId(data.job_id);
+      if (data?.html) {
+        setQuizHTML(data.html);
+        setContentId(data.content_id || null);
+        onGenerated?.();
+      } else {
+        setDispatchedJobId(data.job_id);
+      }
     } catch (err) {
-      console.error("Dispatch failed:", err);
-      setDispatchedJobId(null);
-      alert(t.errorMsg);
+      console.error("Quiz request failed:", err);
+      setDispatchError(t.errorMsg);
+    } finally {
+      setWaitingOnCache(false);
     }
   };
 
   const handleDownloadPDF = async () => {
-    if (!contentId) {
-      alert("Content ID not found to download PDF.");
-      return;
-    }
-
-    setDownloading(true);
+    if (!contentId) return;
     try {
       const response = await downloadWorksheetPDF(contentId);
       const blob = new Blob([response.data], { type: "application/pdf" });
@@ -162,221 +200,128 @@ export default function QuizGenerator({
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Download failed:", err);
-      alert("Download failed. Please try again.");
-    } finally {
-      setDownloading(false);
+      setDispatchError(t.errorMsg);
     }
   };
 
   const handlePrint = () => {
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(
-      `<html><head><title>Quiz</title></head><body>${quizHTML}</body></html>`
-    );
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<html><head><title>Quiz</title></head><body>${quizHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
   };
 
-  const handleQuickAnswer = async () => {
-    if (!target) {
-      alert(t.selectFirst);
-      return;
-    }
-
-    setQuickAnswerLoading(true);
-    setQuizHTML("");
-    setContentId(null);
-
-    try {
-      const { data } = await quickAnswer({
-        ...target,
-        content_type: `quiz_${scope}`,
-        language: language,
-        num_questions: parseInt(numQuestions, 10) || undefined,
-      });
-
-      if (data && data.found && data.html) {
-        setQuizHTML(data.html);
-        setContentId(data.content_id);
-        setQuickAnswerLoading(false);
-      } else {
-        console.log("No cache found, calling regular generator...");
-        setQuickAnswerLoading(false);
-        await onGenerate();
-      }
-    } catch (err) {
-      console.error("Quick Answer Error, falling back to general pipeline:", err);
-      setQuickAnswerLoading(false);
-      await onGenerate();
-    }
-  };
+  const shownError =
+    dispatchError || (error && !error.isTimeout ? error.message || t.errorMsg : null);
 
   return (
-    <div>
-      {/* Config Row */}
-      <div style={configRow}>
-        <div style={fieldGroup}>
-          <label style={labelStyle}>{t.scope}</label>
-          <select value={scope} onChange={(e) => setScope(e.target.value)} style={selectStyle}>
-            <option value="topic" disabled={!selectedTopicId}>
-              {t.topicScope} {!selectedTopicId ? "(N/A)" : ""}
-            </option>
-            <option value="chapter" disabled={!selectedChapter}>
-              {t.chapterScope} {!selectedChapter ? "(N/A)" : ""}
-            </option>
-            <option value="subject" disabled={!selectedSubject}>
-              {t.subjectScope} {!selectedSubject ? "(N/A)" : ""}
-            </option>
-          </select>
+    <div className="wg">
+      <div className="wg-controls">
+        <div className="wg-field">
+          <label className="wg-label" htmlFor="qz-scope">{t.scope}</label>
+          <div className="wg-select">
+            <select id="qz-scope" value={scope} onChange={(e) => setScope(e.target.value)}>
+              <option value="topic">{t.topicScope}</option>
+              <option value="chapter">{t.chapterScope}</option>
+              <option value="subject">{t.subjectScope}</option>
+            </select>
+            <Chevron />
+          </div>
         </div>
 
-        <div style={fieldGroup}>
-          <label style={labelStyle}>{t.questions}</label>
-          <select value={numQuestions} onChange={(e) => setNumQuestions(e.target.value)} style={selectStyle}>
-            <option value={5}>5</option>
-            <option value={10}>10</option>
-            <option value={15}>15</option>
-            <option value={20}>20</option>
-            <option value={25}>25</option>
-            <option value={30}>30</option>
-          </select>
+        <div className="wg-field">
+          <label className="wg-label" htmlFor="qz-language">{t.contentLanguage}</label>
+          <div className="wg-select">
+            <select
+              id="qz-language"
+              value={contentLanguage}
+              onChange={(e) => { setContentLanguage(e.target.value); setLanguagePinned(true); }}
+            >
+              <option value="bangla">{t.langBangla}</option>
+              <option value="english">{t.langEnglish}</option>
+            </select>
+            <Chevron />
+          </div>
+        </div>
+
+        <div className="wg-field">
+          <label className="wg-label" htmlFor="qz-difficulty">{t.difficulty}</label>
+          <div className="wg-select">
+            <select id="qz-difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+              <option value="mixed">{t.mixed}</option>
+              <option value="easy">{t.easy}</option>
+              <option value="medium">{t.medium}</option>
+              <option value="hard">{t.hard}</option>
+            </select>
+            <Chevron />
+          </div>
+        </div>
+
+        <div className="wg-field">
+          <label className="wg-label" htmlFor="qz-count">{t.questions}</label>
+          <input
+            id="qz-count"
+            className="wg-number"
+            type="number"
+            min="1"
+            value={numQuestions}
+            onChange={(e) => setNumQuestions(e.target.value)}
+          />
         </div>
 
         <button
+          type="button"
+          className="wg-generate"
           onClick={onGenerate}
-          disabled={isGenerating || quickAnswerLoading || !target}
-          style={generateBtn(isGenerating || quickAnswerLoading || !target)}
+          disabled={isGenerating || !target}
         >
-          {isGenerating ? t.generating : t.generate}
+          {isGenerating ? (
+            <><span className="wg-spinner" aria-hidden="true" />{t.generating}</>
+          ) : (
+            <><IconBolt />{t.generate}</>
+          )}
         </button>
-
-        {target && (
-          <button
-            onClick={handleQuickAnswer}
-            disabled={quickAnswerLoading || isGenerating}
-            style={quickAnswerBtn(quickAnswerLoading || isGenerating)}
-          >
-            {quickAnswerLoading ? t.quickAnswerLoading : t.quickAnswer}
-          </button>
-        )}
       </div>
 
-      {/* Progress indicator while the job is in flight */}
       {isGenerating && (
-        <div style={progressCard}>
-          <span style={progressSpinner}>⏳</span>
-          <span style={progressText}>{stageLabel(stage, t)}</span>
-        </div>
+        <p className="wg-note wg-note-live" role="status">
+          <span className="wg-spinner" aria-hidden="true" />
+          {stageLabel(stage, t)}
+        </p>
       )}
 
-      {/* Client-side timeout — distinct from a real FAILED */}
       {error?.isTimeout && (
-        <div style={timeoutCard}>
-          <span style={errorText}>{t.stillRunning}</span>
-        </div>
+        <p className="wg-note wg-note-wait" role="status">
+          <IconAlert />{t.stillRunning}
+        </p>
       )}
 
-      {/* Real FAILED — distinct from the timeout above, offers Retry */}
-      {error && !error.isTimeout && (
-        <div style={errorCard}>
-          <span style={errorText}>{error.message || t.errorMsg}</span>
-          <button onClick={onGenerate} style={retryBtn}>
-            {t.retry}
-          </button>
-        </div>
+      {shownError && (
+        <p className="wg-note wg-note-bad" role="alert">
+          <IconAlert />
+          <span>{shownError}</span>
+          <button type="button" className="wg-retry" onClick={onGenerate}>{t.retry}</button>
+        </p>
       )}
 
-      {/* Preview & Action Buttons Section */}
       {quizHTML && (
-        <div style={previewCard}>
-          <div style={previewHeaderRow}>
-            <div style={previewHint}>{t.ready}</div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={handlePrint} style={outlineBtn}>
-                {t.print}
+        <section className="wg-preview">
+          <header className="wg-preview-head">
+            <p className="wg-preview-hint">{t.ready}</p>
+            <div className="wg-preview-actions">
+              <button type="button" className="wg-ghost" onClick={handlePrint}>
+                <IconSheet />{t.print}
               </button>
-              <button onClick={handleDownloadPDF} disabled={downloading} style={downloadBtn(downloading)}>
-                {downloading ? t.downloading : t.download}
+              <button type="button" className="wg-solid" onClick={handleDownloadPDF}>
+                <IconDownload />{t.download}
               </button>
             </div>
-          </div>
-
-          <div
-            className="quiz-render-area"
-            style={quizRenderStyle}
-            dangerouslySetInnerHTML={{ __html: quizHTML }}
-          />
-        </div>
+          </header>
+          <div className="wg-paper" dangerouslySetInnerHTML={{ __html: quizHTML }} />
+        </section>
       )}
     </div>
   );
 }
-
-/* ===== STYLES ===== */
-const configRow = {
-  display: "flex", gap: "16px", alignItems: "flex-end", flexWrap: "wrap",
-  backgroundColor: "#f8fafc", padding: "18px", borderRadius: "16px", border: "1px solid #e2e8f0",
-};
-const fieldGroup = { display: "flex", flexDirection: "column", gap: "6px" };
-const labelStyle = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" };
-const selectStyle = {
-  padding: "10px 14px", borderRadius: "10px", border: "1.5px solid #e2e8f0", background: "#fff",
-  fontSize: "13.5px", fontWeight: 600, color: "#0f172a", outline: "none",
-};
-const generateBtn = (disabled) => ({
-  padding: "12px 24px", borderRadius: "12px", border: "none",
-  background: disabled ? "#fbcfe8" : "linear-gradient(135deg, #db2777, #ec4899)",
-  color: "#fff", fontWeight: 800, fontSize: "13.5px",
-  cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.35)", transition: "all 0.15s",
-});
-
-/* Progress UI */
-const progressCard = {
-  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fdf2f8",
-  border: "1.5px solid #fbcfe8", borderRadius: "12px",
-  display: "flex", alignItems: "center", gap: "10px",
-};
-const progressSpinner = { fontSize: "16px" };
-const progressText = { fontSize: "13px", color: "#9d174d", fontWeight: 700 };
-
-/* Timeout UI */
-const timeoutCard = {
-  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fffbeb",
-  border: "1.5px solid #fde68a", borderRadius: "12px",
-};
-
-/* Error UI Styles */
-const errorCard = {
-  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fef2f2",
-  border: "1.5px solid #fecaca", borderRadius: "12px",
-  display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
-};
-const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
-const retryBtn = {
-  backgroundColor: "#dc2626", color: "#fff", border: "none", padding: "8px 14px",
-  borderRadius: "8px", cursor: "pointer", fontWeight: 700, fontSize: "12.5px",
-  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
-};
-
-const previewCard = {
-  marginTop: "20px", backgroundColor: "#fff", padding: "28px", border: "1px solid #e2e8f0",
-  borderRadius: "18px", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", maxWidth: "100%", overflowX: "auto",
-};
-const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
-const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
-const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-const downloadBtn = (disabled) => ({
-  backgroundColor: disabled ? "#f472b6" : "#db2777", color: "#fff", padding: "10px 20px", border: "none",
-  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "13px",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(219,39,119,0.3)", opacity: disabled ? 0.8 : 1, transition: "all 0.2s",
-});
-const quickAnswerBtn = (disabled) => ({
-  padding: "12px 24px", borderRadius: "12px", border: "none",
-  background: disabled ? "#fef3c7" : "linear-gradient(135deg, #f59e0b, #fbbf24)",
-  color: "#fff", fontWeight: 800, fontSize: "13.5px",
-  cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(245,158,11,0.35)", transition: "all 0.15s",
-});
-const quizRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

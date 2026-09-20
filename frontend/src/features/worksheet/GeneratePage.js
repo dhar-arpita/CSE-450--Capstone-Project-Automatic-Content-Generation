@@ -1,30 +1,43 @@
-// features/generate/GeneratePage.js — Updated to Emerald Green (#059669) Theme
-import React, { useState, useEffect } from "react";
+// features/worksheet/GeneratePage.js — the worksheet studio.
+//
+// Wording is the team's own, unchanged apart from dropping the emoji. The page
+// renders inside the shared app shell, so its navigation, language switch and
+// theme switch are the same objects the dashboard uses.
+import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import BrandLogo from "../../shared/brand/BrandLogo";
-
+import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
-import WorksheetGenerator from "../worksheet/WorksheetGenerator";
+import AppShell from "../../shared/ui/AppShell";
+import SavedContentList from "../../shared/ui/SavedContentList";
+import { IconCheck, IconSheet, IconSpark } from "../../shared/ui/icons";
+import WorksheetGenerator from "./WorksheetGenerator";
+import "../../shared/ui/studio.css";
 
 /* ---------- bilingual UI text ---------- */
 const TXT = {
   bangla: {
     breadcrumb: "Worksheet Studio",
     pageTitle: "AI Worksheet স্টুডিও",
-    pageSub: "তোমার ক্লাসের জন্য মুহূর্তেই পোলিশড worksheet তৈরি করো।",
+    pageSub: "আপনার ক্লাসের জন্য মুহূর্তেই পোলিশড worksheet তৈরি করুন।",
     setupLabel: "সেটআপ",
     step1Title: "কারিকুলাম সিলেকশন",
-    step1Sub: "কোন টপিকের জন্য worksheet বানাতে চাও তা নির্দিষ্ট করো।",
+    step1Sub: "কোন টপিকের জন্য worksheet বানাতে চান তা নির্দিষ্ট করুন।",
     classL: "ক্লাস", subjectL: "বিষয়", chapterL: "অধ্যায়", topicL: "টপিক",
-    selectClass: "ক্লাস বেছে নাও", selectSubject: "বিষয় বেছে নাও",
-    selectChapter: "অধ্যায় বেছে নাও", selectTopic: "টপিক বেছে নাও",
-    hintDone: "চমৎকার। তোমার context লক করা হয়েছে। নিচে generation settings-এ যাও।",
-    hintPending: "টার্গেটেড worksheet generation আনলক করতে চারটা ড্রপডাউনই পূরণ করো।",
+    selectClass: "ক্লাস বেছে নিন", selectSubject: "বিষয় বেছে নিন",
+    selectChapter: "অধ্যায় বেছে নিন", selectTopic: "টপিক বেছে নিন",
+    hintDone: "চমৎকার। আপনার context লক করা হয়েছে। নিচে generation settings-এ যান।",
+    hintPending: "টার্গেটেড worksheet generation আনলক করতে চারটা ড্রপডাউনই পূরণ করুন।",
     step2Title: "কনফিগারেশন ও রেফারেন্স স্টাইল",
-    addSample: "+ রেফারেন্স স্যাম্পল worksheet যোগ করো (ঐচ্ছিক)",
-    uploadRef: "রেফারেন্স ফাইল আপলোড করো", cancel: "বাতিল",
+    addSample: "+ রেফারেন্স স্যাম্পল worksheet যোগ করুন (ঐচ্ছিক)",
+    uploadRef: "রেফারেন্স ফাইল আপলোড করুন", cancel: "বাতিল",
     refHelper: "শুধু স্টাইল/টোন গাইডেন্সের জন্য ব্যবহৃত হবে। কনটেন্ট এখনও নির্বাচিত টপিক অনুযায়ী থাকবে।",
-    selected: "✅ নির্বাচিত:",
+    selected: "নির্বাচিত:",
+    savedTitle: "আপনার তৈরি ওয়ার্কশিট",
+    savedEmpty: "এখনো কোনো ওয়ার্কশিট তৈরি হয়নি — প্রথমটা বানিয়ে ফেলুন!",
+    savedLoading: "লোড হচ্ছে…",
+    savedFailed: "আপনার ওয়ার্কশিটগুলো আনা গেল না।",
+    levels: { easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
+    languages: { bangla: "বাংলা", english: "ইংরেজি" },
   },
   english: {
     breadcrumb: "Worksheet Studio",
@@ -42,59 +55,35 @@ const TXT = {
     addSample: "+ Add a reference sample worksheet (optional)",
     uploadRef: "Upload Reference File", cancel: "Cancel",
     refHelper: "Used only for style/tone guidance. Content still follows selected topic knowledge.",
-    selected: "✅ Selected:",
+    selected: "Selected:",
+    savedTitle: "Your generated worksheets",
+    savedEmpty: "No worksheet generated yet, get your first one!",
+    savedLoading: "Loading…",
+    savedFailed: "Could not load your worksheets.",
+    levels: { easy: "Easy", medium: "Medium", hard: "Hard" },
+    languages: { bangla: "Bangla", english: "English" },
   },
 };
 
-/* ---------- top navbar ---------- */
-function Navbar({ user, onBack, breadcrumb, language, onLanguage }) {
+function SelectField({ label, value, onChange, options, placeholder, disabled }) {
   return (
-    <nav style={navStyle}>
-      <div style={navInner}>
-        <BrandLogo onClick={onBack} tone="light" />
-
-        <div style={navCenter}>
-          <span style={navBreadcrumb}>
-            🏠 Dashboard / <span style={{ color: "#059669", fontWeight: 700, marginLeft: "4px" }}>{breadcrumb}</span>
-          </span>
-        </div>
-
-        <div style={navRight}>
-          <div style={langToggle}>
-            {[["bangla", "BN"], ["english", "EN"]].map(([v, l]) => (
-              <button key={v} onClick={() => onLanguage(v)} style={langBtn(language === v)}>{l}</button>
-            ))}
-          </div>
-          <div style={userBadge}>
-            <div style={userAvatar}>{(user?.name || "S")[0].toUpperCase()}</div>
-            <span style={userName}>{user?.name || "Test Student"}</span>
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
-}
-
-/* ---------- styled select field ---------- */
-function SelectField({ label, icon, value, onChange, disabled, options, placeholder }) {
-  return (
-    <div>
-      <label style={fieldLabel}><span style={{ fontSize: "14px" }}>{icon}</span><span>{label}</span></label>
-      <div style={{ ...pillWrap, ...(disabled ? pillWrapDisabled : {}) }}>
+    <div className="gw-field">
+      <label className="gw-label">{label}</label>
+      <div className="gw-select">
         <select
           value={value}
           disabled={disabled}
           onChange={(e) => onChange(e.target.value)}
-          style={pillSelect}
         >
           <option value="">{placeholder}</option>
-          {options.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
+          {options.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
-        <span style={pillCaret}>▾</span>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </div>
     </div>
   );
@@ -103,7 +92,12 @@ function SelectField({ label, icon, value, onChange, disabled, options, placehol
 export default function GeneratePage() {
   const [user, setUser] = useState(null);
   const navigate = useNavigate();
-  const [language, setLanguage] = useState("bangla");
+
+  /* One language for the whole app. The dictionary below is keyed
+     bangla/english, which is also what the generation API expects, so the
+     global bn/en flag maps straight onto both. */
+  const { lang } = useI18n();
+  const language = lang === "bn" ? "bangla" : "english";
   const t = TXT[language] || TXT.bangla;
 
   const [classList, setClassList] = useState([]);
@@ -119,258 +113,210 @@ export default function GeneratePage() {
   const [sampleFile, setSampleFile] = useState(null);
   const [showSampleInput, setShowSampleInput] = useState(false);
 
+  /* The rail and the preview are siblings, so the page holds the two pieces
+     of state they share: which worksheet is on screen, and a counter the
+     generator bumps whenever it makes a new one so the list refetches. */
+  const [openRequest, setOpenRequest] = useState(null);
+  const [activeContentId, setActiveContentId] = useState(null);
+  const [listVersion, setListVersion] = useState(0);
+
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (!storedUser) {
       navigate("/login");
-    } else {
-      setUser(JSON.parse(storedUser));
-      loadClasses();
+      return;
     }
+    setUser(JSON.parse(storedUser));
+    getClasses()
+      .then(({ data }) => setClassList(data || []))
+      .catch((err) => console.error("Classes load failed", err));
   }, [navigate]);
 
-  const loadClasses = async () => {
-    try {
-      const { data } = await getClasses();
-      setClassList(data || []);
-    } catch (err) {
-      console.error("Classes load failed", err);
-    }
+  const handleLogout = () => {
+    ["access_token", "refresh_token", "user", "chatbot_session_id"].forEach((k) =>
+      localStorage.removeItem(k)
+    );
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("activeJob:"))
+      .forEach((k) => localStorage.removeItem(k));
+    navigate("/", { state: { splash: true } });
   };
 
   const handleClassChange = async (className) => {
     setSelectedClass(className);
-    setSubjectList([]);
-    setChapterList([]);
-    setTopicList([]);
-    setSelectedSubject("");
-    setSelectedChapter("");
-    setSelectedTopicId("");
+    setSubjectList([]); setChapterList([]); setTopicList([]);
+    setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
     try {
       const { data } = await getSubjects(className);
       setSubjectList(data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleSubjectChange = async (subjectId) => {
     setSelectedSubject(subjectId);
-    setChapterList([]);
-    setTopicList([]);
-    setSelectedChapter("");
-    setSelectedTopicId("");
+    setChapterList([]); setTopicList([]);
+    setSelectedChapter(""); setSelectedTopicId("");
     try {
       const { data } = await getChapters(subjectId);
       setChapterList(data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
   const handleChapterChange = async (chapterId) => {
     setSelectedChapter(chapterId);
-    setTopicList([]);
-    setSelectedTopicId("");
+    setTopicList([]); setSelectedTopicId("");
     try {
       const { data } = await getTopics(chapterId);
       setTopicList(data || []);
-    } catch (err) {
-      console.error(err);
-    }
+    } catch (err) { console.error(err); }
   };
 
-  const setupProgress = [selectedClass, selectedSubject, selectedChapter, selectedTopicId].filter(Boolean).length;
+  const chosen = [selectedClass, selectedSubject, selectedChapter, selectedTopicId].filter(Boolean).length;
+  const ready = chosen === 4;
 
   return (
-    <div style={pageStyle}>
-      <Navbar user={user} onBack={() => navigate(-1)} breadcrumb={t.breadcrumb} language={language} onLanguage={setLanguage} />
-
-      <main style={mainWrap}>
-
-        {/* ── PAGE TITLE ── */}
-        <div style={pageTitleRow}>
-          <div style={pageTitleIcon}>📝</div>
-          <div>
-            <h1 style={pageTitleStyle}>{t.pageTitle}</h1>
-            <p style={pageSub}>{t.pageSub}</p>
-          </div>
+    <AppShell
+      breadcrumb={t.breadcrumb}
+      user={user}
+      onLogout={handleLogout}
+      rail={
+        <SavedContentList
+          contentType="worksheet"
+          version={listVersion}
+          activeId={activeContentId}
+          locale={lang === "bn" ? "bn-BD" : "en-GB"}
+          onPick={(id) => setOpenRequest({ contentId: id, nonce: Date.now() })}
+          labels={{
+            title: t.savedTitle,
+            empty: t.savedEmpty,
+            loading: t.savedLoading,
+            failed: t.savedFailed,
+            levels: t.levels,
+            languages: t.languages,
+          }}
+        />
+      }
+    >
+      <section className="gw-head">
+        <span className="gw-head-icon"><IconSheet /></span>
+        <div>
+          <h1>{t.pageTitle}</h1>
+          <p>{t.pageSub}</p>
         </div>
+      </section>
 
-        {/* ── SETUP PROGRESS CARD ── */}
-        <div style={setupCard}>
-          <span style={setupLabel}>{t.setupLabel}</span>
-          <strong style={setupValue}>{setupProgress}/4</strong>
-          <div style={setupTrack}>
-            <div style={{ ...setupFill, width: `${(setupProgress / 4) * 100}%` }} />
+      {/* ── STEP 1 · curriculum ── */}
+      <section className="as-panel gw-step">
+        <header className="gw-step-head">
+          <span className={`gw-step-no${ready ? " is-done" : ""}`}>
+            {ready ? <IconCheck /> : "1"}
+          </span>
+          <div className="gw-step-text">
+            <h2>{t.step1Title}</h2>
+            <p>{t.step1Sub}</p>
           </div>
-        </div>
-
-        {/* ── MAIN CARD ── */}
-        <div style={card}>
-
-          {/* STEP 1 */}
-          <div style={stepHeaderRow}>
-            <div style={stepCircle(setupProgress === 4)}>{setupProgress === 4 ? "✓" : "1"}</div>
-            <div style={{ flex: 1 }}>
-              <h3 style={stepTitle}>{t.step1Title}</h3>
-              <p style={stepSub}>{t.step1Sub}</p>
-            </div>
-            <div style={progressDots}>
-              {[selectedClass, selectedSubject, selectedChapter, selectedTopicId].map((done, i) => (
-                <div key={i} style={progressDot(!!done)} />
-              ))}
-            </div>
-          </div>
-
-          <div style={fieldGrid}>
-            <SelectField
-              label={t.classL}
-              icon="🏫"
-              value={selectedClass}
-              onChange={handleClassChange}
-              placeholder={t.selectClass}
-              options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
-            />
-
-            <SelectField
-              label={t.subjectL}
-              icon="📚"
-              value={selectedSubject}
-              onChange={handleSubjectChange}
-              disabled={!selectedClass}
-              placeholder={t.selectSubject}
-              options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
-            />
-
-            <SelectField
-              label={t.chapterL}
-              icon="🧩"
-              value={selectedChapter}
-              onChange={handleChapterChange}
-              disabled={!selectedSubject}
-              placeholder={t.selectChapter}
-              options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
-            />
-
-            <SelectField
-              label={t.topicL}
-              icon="🎯"
-              value={selectedTopicId}
-              onChange={setSelectedTopicId}
-              disabled={!selectedChapter}
-              placeholder={t.selectTopic}
-              options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
-            />
-          </div>
-
-          <div style={hintBox}>
-            <span style={{ fontSize: "16px" }}>💡</span>
-            <span style={hintText}>
-              {selectedTopicId ? t.hintDone : t.hintPending}
+          <div className="gw-tally">
+            <span className="gw-tally-count">
+              {t.setupLabel} <strong>{chosen}/4</strong>
             </span>
-          </div>
-
-          <div style={divider} />
-
-          {/* STEP 2 */}
-          <div style={stepHeaderRow}>
-            <div style={stepCircle(false)}>2</div>
-            <div style={{ flex: 1 }}>
-              <h3 style={stepTitle}>{t.step2Title}</h3>
+            <div className="gw-tally-track">
+              <div className="gw-tally-fill" style={{ width: `${(chosen / 4) * 100}%` }} />
             </div>
           </div>
+        </header>
 
-          <div style={{ marginBottom: "8px" }}>
-            {!showSampleInput ? (
-              <button onClick={() => setShowSampleInput(true)} style={sampleButtonStyle}>
-                {t.addSample}
+        <div className="gw-fields">
+          <SelectField
+            label={t.classL}
+            value={selectedClass}
+            onChange={handleClassChange}
+            placeholder={t.selectClass}
+            options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
+          />
+          <SelectField
+            label={t.subjectL}
+            value={selectedSubject}
+            onChange={handleSubjectChange}
+            disabled={!selectedClass}
+            placeholder={t.selectSubject}
+            options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
+          />
+          <SelectField
+            label={t.chapterL}
+            value={selectedChapter}
+            onChange={handleChapterChange}
+            disabled={!selectedSubject}
+            placeholder={t.selectChapter}
+            options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
+          />
+          <SelectField
+            label={t.topicL}
+            value={selectedTopicId}
+            onChange={setSelectedTopicId}
+            disabled={!selectedChapter}
+            placeholder={t.selectTopic}
+            options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
+          />
+        </div>
+
+        <p className={`gw-hint${ready ? " is-done" : ""}`}>
+          <IconSpark />
+          {ready ? t.hintDone : t.hintPending}
+        </p>
+      </section>
+
+      {/* ── STEP 2 · settings, optional style sample, generate ── */}
+      <section className="as-panel gw-step">
+        <header className="gw-step-head">
+          <span className="gw-step-no">2</span>
+          <div className="gw-step-text">
+            <h2>{t.step2Title}</h2>
+          </div>
+        </header>
+
+        {!showSampleInput ? (
+          <button type="button" className="gw-sample-open" onClick={() => setShowSampleInput(true)}>
+            {t.addSample}
+          </button>
+        ) : (
+          <div className="gw-sample">
+            <div className="gw-sample-head">
+              <strong>{t.uploadRef}</strong>
+              <button
+                type="button"
+                className="gw-sample-cancel"
+                onClick={() => { setShowSampleInput(false); setSampleFile(null); }}
+              >
+                {t.cancel}
               </button>
-            ) : (
-              <div style={uploadPanelStyle}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
-                  <span style={{ fontSize: "13.5px", fontWeight: 800, color: "#0f172a" }}>{t.uploadRef}</span>
-                  <button onClick={() => { setShowSampleInput(false); setSampleFile(null); }} style={cancelButtonStyle}>{t.cancel}</button>
-                </div>
-                <input
-                  type="file"
-                  accept=".pdf,.txt"
-                  onChange={(e) => setSampleFile(e.target.files[0])}
-                  style={{ fontSize: "13px" }}
-                />
-                <p style={helperTextStyle}>{t.refHelper}</p>
-                {sampleFile && <p style={selectedFileStyle}>{t.selected} {sampleFile.name}</p>}
-              </div>
+            </div>
+            <input
+              type="file"
+              accept=".pdf,.txt"
+              onChange={(e) => setSampleFile(e.target.files[0])}
+            />
+            <p className="gw-sample-help">{t.refHelper}</p>
+            {sampleFile && (
+              <p className="gw-sample-picked">
+                <IconCheck />
+                {t.selected} {sampleFile.name}
+              </p>
             )}
           </div>
+        )}
 
-          <div style={{ marginTop: "20px" }}>
-            <WorksheetGenerator selectedTopicId={selectedTopicId} user={user} sampleFile={sampleFile} language={language} />
-          </div>
+        <div style={{ marginTop: "22px" }}>
+          <WorksheetGenerator
+            selectedTopicId={selectedTopicId}
+            user={user}
+            sampleFile={sampleFile}
+            language={language}
+            openRequest={openRequest}
+            onContentChange={setActiveContentId}
+            onGenerated={() => setListVersion((v) => v + 1)}
+          />
         </div>
-      </main>
-    </div>
+      </section>
+    </AppShell>
   );
 }
-
-/* ===== STYLES ===== */
-const pageStyle = { minHeight: "100vh", background: "#f1f5f9", fontFamily: "'Segoe UI', system-ui, sans-serif" };
-
-/* NAV */
-const navStyle = { background: "#fff", position: "sticky", top: 0, zIndex: 100, boxShadow: "0 1px 8px rgba(0,0,0,0.08)", borderBottom: "1px solid #e2e8f0" };
-const navInner = { maxWidth: "1100px", margin: "0 auto", padding: "0 24px", height: "64px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px" };
-const navCenter = { flex: 1, display: "flex", justifyContent: "center" };
-const navBreadcrumb = { fontSize: "13px", fontWeight: 600, color: "#94a3b8" };
-const navRight = { display: "flex", alignItems: "center", gap: "12px", flexShrink: 0 };
-const langToggle = { display: "flex", background: "#f1f5f9", borderRadius: "999px", padding: "3px" };
-const langBtn = (active) => ({ padding: "5px 12px", borderRadius: "999px", border: "none", background: active ? "#059669" : "transparent", color: active ? "#fff" : "#64748b", fontSize: "12px", fontWeight: 700, cursor: "pointer", transition: "all 0.15s" });
-const userBadge = { display: "flex", alignItems: "center", gap: "8px" };
-const userAvatar = { width: "34px", height: "34px", borderRadius: "50%", background: "#059669", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "14px" };
-const userName = { fontSize: "14px", fontWeight: 600, color: "#0f172a" };
-
-/* MAIN */
-const mainWrap = { maxWidth: "1000px", margin: "0 auto", padding: "32px 20px 60px", display: "flex", flexDirection: "column", gap: "18px" };
-
-const pageTitleRow = { display: "flex", alignItems: "center", gap: "14px" };
-const pageTitleIcon = { width: "48px", height: "48px", borderRadius: "14px", background: "linear-gradient(135deg, #059669, #10b981)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "24px", flexShrink: 0, boxShadow: "0 4px 14px rgba(5,150,105,0.3)" };
-const pageTitleStyle = { margin: 0, fontFamily: "'Poppins', sans-serif", fontSize: "24px", fontWeight: 800, color: "#0f172a" };
-const pageSub = { margin: "4px 0 0", color: "#64748b", fontSize: "13.5px", fontWeight: 500 };
-
-/* SETUP CARD */
-const setupCard = { background: "#fff", borderRadius: "18px", border: "1px solid #d1fae5", boxShadow: "0 4px 16px rgba(5,150,105,0.06)", padding: "16px 22px", display: "flex", alignItems: "center", gap: "14px" };
-const setupLabel = { fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em" };
-const setupValue = { fontSize: "18px", fontWeight: 800, color: "#059669" };
-const setupTrack = { flex: 1, height: "7px", borderRadius: "999px", background: "#e2e8f0", overflow: "hidden" };
-const setupFill = { height: "100%", borderRadius: "999px", background: "linear-gradient(90deg, #059669, #10b981)", transition: "width 0.35s ease" };
-
-/* CARD */
-const card = { background: "#fff", borderRadius: "20px", boxShadow: "0 4px 20px rgba(0,0,0,0.08)", border: "1px solid #e2e8f0", padding: "28px" };
-
-const stepHeaderRow = { display: "flex", alignItems: "center", gap: "12px", marginBottom: "18px" };
-const stepCircle = (done) => ({ width: "30px", height: "30px", borderRadius: "50%", background: done ? "#22c55e" : "#ecfdf5", color: done ? "#fff" : "#059669", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: "13px", flexShrink: 0 });
-const stepTitle = { margin: 0, fontSize: "15px", fontWeight: 800, color: "#0f172a" };
-const stepSub = { margin: "2px 0 0", fontSize: "12px", color: "#94a3b8", fontWeight: 600 };
-const progressDots = { display: "flex", gap: "5px", flexShrink: 0 };
-const progressDot = (done) => ({ width: "26px", height: "5px", borderRadius: "4px", background: done ? "#059669" : "#e2e8f0", transition: "background 0.3s" });
-
-const fieldGrid = { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px", marginBottom: "18px" };
-const fieldLabel = { display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "8px" };
-
-const divider = { height: "1px", background: "#e2e8f0", margin: "24px 0" };
-
-/* PILL SELECT */
-const pillWrap = { display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: "12px", padding: "11px 14px" };
-const pillWrapDisabled = { background: "#f1f5f9", opacity: 0.6 };
-const pillSelect = { flex: 1, border: "none", outline: "none", background: "transparent", fontSize: "13.5px", fontWeight: 600, color: "#0f172a", appearance: "none", fontFamily: "inherit", cursor: "pointer", minWidth: 0 };
-const pillCaret = { color: "#94a3b8", fontSize: "12px", flexShrink: 0 };
-
-/* HINT BOX */
-const hintBox = { display: "flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "10px", padding: "10px 14px" };
-const hintText = { fontSize: "12.5px", color: "#475569", fontWeight: 600 };
-
-/* SAMPLE UPLOAD */
-const sampleButtonStyle = { background: "#ecfdf5", border: "1.5px dashed #a7f3d0", color: "#059669", borderRadius: "12px", fontSize: "13px", fontWeight: 700, padding: "11px 16px", cursor: "pointer" };
-const uploadPanelStyle = { padding: "16px", border: "1.5px dashed #cbd5e1", borderRadius: "12px", backgroundColor: "#f8fafc" };
-const cancelButtonStyle = { border: "1px solid #fecaca", color: "#dc2626", background: "#fff", borderRadius: "8px", fontSize: "12px", fontWeight: 700, padding: "5px 12px", cursor: "pointer" };
-const helperTextStyle = { fontSize: "11.5px", color: "#64748b", marginTop: "9px", marginBottom: 0, fontWeight: 500 };
-const selectedFileStyle = { marginTop: "8px", marginBottom: 0, fontSize: "12px", color: "#059669", fontWeight: 700 };

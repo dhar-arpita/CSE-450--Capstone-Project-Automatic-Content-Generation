@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import BrandLogo from "../../shared/brand/BrandLogo";
+import LogoIntro, { prefersNoIntro } from "../../shared/brand/LogoIntro";
 import { useI18n } from "../../shared/i18n";
 import { useTheme } from "../../shared/theme";
 import "./LandingPage.css";
@@ -58,13 +59,13 @@ const IconSpark = () => (
 
 const CRAFT_ICONS = [IconSheet, IconQuiz, IconNotes, IconSpark];
 
-function HeroFilm() {
+function HeroFilm({ hold = false }) {
   const videoRef = useRef(null);
   const [settled, setSettled] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || hold) return;
 
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       setSettled(true);
@@ -76,7 +77,7 @@ function HeroFilm() {
     if (started && typeof started.catch === "function") {
       started.catch(() => setSettled(true));
     }
-  }, []);
+  }, [hold]);
 
   return (
     <div className="lp-film">
@@ -86,7 +87,7 @@ function HeroFilm() {
         poster={FILM_REST}
         muted
         playsInline
-        autoPlay
+        autoPlay={!hold}
         preload="auto"
         onEnded={() => setSettled(true)}
         aria-hidden="true"
@@ -153,16 +154,32 @@ function Nav() {
 
 export default function LandingPage() {
   const { t } = useI18n();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  /* Signing out is the one arrival at this page that plays the mark animation.
+     The flag is read once and then dropped from history, so a reload — or the
+     back button — does not replay it. */
+  const [splash, setSplash] = useState(
+    () => Boolean(location.state?.splash) && !prefersNoIntro()
+  );
+  useEffect(() => {
+    if (location.state?.splash) {
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
+
   const craftItems = t("craft.items");
   const steps = t("how.steps");
   const quotes = t("students.quotes");
 
   return (
     <div className="lp">
+      {splash && <LogoIntro onFinish={() => setSplash(false)} />}
       <Nav />
 
       <section className="lp-hero">
-        <HeroFilm />
+        <HeroFilm hold={splash} />
 
         <div className="lp-hero-body">
           <p className="lp-kicker">{t("hero.kicker")}</p>

@@ -39,15 +39,56 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response interceptor to handle 401 (token expired)
+// A 401 from the login or signup call itself is an *answer* — wrong password,
+// unknown email — not an expired session. It must reach the form that asked,
+// so the page can say so in place. Redirecting on it used to throw the user off
+// whichever door they were standing at (a bad student password landed them on
+// the teacher login) and, because window.location is a full page load, replayed
+// the logo animation on the way.
+const AUTH_ATTEMPTS = [
+  { method: "post", path: "/login/" },   // logging in
+  { method: "post", path: "/users/" },   // signing up
+];
+
+function isAuthAttempt(config) {
+  if (!config) return false;
+  const method = (config.method || "get").toLowerCase();
+  const path = (config.url || "").split("?")[0];
+  return AUTH_ATTEMPTS.some((a) => a.method === method && a.path === path);
+}
+
+// Which door this user came in through, so an expired session sends them back
+// to the same one rather than always to the teacher login.
+function doorForStoredRole() {
+  try {
+    const role = JSON.parse(localStorage.getItem("user") || "null")?.role;
+    if (role === "student") return "/login/student";
+    if (role === "admin") return "/login/admin";
+  } catch {
+    // unreadable storage — the default door is a fine answer
+  }
+  return "/login";
+}
+
+// A page can easily have two calls in flight at once. The first 401 clears the
+// stored user, so a second one arriving a moment later can no longer tell which
+// role this was and would overwrite the redirect with the default door. Handle
+// the expiry exactly once.
+let expiryHandled = false;
+
+// Response interceptor: a 401 on any *other* call means the token has expired.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    if (error.response?.status === 401 && !isAuthAttempt(error.config) && !expiryHandled) {
+      expiryHandled = true;
+      const door = doorForStoredRole();
+      // Only the session is dropped. dhi.lang and dhi.theme are settings, not
+      // credentials, and should survive being signed out.
       localStorage.removeItem("access_token");
       localStorage.removeItem("refresh_token");
       localStorage.removeItem("user");
-      window.location.href = "/login";
+      window.location.href = door;
     }
     return Promise.reject(error);
   }
@@ -59,6 +100,16 @@ export const login = (email, password) =>
   api.post("/login/", { email, password });
 export const getCurrentUser = () => api.get("/users/me");
 export const getUsers = () => api.get("/users/");
+
+// Real counts for the dashboard tiles, straight out of the database.
+export const getStatsOverview = () => api.get("/stats/overview");
+
+// ──── PROFILE ────
+export const getMyTotals = () => api.get("/stats/me");
+export const getMyActivity = (days = 30) => api.get(`/stats/me/activity?days=${days}`);
+export const getMyNotifications = (limit = 20) =>
+  api.get(`/stats/me/notifications?limit=${limit}`);
+export const getMyClasses = (limit = 6) => api.get(`/stats/me/classes?limit=${limit}`);
 
 
 // ──── CURRICULUM ENDPOINTS ────
@@ -145,7 +196,17 @@ export const refineWorksheet = (contentId, currentProblems, refinements) => {
 
 export const getWorksheetDetails = (contentId) => api.get(`/generate/worksheet/${contentId}`);
 
+// Everything this teacher has generated of one kind, newest first. The
+// content_type argument is why this is not called listMyWorksheets: the quiz
+// and study-note pages will ask the same endpoint for their own kind.
+export const listMyContent = (contentType = "worksheet", limit = 30) =>
+  api.get(`/generate/my/content?content_type=${encodeURIComponent(contentType)}&limit=${limit}`);
+
 export const getIngestionStatus = (jobId) => api.get(`/ingest/status/${jobId}`);
+
+// What this teacher has sent for ingestion, for the upload studio's rail.
+export const listMyUploads = (limit = 40) =>
+  api.get(`/ingest/my/uploads?limit=${limit}`);
 
 
 // ──── STUDY NOTE GENERATION ────
@@ -170,6 +231,7 @@ export const generateQuiz = (params) => {
   if (params.chapter_id) formData.append("chapter_id", params.chapter_id);
   if (params.subject_id) formData.append("subject_id", params.subject_id);
   if (params.language) formData.append("language", params.language);
+  if (params.difficulty) formData.append("difficulty", params.difficulty);
   if (params.num_questions) formData.append("num_questions", params.num_questions);
   if (params.refresh) formData.append("refresh", "true");   // see generateWorksheet
 

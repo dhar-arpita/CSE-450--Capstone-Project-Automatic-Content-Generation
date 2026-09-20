@@ -1,0 +1,302 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Refinement dialog.
+
+   Same design language as the rest of the studio — forest carries structure,
+   bubblegum carries the action — and the same type scale: titles 1.05rem,
+   body .92rem, rows .9rem. The old dialog sat at 12px on white and read as a
+   settings panel from another application.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.rf-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(8, 18, 12, .56);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+}
+
+.rf-card {
+  display: flex;
+  flex-direction: column;
+  width: min(760px, 100%);
+  max-height: min(88vh, 900px);
+  border: 1px solid var(--dhi-line);
+  border-radius: 24px;
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-ink);
+  font-family: var(--dhi-sans);
+  box-shadow: var(--dhi-shadow-lg);
+  overflow: hidden;
+}
+
+/* ── header ────────────────────────────────────────────────────────────── */
+.rf-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 26px 26px 18px;
+  border-bottom: 1px solid var(--dhi-line);
+  background: var(--acc-2-wash);
+}
+.rf-eyebrow {
+  margin: 0 0 6px;
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--acc-2);
+}
+.rf-title {
+  margin: 0 0 6px;
+  font-family: var(--dhi-display);
+  font-weight: 400;
+  font-size: 1.75rem;
+  line-height: 1.12;
+  letter-spacing: -.02em;
+}
+.rf-sub { margin: 0; font-size: .95rem; line-height: 1.55; color: var(--dhi-muted); max-width: 56ch; }
+
+.rf-close {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 12px;
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-muted);
+  cursor: pointer;
+  transition: color .18s ease, border-color .18s ease;
+}
+.rf-close:hover:not(:disabled) { color: var(--dhi-ink); border-color: var(--acc-2); }
+.rf-close:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ── meta chips ────────────────────────────────────────────────────────── */
+.rf-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 26px 0;
+}
+.rf-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 999px;
+  background: var(--dhi-surface-sunken);
+  color: var(--dhi-muted);
+  font-size: .88rem;
+  font-weight: 600;
+}
+.rf-chip strong { color: var(--dhi-ink); }
+.rf-chip svg { width: 16px; height: 16px; }
+.rf-chip.is-on {
+  border-color: var(--acc-1);
+  background: var(--acc-1-wash);
+  color: var(--acc-1);
+}
+.rf-chip.is-on strong { color: inherit; }
+
+/* ── options ───────────────────────────────────────────────────────────── */
+.rf-options {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 26px 22px;
+}
+
+.rf-option {
+  padding: 18px 20px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 16px;
+  background: var(--dhi-surface-raised);
+  transition: border-color .18s ease, background .18s ease;
+}
+.rf-option.is-on { border-color: var(--acc-1); background: var(--acc-1-wash); }
+
+.rf-option-head { display: flex; align-items: center; gap: 11px; cursor: pointer; }
+.rf-option-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-forest);
+}
+.rf-option.is-on .rf-option-icon { background: var(--dhi-surface-raised); }
+.rf-option-title { font-size: 1.05rem; font-weight: 680; line-height: 1.3; }
+.rf-option-desc {
+  margin: 8px 0 0 41px;
+  font-size: .92rem;
+  line-height: 1.55;
+  color: var(--dhi-muted);
+}
+
+/* bubblegum is the selection colour throughout */
+.rf-check {
+  flex: 0 0 auto;
+  width: 19px;
+  height: 19px;
+  accent-color: var(--dhi-bloom);
+  cursor: pointer;
+}
+
+.rf-sub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0 0 41px;
+  font-size: .92rem;
+  font-weight: 600;
+  color: var(--dhi-ink-soft);
+}
+.rf-number, .rf-mini-select {
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 11px;
+  background: var(--dhi-field);
+  color: var(--dhi-ink);
+  font-family: inherit;
+  font-size: .92rem;
+  font-weight: 600;
+}
+.rf-number { width: 92px; }
+.rf-mini-select { flex: 0 0 auto; cursor: pointer; }
+.rf-number:focus, .rf-mini-select:focus {
+  outline: none;
+  border-color: var(--dhi-bloom);
+  box-shadow: 0 0 0 4px rgba(255, 79, 154, .16);
+}
+
+.rf-list {
+  list-style: none;
+  margin: 14px 0 0 41px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+.rf-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: var(--dhi-surface-sunken);
+  cursor: pointer;
+}
+.rf-row-split { justify-content: space-between; gap: 12px; background: none; padding: 0; }
+.rf-row-split .rf-row { flex: 1; min-width: 0; }
+.rf-row-text {
+  font-size: .9rem;
+  line-height: 1.45;
+  color: var(--dhi-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rf-empty { font-size: .9rem; font-style: italic; color: var(--dhi-muted); padding: 4px 2px; }
+
+/* ── running / waiting / failed ────────────────────────────────────────── */
+.rf-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 26px 4px;
+  padding: 13px 16px;
+  border-radius: 13px;
+  font-size: .93rem;
+  line-height: 1.5;
+  font-weight: 600;
+}
+.rf-note svg { flex: 0 0 auto; }
+.rf-note-live { background: var(--acc-1-wash); color: var(--acc-1); }
+.rf-note-wait { background: var(--acc-4-wash); color: var(--acc-4); }
+.rf-note-bad {
+  background: var(--dhi-danger-wash);
+  border: 1px solid var(--dhi-danger);
+  color: var(--dhi-danger);
+}
+
+.rf-spinner {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: rf-spin .7s linear infinite;
+}
+@keyframes rf-spin { to { transform: rotate(360deg); } }
+
+/* ── footer ────────────────────────────────────────────────────────────── */
+.rf-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 18px 26px 22px;
+  border-top: 1px solid var(--dhi-line);
+  background: var(--dhi-surface-sunken);
+}
+.rf-ghost, .rf-send {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  height: 48px;
+  padding: 0 24px;
+  border-radius: 13px;
+  font-family: inherit;
+  font-size: .96rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: transform .18s ease, opacity .18s ease;
+}
+.rf-ghost {
+  border: 1px solid var(--dhi-line-strong);
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-ink);
+}
+.rf-ghost:hover:not(:disabled) { border-color: var(--dhi-ink-soft); }
+.rf-send {
+  border: 0;
+  background: var(--dhi-bloom-deep);
+  color: #fff;
+}
+[data-theme="dark"] .rf-send { color: #2a0714; }
+.rf-send:hover:not(:disabled) { transform: translateY(-1px); }
+.rf-ghost:disabled, .rf-send:disabled { opacity: .5; cursor: not-allowed; }
+.rf-ghost:focus-visible, .rf-send:focus-visible, .rf-close:focus-visible {
+  outline: 2px solid var(--dhi-bloom);
+  outline-offset: 3px;
+}
+
+@media (max-width: 620px) {
+  .rf-head, .rf-meta, .rf-options, .rf-foot { padding-left: 18px; padding-right: 18px; }
+  .rf-note { margin-left: 18px; margin-right: 18px; }
+  .rf-option-desc, .rf-sub-row, .rf-list { margin-left: 0; }
+  .rf-foot { flex-direction: column-reverse; }
+  .rf-ghost, .rf-send { justify-content: center; width: 100%; }
+  .rf-row-split { flex-direction: column; align-items: stretch; gap: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rf-option, .rf-send, .rf-close { transition: none; }
+  .rf-spinner { animation-duration: 1.6s; }
+}

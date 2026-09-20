@@ -12,6 +12,7 @@ import ChatbotPage from "./features/chatbot/ChatbotPage";
 import ProtectedRoute from "./shared/services/ProtectedRoute";
 import StudyNotePage from "./features/studynote/StudyNotePage";
 import QuizPage from "./features/quiz/QuizPage";
+import ProfilePage from "./features/profile/ProfilePage";
 import { I18nProvider } from "./shared/i18n";
 import { ThemeProvider } from "./shared/theme";
 
@@ -42,6 +43,7 @@ function App() {
         <Route path="/chatbot" element={<ProtectedRoute allowedRoles={["student"]}><ChatbotPage /></ProtectedRoute>} />
         <Route path="/study-notes" element={<ProtectedRoute><StudyNotePage /></ProtectedRoute>} />
         <Route path="/quiz" element={<ProtectedRoute><QuizPage /></ProtectedRoute>} />
+        <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
       </Routes>
     </Router>
     </I18nProvider>

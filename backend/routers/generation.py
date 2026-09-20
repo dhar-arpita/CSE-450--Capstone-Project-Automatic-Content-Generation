@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Response, UploadFile, File, Form, HTTPException, Depends
+from fastapi import APIRouter, Response, UploadFile, File, Form, HTTPException, Depends, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -7,10 +7,7 @@ import weasyprint
 from core.config import get_db
 from core.security import get_current_user_from_header
 from models.db_models import (
-    Topic, Chapter, Subject, Class,
-    TeacherSession, TeacherSessionTopic,
-    LearningSession, LearningSessionTopic,
-    GeneratedContent, User,
+    Chapter, Class, GeneratedContent, LearningSession, LearningSessionTopic, Subject, TeacherSession, TeacherSessionTopic, Topic, User,
 )
 from services.generation_service import (
     search_curriculum_context_for_quiz,
@@ -267,8 +264,93 @@ def get_worksheet(
         "content_id": content.content_id,
         "topic_id": content.topic_id,
         "difficulty_level": content.difficulty_level,
+        # The rendered sheet, so a worksheet picked out of the teacher's list
+        # can be shown without regenerating anything.
+        "html": content.display_body,
         "problems": problems,
         "visuals": visuals
+    }
+
+
+@router.get("/my/content")
+def list_my_content(
+    # Comma-separated so the quiz studio can ask for all three of its scopes
+    # (quiz_topic, quiz_chapter, quiz_subject) in one call.
+    content_type: str = Query("worksheet"),
+    limit: int = Query(30, ge=1, le=100),
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Everything this teacher has generated of one kind, newest first.
+
+    Ownership runs through the session table rather than a column on
+    generated_content: services/cache_service._save_generated_content opens a
+    teacher_session for a teacher or admin and a learning_session for a
+    student, and hangs the content off whichever it made. teacher.teacher_id
+    is a foreign key onto user.user_id, so the join below is the teacher's own
+    work and nobody else's.
+
+    Cache seeds are excluded — those are pre-warmed rows written by
+    scripts/warm_cache.py, not something this teacher made.
+    """
+    wanted = [c.strip() for c in content_type.split(",") if c.strip()]
+    if not wanted:
+        return {"content_type": content_type, "items": []}
+
+    rows = (
+        db.query(
+            GeneratedContent.content_id,
+            GeneratedContent.difficulty_level,
+            GeneratedContent.num_problems,
+            GeneratedContent.language,
+            GeneratedContent.generated_at,
+            GeneratedContent.content_type,
+            Topic.name.label("topic_name"),
+            Chapter.name.label("chapter_name"),
+            Chapter.chapter_no,
+            Subject.name.label("subject_name"),
+            Subject.class_name,
+        )
+        .join(TeacherSession, TeacherSession.session_id == GeneratedContent.teacher_session_id)
+        # The chain is coalesced because it is not always complete: a chapter-scope
+        # quiz has no topic_id and a subject-scope quiz has neither topic nor
+        # chapter, so those rows carry the ids directly on generated_content.
+        # Older rows predate those columns and only reach the chain through Topic.
+        .outerjoin(Topic, Topic.topic_id == GeneratedContent.topic_id)
+        .outerjoin(
+            Chapter,
+            Chapter.chapter_id == func.coalesce(GeneratedContent.chapter_id, Topic.chapter_id),
+        )
+        .outerjoin(
+            Subject,
+            Subject.subject_id == func.coalesce(GeneratedContent.subject_id, Chapter.subject_id),
+        )
+        .filter(TeacherSession.teacher_id == current_user.user_id)
+        .filter(GeneratedContent.content_type.in_(wanted))
+        .filter(GeneratedContent.is_cache_seed.is_(False))
+        .order_by(GeneratedContent.generated_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    return {
+        "content_type": content_type,
+        "items": [
+            {
+                "content_id": r.content_id,
+                "content_type": r.content_type,
+                "topic_name": r.topic_name,
+                "chapter_name": r.chapter_name,
+                "chapter_no": r.chapter_no,
+                "subject_name": r.subject_name,
+                "class_name": r.class_name,
+                "difficulty_level": r.difficulty_level,
+                "num_problems": r.num_problems,
+                "language": r.language,
+                "generated_at": r.generated_at.isoformat() if r.generated_at else None,
+            }
+            for r in rows
+        ],
     }
 
 
@@ -326,6 +408,11 @@ async def create_quiz(
     chapter_id: Optional[int] = Form(None),
     subject_id: Optional[int] = Form(None),
     language: str = Form("english"),
+    # The quiz pipeline has always taken a difficulty — run_quiz_agent accepts it
+    # and the prompt template interpolates it — but the router used to pin it to
+    # "mixed" and never let a teacher choose. "mixed" stays the default, so the
+    # existing cache seeds (which are all keyed on it) still hit.
+    difficulty: str = Form("mixed"),
     num_questions: Optional[int] = Form(None),   # optional: dile eta, na dile scope map (10/20/30)
     refresh: bool = Form(False),                # NEW — true bypasses the cache entirely
     current_user: User = Depends(get_current_user_from_header),
@@ -386,7 +473,7 @@ async def create_quiz(
         key = normalize_key(
             content_type=quiz_content_type,
             language=language,
-            difficulty_level=FIXED_DIFFICULTY[quiz_content_type],
+            difficulty_level=difficulty,
             num_problems=effective_quiz_questions(num_questions, scope),
             topic_id=target_topic_id,
             chapter_id=curr_chapter_id,
@@ -420,6 +507,7 @@ async def create_quiz(
             "chapter_id": curr_chapter_id,
             "subject_id": curr_subject_id,
             "language": language,
+            "difficulty": difficulty,
             "num_questions": num_questions,
         },
     )

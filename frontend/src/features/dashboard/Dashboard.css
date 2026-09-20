@@ -1,0 +1,316 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Teacher dashboard — the content inside the app shell.
+
+   The chrome (sidebar, top bar, rails, footer) lives in shared/ui/AppShell.css
+   and is shared with every other signed-in page. Only what is particular to
+   this page is here.
+
+   Type scale note: the body copy below the greeting panel was set a step too
+   small at first and had to be read at a lean. Card text is .92rem, headings
+   1.24rem, and the right rail matches, which measures comfortably at arm's
+   length without shouting.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── greeting panel ────────────────────────────────────────────────────── */
+.db-hero {
+  --hero-bg:   #4e2780;                      /* brand violet — the mark's own field */
+  --hero-fg:   #ffffff;
+  --hero-dim:  rgba(255, 255, 255, .80);
+  --hero-edge: rgba(255, 255, 255, .22);
+  --hero-pill: rgba(255, 255, 255, .14);
+
+  position: relative;
+  overflow: hidden;
+  padding: clamp(26px, 3.4vw, 40px);
+  border-radius: 24px;
+  background: var(--hero-bg);
+  color: var(--hero-fg);
+}
+[data-theme="dark"] .db-hero {
+  --hero-bg:   #3b1d63;
+  --hero-fg:   #ffffff;
+  --hero-dim:  rgba(255, 255, 255, .76);
+  --hero-edge: rgba(255, 255, 255, .20);
+  --hero-pill: rgba(255, 255, 255, .11);
+}
+
+.db-hero-mark {
+  position: absolute;
+  right: clamp(14px, 2vw, 34px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: clamp(150px, 17vw, 224px);
+  height: auto;
+  /* full strength: at low opacity the mark washed out into the panel instead
+     of reading as the logo. It sits clear of the copy's measure. */
+  opacity: 1;
+  pointer-events: none;
+}
+.db-hero-inner { position: relative; max-width: 54ch; }
+
+.db-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  background: var(--hero-pill);
+  border: 1px solid var(--hero-edge);
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--hero-fg);
+}
+.db-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dhi-leaf);
+  box-shadow: 0 0 0 3px rgba(126, 217, 87, .22);
+}
+
+.db-hero h1 {
+  margin: 0 0 10px;
+  font-family: var(--dhi-display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 3vw, 2.35rem);
+  line-height: 1.1;
+  letter-spacing: -.02em;
+}
+html[lang="bn"] .db-hero h1 { line-height: 1.35; letter-spacing: 0; }
+.db-hero p { margin: 0; color: var(--hero-dim); font-size: 1rem; line-height: 1.68; }
+
+/* ── section headings ──────────────────────────────────────────────────── */
+.db-head { margin-bottom: 16px; }
+.db-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 5px;
+  font-size: 1.24rem;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+html[lang="bn"] .db-head h2 { letter-spacing: 0; line-height: 1.45; }
+.db-head p { margin: 0; font-size: .95rem; color: var(--dhi-muted); line-height: 1.55; }
+
+.db-head-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-forest);
+}
+.db-head-icon svg { width: 17px; height: 17px; }
+
+/* ── feature cards ─────────────────────────────────────────────────────── */
+.db-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.db-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 24px 22px 20px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 18px;
+  background: var(--dhi-surface-raised);
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), border-color .22s ease, box-shadow .22s ease;
+}
+.db-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--card-accent);
+  box-shadow: var(--dhi-shadow-md);
+}
+.db-card:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 3px; }
+
+.db-card-tile {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: var(--card-wash);
+  color: var(--card-accent);
+}
+.db-card-tile svg { width: 22px; height: 22px; }
+
+.db-card h3 { margin: 4px 0 0; font-size: 1.06rem; font-weight: 680; line-height: 1.35; }
+.db-card p {
+  margin: 0;
+  font-size: .92rem;
+  line-height: 1.62;
+  color: var(--dhi-muted);
+  flex: 1;
+}
+.db-card-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 4px;
+  font-size: .9rem;
+  font-weight: 650;
+  color: var(--card-accent);
+  transition: gap .2s ease;
+}
+.db-card:hover .db-card-cta { gap: 11px; }
+
+.db-badge {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: var(--card-wash);
+  border: 1px solid var(--card-accent);
+  color: var(--card-accent);
+  font-size: .7rem;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+html[lang="bn"] .db-badge { letter-spacing: 0; font-size: .76rem; }
+
+/* ── stat row ──────────────────────────────────────────────────────────── */
+.db-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 18px;
+  background: var(--dhi-surface-raised);
+}
+.db-stat { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; }
+.db-ring { position: relative; width: 100px; height: 100px; }
+.db-ring svg { width: 100%; height: 100%; }
+.db-ring-track { fill: none; stroke: var(--dhi-line); stroke-width: 6; }
+.db-ring-live { fill: none; stroke: var(--stat-accent); stroke-width: 6; stroke-linecap: round; }
+.db-ring-value {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+}
+
+.db-levels {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+}
+.db-levels li {
+  font-size: .72rem;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: .01em;
+  color: var(--stat-accent);
+  white-space: nowrap;
+}
+html[lang="bn"] .db-levels li { font-size: .78rem; letter-spacing: 0; }
+
+.db-stat-label { font-size: .88rem; color: var(--dhi-muted); line-height: 1.45; max-width: 18ch; }
+
+/* ── right rail ────────────────────────────────────────────────────────── */
+.db-profile { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+.db-profile-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-forest);
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+.db-profile-name { font-size: 1.08rem; font-weight: 700; line-height: 1.3; }
+.db-profile-meta { font-size: .86rem; color: var(--dhi-muted); word-break: break-word; }
+.db-profile-role {
+  margin-top: 2px;
+  padding: 4px 13px;
+  border-radius: 999px;
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-forest);
+  font-size: .74rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+html[lang="bn"] .db-profile-role { letter-spacing: 0; text-transform: none; }
+
+.db-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.db-step { position: relative; padding: 0 0 20px 36px; }
+.db-step:last-child { padding-bottom: 0; }
+.db-step::before {
+  content: attr(data-step);
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-forest);
+  font-size: .72rem;
+  font-weight: 700;
+}
+.db-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 12.5px;
+  top: 30px;
+  bottom: 6px;
+  width: 1px;
+  background: var(--dhi-line-strong);
+}
+.db-step h4 { margin: 4px 0 3px; font-size: .93rem; font-weight: 650; line-height: 1.4; }
+.db-step p { margin: 0; font-size: .86rem; line-height: 1.6; color: var(--dhi-muted); }
+
+/* ── responsive ────────────────────────────────────────────────────────── */
+@media (max-width: 680px) {
+  .db-cards { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 760px) {
+  .db-hero-mark { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .db-card, .db-card-cta { transition: none; }
+  .db-card:hover { transform: none; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Greeting panel — alternative palettes
+
+   Replace the --hero-* block at the top of .db-hero with one of these. Each
+   carries its own foreground, because a light panel needs dark text.
+
+   A · Brand violet        the field the tangram was drawn on
+       #4e2780 / #ffffff                      dark: #3b1d63
+   B · Deep forest         stays inside the green half of the palette
+       #1b5138 / #ffffff                      dark: #15402d
+   C · Paper               hero becomes a light card like the others
+       #ffffff / #0b1f15, dim #5d7367         dark: #101c15 / #e9f1eb
+   D · Bubblegum wash      current — the other half of the palette
+       #ffe4ef / #0b1f15, dim #5d7367         dark: #2a1520 / #f6e8ee
+   ═══════════════════════════════════════════════════════════════════════════ */

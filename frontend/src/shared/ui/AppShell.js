@@ -1,0 +1,135 @@
+import React, { useState } from "react";
+import { Link, NavLink } from "react-router-dom";
+import BrandLogo from "../brand/BrandLogo";
+import NotificationBell from "./NotificationBell";
+import { useI18n } from "../i18n";
+import { useTheme } from "../theme";
+import {
+  IconClose, IconGlobe, IconHome, IconLogout, IconMenu, IconMoon, IconNotes,
+  IconQuiz, IconSheet, IconSun, IconUpload, IconUser2,
+} from "./icons";
+import "./AppShell.css";
+
+/* The signed-in chrome: fixed left rail, top bar, working column, footer.
+   Every page inside the app renders through this, so the navigation, the
+   language switch and the theme switch can never drift apart between pages.
+
+   Pages supply their own breadcrumb and content; an optional `rail` fills the
+   right-hand column, and when it is absent the working column takes the full
+   width. */
+
+export const APP_NAV = [
+  { to: "/dashboard", key: "dashboard", Icon: IconHome, end: true },
+  { to: "/generate", key: "worksheet", Icon: IconSheet },
+  { to: "/quiz", key: "quiz", Icon: IconQuiz },
+  { to: "/study-notes", key: "notes", Icon: IconNotes },
+  { to: "/upload", key: "upload", Icon: IconUpload },
+  { to: "/profile", key: "profile", Icon: IconUser2 },
+];
+
+export default function AppShell({ breadcrumb, user, onLogout, rail, tone, width, children }) {
+  const { t, lang, toggleLang } = useI18n();
+  const { theme, toggleTheme } = useTheme();
+  const [navOpen, setNavOpen] = useState(false);
+
+  const closeNav = () => setNavOpen(false);
+  const initial = user?.name?.charAt(0)?.toUpperCase() || "U";
+
+  return (
+    <div className={`as${tone ? ` as-tone-${tone}` : ""}${navOpen ? " is-nav-open" : ""}`}>
+      <aside className="as-side">
+        <div className="as-side-top">
+          <BrandLogo to="/dashboard" />
+        </div>
+
+        <nav className="as-nav" aria-label={t("app.nav.dashboard")}>
+          {APP_NAV.map(({ to, key, Icon, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              onClick={closeNav}
+              className={({ isActive }) => `as-nav-item${isActive ? " is-active" : ""}`}
+            >
+              <Icon />
+              {t(`app.nav.${key}`)}
+            </NavLink>
+          ))}
+        </nav>
+
+        <div className="as-side-foot">
+          {/* The theme control is icon-only on purpose: a visible label would
+              mean inventing copy in two languages for a toggle whose meaning
+              the icon already carries. */}
+          <div className="as-side-row">
+            <button type="button" className="as-nav-item" onClick={toggleLang}>
+              <IconGlobe />
+              {lang === "bn" ? "English" : "বাংলা"}
+            </button>
+            <button
+              type="button"
+              className="as-icon-btn"
+              onClick={toggleTheme}
+              title={theme === "dark" ? t("a11y.toLight") : t("a11y.toDark")}
+              aria-label={theme === "dark" ? t("a11y.toLight") : t("a11y.toDark")}
+            >
+              {theme === "dark" ? <IconSun /> : <IconMoon />}
+            </button>
+          </div>
+          <button type="button" className="as-nav-item is-danger" onClick={onLogout}>
+            <IconLogout />
+            {t("app.logout")}
+          </button>
+        </div>
+      </aside>
+
+      {navOpen && (
+        <button
+          type="button"
+          className="as-scrim"
+          aria-label={t("app.closeMenu")}
+          onClick={closeNav}
+        />
+      )}
+
+      <div className="as-body">
+        <header className="as-top">
+          <button
+            type="button"
+            className="as-burger"
+            onClick={() => setNavOpen((v) => !v)}
+            aria-label={t("app.menu")}
+            aria-expanded={navOpen}
+          >
+            {navOpen ? <IconClose /> : <IconMenu />}
+          </button>
+
+          <p className="as-crumb">
+            <IconHome />
+            <span className="as-crumb-sep">/</span>
+            <strong>{breadcrumb}</strong>
+          </p>
+
+          <div className="as-top-right">
+            <NotificationBell />
+            {/* The chip is the way to the profile from anywhere in the app. */}
+            <Link className="as-user" to="/profile">
+              <span className="as-avatar">{initial}</span>
+              <span className="as-user-text">
+                <span className="as-user-name">{user?.name || "—"}</span>
+                <span className="as-user-role">{user?.role || ""}</span>
+              </span>
+            </Link>
+          </div>
+        </header>
+
+        <div className={`as-grid${rail ? "" : " is-wide"}${width === "full" ? " is-full" : ""}`}>
+          <main className="as-main">{children}</main>
+          {rail && <aside className="as-rail">{rail}</aside>}
+        </div>
+
+        <footer className="as-foot">{t("app.footer")}</footer>
+      </div>
+    </div>
+  );
+}

@@ -1,112 +1,134 @@
-// features/studynote/StudyNoteGenerator.js — matches WorksheetGenerator's visual language
-import React, { useState, useEffect } from "react";
-import { generateStudyNote, downloadWorksheetPDF } from "../../shared/services/api";
+import React, { useEffect, useState } from "react";
+import { generateStudyNote, downloadWorksheetPDF, getWorksheetDetails } from "../../shared/services/api";
 import useJobPolling from "../../shared/services/useJobPolling";
+import { IconAlert, IconBolt, IconDownload, IconSheet } from "../../shared/ui/icons";
+import "../../shared/ui/studio.css";
 
+/* Wording is the team's own, minus the emoji. The content-language control is
+   new and is worded exactly as it is in the worksheet and quiz studios.
+   Study notes have no difficulty — the backend pins it to None for this
+   content type, so offering one would be a control that does nothing. */
 const TXT = {
   bangla: {
-    generate: "📒 Study Note তৈরি করো",
-    generating: "⌛ তৈরি হচ্ছে...",
-    ready: "📒 Study Note তৈরি। নিচে রিভিউ করো — চাইলে প্রিন্ট বা ডাউনলোড করতে পারো।",
-    print: "🖨️ Print",
-    download: "📥 PDF ডাউনলোড করো",
-    downloading: "⌛ ডাউনলোড হচ্ছে...",
-    selectFirst: "প্রথমে উপরের ড্রপডাউন থেকে একটা Topic বেছে নাও!",
+    contentLanguage: "কনটেন্টের ভাষা", langBangla: "বাংলা", langEnglish: "ইংরেজি",
+    generate: "Study Note তৈরি করুন",
+    generating: "তৈরি হচ্ছে...",
+    ready: "Study Note তৈরি। নিচে রিভিউ করুন — চাইলে প্রিন্ট বা ডাউনলোড করতে পারেন।",
+    print: "প্রিন্ট",
+    download: "PDF ডাউনলোড করুন",
     empty: "Study note তৈরি হয়েছে কিন্তু কোনো কনটেন্ট পাওয়া যায়নি।",
-    errorMsg: "⚠️ স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
-    retry: "🔄 আবার চেষ্টা করুন",
-    noCache: "⚠️ এই টপিকের জন্য ক্যাশে করা কনটেন্ট পাওয়া যায়নি।",
+    errorMsg: "স্টাডি নোট তৈরি করতে সমস্যা হয়েছে।",
+    retry: "আবার চেষ্টা করুন",
     stageGenerating: "নোট লেখা হচ্ছে...",
     stageSaving: "সংরক্ষণ করা হচ্ছে...",
-    stillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখো।",
+    stillRunning: "এখনো চলছে — একটু পরে আবার দেখুন।",
   },
   english: {
-    generate: "📒 Generate Study Note",
-    generating: "⌛ Generating...",
-    ready: "📒 Study note ready. Review below — print or download as PDF.",
-    print: "🖨️ Print",
-    download: "📥 Download PDF",
-    downloading: "⌛ Downloading...",
-    selectFirst: "Please select a Topic from the dropdowns above first!",
+    contentLanguage: "Content language", langBangla: "Bangla", langEnglish: "English",
+    generate: "Generate Study Note",
+    generating: "Generating...",
+    ready: "Study note ready. Review below — print or download as PDF.",
+    print: "Print",
+    download: "Download PDF",
     empty: "Study note generated but content is empty.",
-    errorMsg: "⚠️ Failed to generate study note.",
-    retry: "🔄 Try Again",
-    noCache: "⚠️ No cached content found for this topic.",
+    errorMsg: "Failed to generate the study note.",
+    retry: "Try Again",
     stageGenerating: "Writing the note...",
     stageSaving: "Saving...",
-    stillRunning: "⏳ Still running — check back in a moment.",
+    stillRunning: "Still running — check back in a moment.",
   },
 };
 
-const stageLabel = (stage, t) => {
-  if (stage === "saving") return t.stageSaving;
-  return t.stageGenerating;
-};
+const stageLabel = (stage, t) => (stage === "saving" ? t.stageSaving : t.stageGenerating);
 
-export default function StudyNoteGenerator({ selectedTopicId, language = "bangla" }) {
+export default function StudyNoteGenerator({
+  selectedTopicId, language = "bangla",
+  openRequest = null, onContentChange, onGenerated,
+}) {
   const t = TXT[language] || TXT.bangla;
-  const [downloading, setDownloading] = useState(false);
+
   const [noteHTML, setNoteHTML] = useState("");
   const [contentId, setContentId] = useState(null);
+  const [dispatchError, setDispatchError] = useState(null);
+  const [waitingOnCache, setWaitingOnCache] = useState(false);
+  const [openingSaved, setOpeningSaved] = useState(false);
+
+  const [contentLanguage, setContentLanguage] = useState(language);
+  const [languagePinned, setLanguagePinned] = useState(false);
+  useEffect(() => {
+    if (!languagePinned) setContentLanguage(language);
+  }, [language, languagePinned]);
 
   const [dispatchedJobId, setDispatchedJobId] = useState(null);
-  const { status, stage, result, error } = useJobPolling(
-    dispatchedJobId,
-    "activeJob:studyNote"
-  );
+  const { status, stage, result, error } = useJobPolling(dispatchedJobId, "activeJob:studynote");
 
-  const isGenerating = status === "QUEUED" || status === "PROCESSING";
+  const isGenerating =
+    waitingOnCache || openingSaved || status === "QUEUED" || status === "PROCESSING";
 
-  // A cache HIT still returns 200 with the html inline — handled directly in
-  // onGenerate below. This effect only fires for the cache-MISS / dispatched
-  // path, once the polled job reaches SUCCESS.
+  useEffect(() => { onContentChange?.(contentId); }, [contentId, onContentChange]);
+
   useEffect(() => {
     if (status === "SUCCESS" && result) {
       const html = result.html || result.note_html || result.content || "";
       if (html) {
         setNoteHTML(html);
-        setContentId(result.content_id || result.id || null);
+        setContentId(result.content_id || null);
+        onGenerated?.();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, result]);
 
+  useEffect(() => {
+    if (!openRequest?.contentId) return undefined;
+    let cancelled = false;
+    setDispatchError(null);
+    setOpeningSaved(true);
+    getWorksheetDetails(openRequest.contentId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setNoteHTML(data?.html || "");
+        setContentId(data?.content_id ?? openRequest.contentId);
+      })
+      .catch((err) => {
+        console.error("Could not open saved study note:", err);
+        if (!cancelled) setDispatchError(t.errorMsg);
+      })
+      .finally(() => { if (!cancelled) setOpeningSaved(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openRequest]);
+
+  /* One button, cache-first: POST /generate/study-note returns the finished
+     note inline when a seed matches, or a job id to poll when it does not. */
   const onGenerate = async () => {
-    if (!selectedTopicId) {
-      alert(t.selectFirst);
-      return;
-    }
+    if (!selectedTopicId) return;
 
     setNoteHTML("");
     setContentId(null);
+    setDispatchError(null);
+    setDispatchedJobId(null);
+    setWaitingOnCache(true);
 
     try {
-      // Cache first: the backend serves the cached note for this topic when one
-      // exists (200 inline), and dispatches to a worker (202 {job_id}) only
-      // when it does not.
-      const response = await generateStudyNote(selectedTopicId, language);
-      if (response.status === 202) {
-        setDispatchedJobId(response.data.job_id);
+      const { data } = await generateStudyNote(selectedTopicId, contentLanguage);
+      if (data?.html) {
+        setNoteHTML(data.html);
+        setContentId(data.content_id || null);
+        onGenerated?.();
       } else {
-        const html = response.data?.html || response.data?.note_html || response.data?.content || "";
-        if (html) {
-          setNoteHTML(html);
-          setContentId(response.data?.content_id || response.data?.id || null);
-        }
+        setDispatchedJobId(data.job_id);
       }
     } catch (err) {
-      console.error("Dispatch failed:", err);
-      setDispatchedJobId(null);
-      alert(t.errorMsg);
+      console.error("Study note request failed:", err);
+      setDispatchError(t.errorMsg);
+    } finally {
+      setWaitingOnCache(false);
     }
   };
 
   const handleDownloadPDF = async () => {
-    if (!contentId) {
-      alert("Content ID not found to download PDF.");
-      return;
-    }
-
-    setDownloading(true);
+    if (!contentId) return;
     try {
       const response = await downloadWorksheetPDF(contentId);
       const blob = new Blob([response.data], { type: "application/pdf" });
@@ -120,142 +142,94 @@ export default function StudyNoteGenerator({ selectedTopicId, language = "bangla
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error("Download failed:", err);
-      alert("Download failed. Please try again.");
-    } finally {
-      setDownloading(false);
+      setDispatchError(t.errorMsg);
     }
   };
 
   const handlePrint = () => {
-    const printWindow = window.open("", "_blank");
-    printWindow.document.write(
-      `<html><head><title>Study Note</title></head><body>${noteHTML}</body></html>`
-    );
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
+    const win = window.open("", "_blank");
+    if (!win) return;
+    win.document.write(`<html><head><title>Study Note</title></head><body>${noteHTML}</body></html>`);
+    win.document.close();
+    win.focus();
+    win.print();
   };
 
+  const shownError =
+    dispatchError || (error && !error.isTimeout ? error.message || t.errorMsg : null);
+
   return (
-    <div>
-      {/* Generate Button Row */}
-      <div style={configRow}>
+    <div className="wg">
+      <div className="wg-controls">
+        <div className="wg-field">
+          <label className="wg-label" htmlFor="sn-language">{t.contentLanguage}</label>
+          <div className="wg-select">
+            <select
+              id="sn-language"
+              value={contentLanguage}
+              onChange={(e) => { setContentLanguage(e.target.value); setLanguagePinned(true); }}
+            >
+              <option value="bangla">{t.langBangla}</option>
+              <option value="english">{t.langEnglish}</option>
+            </select>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6" />
+            </svg>
+          </div>
+        </div>
+
         <button
+          type="button"
+          className="wg-generate"
           onClick={onGenerate}
           disabled={isGenerating || !selectedTopicId}
-          style={generateBtn(isGenerating || !selectedTopicId)}
         >
-          {isGenerating ? t.generating : t.generate}
+          {isGenerating ? (
+            <><span className="wg-spinner" aria-hidden="true" />{t.generating}</>
+          ) : (
+            <><IconBolt />{t.generate}</>
+          )}
         </button>
       </div>
 
-      {/* Progress indicator while the job is in flight */}
       {isGenerating && (
-        <div style={progressCard}>
-          <span style={progressSpinner}>⏳</span>
-          <span style={progressText}>{stageLabel(stage, t)}</span>
-        </div>
+        <p className="wg-note wg-note-live" role="status">
+          <span className="wg-spinner" aria-hidden="true" />
+          {stageLabel(stage, t)}
+        </p>
       )}
 
-      {/* Client-side timeout — distinct from a real FAILED */}
       {error?.isTimeout && (
-        <div style={timeoutCard}>
-          <span style={errorText}>{t.stillRunning}</span>
-        </div>
+        <p className="wg-note wg-note-wait" role="status">
+          <IconAlert />{t.stillRunning}
+        </p>
       )}
 
-      {/* Real FAILED — distinct from the timeout above, offers Retry */}
-      {error && !error.isTimeout && (
-        <div style={errorCard}>
-          <span style={errorText}>{error.message || t.errorMsg}</span>
-          <button onClick={onGenerate} style={retryBtn}>
-            {t.retry}
-          </button>
-        </div>
+      {shownError && (
+        <p className="wg-note wg-note-bad" role="alert">
+          <IconAlert />
+          <span>{shownError}</span>
+          <button type="button" className="wg-retry" onClick={onGenerate}>{t.retry}</button>
+        </p>
       )}
 
-      {/* Preview & Action Buttons Section */}
       {noteHTML && (
-        <div style={previewCard}>
-          <div style={previewHeaderRow}>
-            <div style={previewHint}>{t.ready}</div>
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
-              <button onClick={handlePrint} style={outlineBtn}>
-                {t.print}
+        <section className="wg-preview">
+          <header className="wg-preview-head">
+            <p className="wg-preview-hint">{t.ready}</p>
+            <div className="wg-preview-actions">
+              <button type="button" className="wg-ghost" onClick={handlePrint}>
+                <IconSheet />{t.print}
               </button>
-              <button
-                onClick={handleDownloadPDF}
-                disabled={downloading}
-                style={downloadBtn(downloading)}
-              >
-                {downloading ? t.downloading : t.download}
+              <button type="button" className="wg-solid" onClick={handleDownloadPDF}>
+                <IconDownload />{t.download}
               </button>
             </div>
-          </div>
-
-          <div
-            className="note-render-area"
-            style={noteRenderStyle}
-            dangerouslySetInnerHTML={{ __html: noteHTML }}
-          />
-        </div>
+          </header>
+          <div className="wg-paper" dangerouslySetInnerHTML={{ __html: noteHTML }} />
+        </section>
       )}
     </div>
   );
 }
-
-/* ===== STYLES (mirrors WorksheetGenerator, cyan/teal theme) ===== */
-const configRow = {
-  display: "flex", gap: "16px", alignItems: "center", flexWrap: "wrap",
-  backgroundColor: "#f8fafc", padding: "18px", borderRadius: "16px", border: "1px solid #e2e8f0",
-};
-
-const generateBtn = (disabled) => ({
-  padding: "12px 24px", borderRadius: "12px", border: "none",
-  background: disabled ? "#a5f3fc" : "linear-gradient(135deg, #0891b2, #06b6d4)",
-  color: "#fff", fontWeight: 800, fontSize: "13.5px",
-  cursor: disabled ? "not-allowed" : "pointer",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.35)", transition: "all 0.15s",
-});
-
-/* Progress UI */
-const progressCard = {
-  marginTop: "16px", padding: "14px 18px", backgroundColor: "#ecfeff",
-  border: "1.5px solid #a5f3fc", borderRadius: "12px",
-  display: "flex", alignItems: "center", gap: "10px",
-};
-const progressSpinner = { fontSize: "16px" };
-const progressText = { fontSize: "13px", color: "#0e7490", fontWeight: 700 };
-
-/* Timeout UI */
-const timeoutCard = {
-  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fffbeb",
-  border: "1.5px solid #fde68a", borderRadius: "12px",
-};
-
-/* Error UI Styles */
-const errorCard = {
-  marginTop: "16px", padding: "14px 18px", backgroundColor: "#fef2f2",
-  border: "1.5px solid #fecaca", borderRadius: "12px",
-  display: "flex", alignItems: "center", justifyContent: "space-between", gap: "12px",
-};
-const errorText = { fontSize: "13px", color: "#991b1b", fontWeight: 600 };
-const retryBtn = {
-  backgroundColor: "#dc2626", color: "#fff", border: "none", padding: "8px 14px",
-  borderRadius: "8px", cursor: "pointer", fontWeight: 700, fontSize: "12.5px",
-  boxShadow: "0 2px 8px rgba(220,38,38,0.25)",
-};
-
-const previewCard = {
-  marginTop: "20px", backgroundColor: "#fff", padding: "28px", border: "1px solid #e2e8f0",
-  borderRadius: "18px", boxShadow: "0 4px 20px rgba(0,0,0,0.06)", maxWidth: "100%", overflowX: "auto",
-};
-const previewHeaderRow = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" };
-const previewHint = { fontSize: "12px", color: "#64748b", fontWeight: 600 };
-const outlineBtn = { backgroundColor: "#f1f5f9", color: "#334155", padding: "10px 16px", border: "1px solid #cbd5e1", borderRadius: "10px", cursor: "pointer", fontWeight: 700, fontSize: "13px" };
-const downloadBtn = (disabled) => ({
-  backgroundColor: disabled ? "#a5f3fc" : "#0891b2", color: "#fff", padding: "10px 20px", border: "none",
-  borderRadius: "10px", cursor: disabled ? "not-allowed" : "pointer", fontWeight: 700, fontSize: "13px",
-  boxShadow: disabled ? "none" : "0 4px 14px rgba(8,145,178,0.3)", opacity: disabled ? 0.8 : 1, transition: "all 0.2s",
-});
-const noteRenderStyle = { fontFamily: "'Times New Roman', serif", lineHeight: "1.7", color: "#000" };

@@ -1,0 +1,246 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Teacher profile — overview, calendar and usage chart.
+
+   The chart and calendar are hand-drawn SVG/CSS rather than a charting
+   dependency: the whole thing is four series of small integers, and a library
+   would bring its own palette and type scale to fight with.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── identity header ───────────────────────────────────────────────────── */
+.pf-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: clamp(22px, 3vw, 30px);
+  border-radius: 22px;
+  background: var(--dhi-surface-invert);
+  color: #fff;
+}
+[data-theme="dark"] .pf-head { background: var(--dhi-surface-tint); color: var(--dhi-ink); }
+
+.pf-avatar {
+  flex: 0 0 auto;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--dhi-bloom-deep);
+  color: #fff;
+  font-size: 1.9rem;
+  font-weight: 700;
+}
+.pf-id { min-width: 0; }
+.pf-id h1 {
+  margin: 0 0 6px;
+  font-family: var(--dhi-display);
+  font-weight: 400;
+  font-size: clamp(1.7rem, 3vw, 2.3rem);
+  line-height: 1.1;
+  letter-spacing: -.02em;
+}
+html[lang="bn"] .pf-id h1 { line-height: 1.34; letter-spacing: 0; }
+.pf-id p { margin: 0; font-size: .95rem; opacity: .82; word-break: break-word; }
+.pf-role {
+  display: inline-block;
+  margin-top: 10px;
+  padding: 4px 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .16);
+  border: 1px solid rgba(255, 255, 255, .26);
+  font-size: .76rem;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+html[lang="bn"] .pf-role { letter-spacing: 0; text-transform: none; }
+[data-theme="dark"] .pf-role {
+  background: var(--dhi-surface-raised);
+  border-color: var(--dhi-line-strong);
+}
+
+/* ── overview cards ────────────────────────────────────────────────────── */
+.pf-section-label {
+  margin: 0 0 14px;
+  font-size: .82rem;
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--dhi-muted);
+}
+html[lang="bn"] .pf-section-label { letter-spacing: .02em; text-transform: none; font-size: .95rem; }
+
+.pf-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+.pf-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 2px solid var(--card-line);
+  border-radius: 18px;
+  background: var(--card-bg);
+  /* Every viz fill is light enough to carry dark text, in either theme. */
+  color: var(--viz-ink);
+}
+.pf-card-mark {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  background: rgba(255, 255, 255, .66);
+  /* A fixed dark ink, not --card-line: in dark mode the outline token is the
+     LIGHT shade, which put a pale glyph on a pale tile and made the icons
+     vanish. The card fill is the same in both themes, so the glyph can be. */
+  color: var(--viz-ink);
+}
+/* The icon components ship at 18px; that reads as microscopic inside a 52px
+   tile, and CSS beats the width/height attributes. */
+.pf-card-mark svg { width: 26px; height: 26px; stroke-width: 1.8; }
+.pf-card-n { font-size: 1.85rem; font-weight: 700; line-height: 1; letter-spacing: -.02em; }
+.pf-card-l { display: block; margin-top: 5px; font-size: .88rem; opacity: .78; line-height: 1.35; font-weight: 600; }
+
+/* ── calendar + chart row ──────────────────────────────────────────────── */
+.pf-row {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.95fr) minmax(0, 2.7fr) minmax(210px, 1.1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.pf-panel {
+  display: flex;
+  flex-direction: column;
+  padding: 22px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 18px;
+  background: var(--dhi-surface-raised);
+  min-width: 0;
+}
+.pf-panel-head { margin-bottom: 16px; }
+.pf-panel-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 4px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.pf-panel-head h2 svg { color: var(--dhi-forest); }
+.pf-panel-head p { margin: 0; font-size: .88rem; color: var(--dhi-muted); line-height: 1.5; }
+
+/* calendar */
+.pf-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.pf-cal-dow {
+  text-align: center;
+  font-size: .68rem;
+  font-weight: 700;
+  color: var(--dhi-muted);
+  padding-bottom: 4px;
+}
+.pf-cal-day {
+  position: relative;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  font-size: .8rem;
+  font-weight: 500;
+  color: var(--dhi-ink-soft);
+}
+.pf-cal-day.is-blank { visibility: hidden; }
+.pf-cal-day.has-work { background: var(--dhi-surface-tint); color: var(--dhi-forest); font-weight: 700; }
+.pf-cal-day.is-today { outline: 2px solid var(--dhi-bloom); outline-offset: -2px; }
+.pf-cal-key {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  font-size: .78rem;
+  color: var(--dhi-muted);
+}
+.pf-cal-key span {
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
+  background: var(--dhi-surface-tint);
+}
+
+/* chart */
+.pf-chart { flex: 1; min-height: 0; }
+.pf-chart svg { width: 100%; height: auto; display: block; overflow: visible; }
+.pf-grid { stroke: var(--dhi-line); stroke-width: 1; }
+.pf-axis { fill: var(--dhi-muted); font-size: 10px; font-family: var(--dhi-sans); }
+.pf-chart rect { stroke-width: 1.4; }
+.pf-bar-worksheet  { fill: var(--viz-1); stroke: var(--viz-1-line); }
+.pf-bar-quiz       { fill: var(--viz-2); stroke: var(--viz-2-line); }
+.pf-bar-study_note { fill: var(--viz-3); stroke: var(--viz-3-line); }
+.pf-bar-upload     { fill: var(--viz-4); stroke: var(--viz-4-line); }
+
+.pf-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; }
+.pf-legend-item { display: flex; align-items: center; gap: 7px; font-size: .84rem; color: var(--dhi-muted); }
+/* The .pf-bar-* classes set `fill`, which a <span> cannot use — the swatches
+   need their own background or they all inherit the muted text colour. */
+.pf-legend-swatch { width: 12px; height: 12px; border-radius: 4px; }
+.pf-legend-swatch { border: 1.5px solid; }
+.pf-legend-swatch.pf-bar-worksheet  { background: var(--viz-1); border-color: var(--viz-1-line); }
+.pf-legend-swatch.pf-bar-quiz       { background: var(--viz-2); border-color: var(--viz-2-line); }
+.pf-legend-swatch.pf-bar-study_note { background: var(--viz-3); border-color: var(--viz-3-line); }
+.pf-legend-swatch.pf-bar-upload     { background: var(--viz-4); border-color: var(--viz-4-line); }
+
+.pf-empty {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-height: 180px;
+  font-size: .92rem;
+  color: var(--dhi-muted);
+  text-align: center;
+}
+
+/* Three columns hold down to about 1200px of viewport; below that the class
+   panel drops to its own full-width row rather than being squeezed. */
+@media (max-width: 1200px) {
+  .pf-row { grid-template-columns: minmax(230px, 1fr) minmax(0, 2.4fr); }
+  .pf-row > .pf-panel:last-child { grid-column: 1 / -1; }
+}
+@media (max-width: 1100px) {
+  .pf-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .pf-row { grid-template-columns: minmax(0, 1fr); }
+  .pf-row > .pf-panel:last-child { grid-column: auto; }
+}
+@media (max-width: 520px) {
+  .pf-cards { grid-template-columns: minmax(0, 1fr); }
+  .pf-head { flex-direction: column; text-align: center; }
+}
+
+
+/* ── classes this teacher works with ───────────────────────────────────── */
+.pf-classes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 14px; }
+.pf-class-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+.pf-class-name { font-size: .9rem; font-weight: 650; color: var(--dhi-ink); }
+.pf-class-n { font-size: .85rem; font-weight: 700; color: var(--dhi-muted); }
+.pf-class-track {
+  grid-column: 1 / -1;
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--dhi-surface-sunken);
+  overflow: hidden;
+}
+.pf-class-fill { height: 100%; border: 1.4px solid; }
+.pf-class-fill:first-child { border-radius: 999px 0 0 999px; }
+.pf-class-fill:last-child { border-radius: 0 999px 999px 0; }
+.pf-class-fill:only-child { border-radius: 999px; }
+.pf-fill-content { background: var(--viz-1); border-color: var(--viz-1-line); }
+.pf-fill-uploads { background: var(--viz-4); border-color: var(--viz-4-line); }

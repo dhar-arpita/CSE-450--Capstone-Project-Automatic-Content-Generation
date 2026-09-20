@@ -58,6 +58,17 @@
 
   --dhi-sans:    'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --dhi-display: 'Instrument Serif', Georgia, serif;
+
+  /* Data visualisation. Deliberately lighter than the --acc-* family: at
+     chart-bar size the dark accents read as four shades of "dark" and the
+     green and teal were almost impossible to tell apart. Each fill carries a
+     darker outline of its own hue so the shapes stay crisp on a pale page,
+     and every fill is light enough to take dark text on top. */
+  --viz-1: #5cc98a;  --viz-1-line: #17593a;   /* worksheets  — leaf   */
+  --viz-2: #ff7ab4;  --viz-2-line: #b82c6c;   /* quizzes     — bloom  */
+  --viz-3: #5cc5e6;  --viz-3-line: #0e5468;   /* study notes — sky    */
+  --viz-4: #e3ad55;  --viz-4-line: #7a4f05;   /* uploads     — amber  */
+  --viz-ink: #0b1f15;
 }
 
 [data-theme="dark"] {
@@ -87,6 +98,13 @@
   /* inverted so a "solid" button stays visible against a dark page */
   --dhi-solid-bg: #e4f0e8;
   --dhi-solid-fg: #0b1f15;
+
+  /* The fills stay put in dark mode — they are already mid-tone and read well
+     on a dark page — but the outlines lift so they read as edges, not holes. */
+  --viz-1-line: #a6e8c5;
+  --viz-2-line: #ffc3dc;
+  --viz-3-line: #a9e2f4;
+  --viz-4-line: #f2d69f;
 
   --dhi-shadow-sm: 0 1px 2px rgba(0, 0, 0, .5);
   --dhi-shadow-md: 0 10px 30px -14px rgba(0, 0, 0, .75);
