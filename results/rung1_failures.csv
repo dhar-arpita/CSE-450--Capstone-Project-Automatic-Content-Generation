@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+JOB,worksheet_e2e,"Exception('list indices must be integers or slices, not str')",2,2026-09-20T05:23:40Z,2026-09-20T05:36:28Z
