@@ -15,6 +15,20 @@ class User(Base):
     password = Column(String(255), nullable=False)
     role = Column(String(50), CheckConstraint("role IN ('admin', 'teacher', 'student')"), nullable=False)
     created_at = Column(TIMESTAMP, server_default=func.now())
+    # Seeded demo/testing accounts (ops/init_db.py). Their content is real and
+    # behaves normally everywhere in the product; it is only left out of the
+    # admin console's "how much is this platform actually used" aggregates, the
+    # same way is_cache_seed rows are. Without this, every smoke test before a
+    # demo would inflate the very numbers the admin console reports.
+    # Added by migrations/003_user_is_demo.sql.
+    is_demo = Column(Boolean, default=False, nullable=False, server_default="false")
+    # Soft delete. user_id is a foreign key from about ten tables with no
+    # cascade rules, so a hard DELETE would either fail on a constraint or
+    # strand rows behind it. Stamping a timestamp also keeps the platform's
+    # history honest: removing a teacher should not retroactively erase the
+    # worksheets they made from the totals.
+    # Added by migrations/004_user_deleted_at.sql.
+    deleted_at = Column(TIMESTAMP, nullable=True)
 
 
 class Admin(Base):

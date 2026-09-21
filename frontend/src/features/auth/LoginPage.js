@@ -51,7 +51,9 @@ export default function LoginPage({ role }) {
         email: data.email,
         role: data.role,
       }));
-      navigate("/dashboard");
+      // The admin's home is the console; there is no teacher dashboard for
+      // them to land on.
+      navigate(data.role === "admin" ? "/admin" : "/dashboard");
     } catch (err) {
       // No response at all means the API is unreachable — telling the user
       // their password is wrong would send them chasing the wrong problem.

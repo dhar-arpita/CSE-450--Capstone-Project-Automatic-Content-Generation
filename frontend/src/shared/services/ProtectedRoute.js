@@ -6,12 +6,22 @@ export default function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace />;
   }
 
-  if (allowedRoles && allowedRoles.length > 0) {
-    const storedUser = localStorage.getItem("user");
-    const role = storedUser ? JSON.parse(storedUser)?.role : null;
-    if (!allowedRoles.includes(role)) {
-      return <Navigate to="/dashboard" replace />;
-    }
+  const storedUser = localStorage.getItem("user");
+  const role = storedUser ? JSON.parse(storedUser)?.role : null;
+
+  // The admin has no teacher dashboard to fall back to — /dashboard reads
+  // teacher-owned content and would render empty for them — so every bounce
+  // lands on the console instead.
+  const home = role === "admin" ? "/admin" : "/dashboard";
+
+  if (allowedRoles && allowedRoles.length > 0 && !allowedRoles.includes(role)) {
+    return <Navigate to={home} replace />;
+  }
+
+  // The reverse: the admin following a link into the teacher app, which is
+  // not theirs to use.
+  if (role === "admin" && !allowedRoles?.includes("admin")) {
+    return <Navigate to="/admin" replace />;
   }
 
   return children;

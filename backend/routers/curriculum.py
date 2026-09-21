@@ -67,12 +67,17 @@ class TopicResponse(BaseModel):
 # ── GET /curriculum/classes ───────────────────────────────────────────────────
 
 @router.get("/classes", response_model=List[ClassResponse])
-def get_all_classes(db: Session = Depends(get_db),
-                     current_user: User = Depends(get_current_user_from_header)):
+def get_all_classes(db: Session = Depends(get_db)):
     """
     Returns all available classes.
     This is the FIRST dropdown the teacher sees on the upload form.
     Example response: [{"class_name": "Class 6", "educational_level": "Secondary"}, ...]
+
+    Unauthenticated on purpose. Student signup has to show this list *before*
+    the account exists, so requiring a token would make the class picker
+    impossible to fill. The list is the names of school classes and nothing
+    else — no user data, nothing that is not already on the public site.
+    Every other curriculum endpoint still requires a token.
     """
 
     # Query all rows from the 'class' table

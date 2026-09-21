@@ -170,6 +170,24 @@ html[lang="bn"] .au-title { line-height: 1.34; letter-spacing: 0; }
   box-shadow: 0 0 0 4px rgba(255, 79, 154, .16);
 }
 
+/* The class picker on student signup. Native select, same shell as .au-input;
+   the browser's own arrow is dropped for the project's chevron so it matches
+   the rest of the icon set instead of the OS. */
+.au-select {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+.au-select[data-empty="true"] { color: var(--dhi-muted); }
+.au-select:disabled { cursor: progress; opacity: .6; }
+.au-select-chevron {
+  position: absolute;
+  right: 15px;
+  display: flex;
+  color: var(--dhi-muted);
+  pointer-events: none;
+}
+
 .au-reveal-btn {
   position: absolute;
   right: 12px;

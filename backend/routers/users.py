@@ -1,4 +1,5 @@
 # routers/users.py - UPDATED with JWT + Password hashing
+from datetime import date
 from typing import List
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
@@ -8,9 +9,9 @@ from core.config import get_db
 from core.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token,
-    get_current_user_from_header
+    get_current_user_from_header, require_admin
 )
-from models.db_models import User, Student,Teacher
+from models.db_models import Class, User, Student, Teacher
 from schemas.user import UserCreate, UserResponse, LoginRequest, TokenResponse
 from services import rag_service
 
@@ -23,10 +24,11 @@ router = APIRouter(tags=["Users"])
 def create_user(user: UserCreate, db: Session = Depends(get_db)):
     """
     Signup endpoint.
+    - Reject anything but teacher/student (enforced by UserCreate.role)
     - Check if email already exists
     - Hash password with bcrypt
+    - Create the matching Student / Teacher row
     - Issue JWT token
-    - If role is 'student', also create Student record
     """
     # Check if email already registered
     existing_user = db.query(User).filter(User.email == user.email).first()
@@ -36,6 +38,18 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     # Hash password
     hashed_password = hash_password(user.password)
     
+    # A student is scoped to one class for the life of the account, so the
+    # class is checked against the curriculum before the user row is written —
+    # student.class_name is a FK to class.class_name, and a typo here would
+    # either blow up on commit or leave the student pointing at nothing.
+    if user.role == "student":
+        known = db.query(Class).filter(Class.class_name == user.class_name).first()
+        if not known:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unknown class '{user.class_name}'.",
+            )
+
     # Create user with hashed password
     db_user = User(
         name=user.name,
@@ -45,17 +59,18 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
     )
     db.add(db_user)
     db.flush()  # Get user_id without committing yet
-    
-    # If student role, create Student record
+
     if user.role == "student":
-        # Need class_name for student — for now, optional/null
-        # You can update this later or require it in frontend
-        student = Student(student_id=db_user.user_id)
+        student = Student(student_id=db_user.user_id, class_name=user.class_name)
         db.add(student)
-    elif user.role == "teacher":                          # <- new add
-        teacher = Teacher(teacher_id=db_user.user_id)      # <- new add
+    elif user.role == "teacher":
+        # join_date was never set on this path, so every teacher created
+        # through signup had a NULL one and the admin stats had nothing to
+        # count. user.created_at is the reliable signup timestamp, but the
+        # column exists, so fill it.
+        teacher = Teacher(teacher_id=db_user.user_id, join_date=date.today())
         db.add(teacher)
-    
+
     db.commit()
     db.refresh(db_user)
     
@@ -85,6 +100,13 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
     
     if not user or not verify_password(req.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
+
+    # A soft-deleted account keeps its row so the history it produced stays
+    # attributable, but it is not a way in any more. Deliberately the same
+    # wording as a wrong password: which addresses still exist is not
+    # something an unauthenticated caller should be able to probe for.
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
     
     # Create tokens
     access_token = create_access_token(data={"sub": str(user.user_id)})
@@ -101,8 +123,18 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/users/", response_model=List[UserResponse])
-def read_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Returns a paginated list of all users."""
+def read_users(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Returns a paginated list of all users. Administrator only.
+
+    This had no authentication of any kind: every name and email address on
+    the platform was readable by anyone who could reach the API, signed in or
+    not.
+    """
     return rag_service.get_users(db, skip=skip, limit=limit)
 
 

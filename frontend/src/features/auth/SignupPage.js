@@ -1,11 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
-import { signup } from "../../shared/services/api";
+import { getClasses, signup } from "../../shared/services/api";
 import AuthShell from "./AuthShell";
-import { Alert, Field, PasswordField, Submit } from "./fields";
-import { IconLock, IconMail, IconUser } from "./icons";
-import { DEFAULT_ROLE, LOGIN_PATH, ROLES } from "./roles";
+import { Alert, Field, PasswordField, SelectField, Submit } from "./fields";
+import { IconLock, IconMail, IconSchool, IconUser } from "./icons";
+import { DEFAULT_ROLE, LOGIN_PATH, SIGNUP_ROLES } from "./roles";
 import "./auth.css";
 
 const MIN_PASSWORD = 6;
@@ -18,11 +18,32 @@ export default function SignupPage() {
   // Arriving from "Join as a student" should land on the student role already
   // chosen; an unknown value in the query string must not select nothing.
   const asked = params.get("role");
-  const [role, setRole] = useState(ROLES.includes(asked) ? asked : DEFAULT_ROLE);
+  const [role, setRole] = useState(SIGNUP_ROLES.includes(asked) ? asked : DEFAULT_ROLE);
 
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", className: "" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // A student belongs to one class and only ever sees that class's material,
+  // so the class is fixed here at signup rather than chosen per session. The
+  // list is fetched only once the student role is actually picked — a teacher
+  // signing up never needs it. /curriculum/classes is unauthenticated for
+  // exactly this reason: there is no token yet.
+  const [classes, setClasses] = useState([]);
+  const [classesFailed, setClassesFailed] = useState(false);
+
+  useEffect(() => {
+    if (role !== "student" || classes.length) return;
+    let live = true;
+    getClasses()
+      .then(({ data }) => {
+        if (!live) return;
+        setClasses(data);
+        setClassesFailed(false);
+      })
+      .catch(() => live && setClassesFailed(true));
+    return () => { live = false; };
+  }, [role, classes.length]);
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -38,6 +59,10 @@ export default function SignupPage() {
       setError(t("auth.errors.shortPassword"));
       return;
     }
+    if (role === "student" && !form.className) {
+      setError(t("auth.errors.pickClass"));
+      return;
+    }
 
     setLoading(true);
     try {
@@ -46,6 +71,9 @@ export default function SignupPage() {
         email: form.email.trim(),
         password: form.password,
         role,
+        // Sent only for students; the backend rejects a student without one
+        // and ignores it for teachers.
+        ...(role === "student" ? { class_name: form.className } : {}),
       });
       localStorage.setItem("access_token", data.access_token);
       localStorage.setItem("refresh_token", data.refresh_token);
@@ -67,7 +95,7 @@ export default function SignupPage() {
       <fieldset className="au-roles">
         <legend className="au-label">{t("auth.roleLabel")}</legend>
         <div className="au-roles-row">
-          {ROLES.map((r) => (
+          {SIGNUP_ROLES.map((r) => (
             <button
               type="button"
               key={r}
@@ -100,6 +128,24 @@ export default function SignupPage() {
         value={form.email}
         onChange={set("email")}
       />
+      {role === "student" && (
+        <SelectField
+          label={t("auth.fields.className")}
+          icon={<IconSchool />}
+          name="class_name"
+          placeholder={
+            classesFailed
+              ? t("auth.fields.classUnavailable")
+              : classes.length
+                ? t("auth.fields.classPlaceholder")
+                : t("auth.fields.classLoading")
+          }
+          options={classes.map((c) => ({ value: c.class_name, label: c.class_name }))}
+          value={form.className}
+          onChange={set("className")}
+          disabled={classesFailed || !classes.length}
+        />
+      )}
       <PasswordField
         label={t("auth.fields.password")}
         icon={<IconLock />}

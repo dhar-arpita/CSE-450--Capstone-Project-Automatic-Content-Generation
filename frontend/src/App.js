@@ -13,6 +13,7 @@ import ProtectedRoute from "./shared/services/ProtectedRoute";
 import StudyNotePage from "./features/studynote/StudyNotePage";
 import QuizPage from "./features/quiz/QuizPage";
 import ProfilePage from "./features/profile/ProfilePage";
+import AdminPage from "./features/admin/AdminPage";
 import { I18nProvider } from "./shared/i18n";
 import { ThemeProvider } from "./shared/theme";
 
@@ -44,6 +45,16 @@ function App() {
         <Route path="/study-notes" element={<ProtectedRoute><StudyNotePage /></ProtectedRoute>} />
         <Route path="/quiz" element={<ProtectedRoute><QuizPage /></ProtectedRoute>} />
         <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
+
+        {/* The admin console. Four views share one component; the route is
+            what selects between them, so the left nav behaves like any other
+            navigation rather than hiding state in the page. Every endpoint
+            behind them is gated by require_admin on the server — allowedRoles
+            only decides what is worth rendering. */}
+        <Route path="/admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPage view="overview" /></ProtectedRoute>} />
+        <Route path="/admin/people" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPage view="people" /></ProtectedRoute>} />
+        <Route path="/admin/operations" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPage view="ops" /></ProtectedRoute>} />
+        <Route path="/admin/curriculum" element={<ProtectedRoute allowedRoles={["admin"]}><AdminPage view="curriculum" /></ProtectedRoute>} />
       </Routes>
     </Router>
     </I18nProvider>

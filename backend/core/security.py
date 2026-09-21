@@ -87,7 +87,12 @@ def get_current_user(token: str = None, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.user_id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    # Tokens outlive the account. Without this, a user deleted by the admin
+    # keeps full access until their existing token happens to expire.
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=401, detail="This account is no longer active.")
+
     return user
 
 # Alternative: Use FastAPI's OAuth2 pattern
@@ -116,7 +121,12 @@ def get_current_user_from_header(credentials: HTTPAuthorizationCredentials = Dep
     user = db.query(User).filter(User.user_id == user_id).first()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
+    # Tokens outlive the account. Without this, a user deleted by the admin
+    # keeps full access until their existing token happens to expire.
+    if user.deleted_at is not None:
+        raise HTTPException(status_code=401, detail="This account is no longer active.")
+
     return user
 
 # ──── DEPENDENCY: role gate ────
@@ -131,5 +141,23 @@ def require_teacher_or_admin(current_user: User = Depends(get_current_user_from_
         raise HTTPException(
             status_code=403,
             detail="Cache administration is restricted to teachers and admins.",
+        )
+    return current_user
+
+
+def require_admin(current_user: User = Depends(get_current_user_from_header)) -> User:
+    """
+    Allow the platform administrator only.
+
+    There is exactly one admin and it is seeded (ops/init_db.py), never created
+    through signup. Everything behind this gate reads across *all* users'
+    data — platform-wide counts, the job queue, the user list — so it is a
+    strictly narrower gate than require_teacher_or_admin, which only ever
+    meant "not a student".
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=403,
+            detail="This is restricted to the platform administrator.",
         )
     return current_user

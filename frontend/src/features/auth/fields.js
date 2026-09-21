@@ -1,6 +1,6 @@
 import React, { useId, useState } from "react";
 import { useI18n } from "../../shared/i18n";
-import { IconAlert, IconArrow, IconEye, IconEyeOff } from "./icons";
+import { IconAlert, IconArrow, IconChevronDown, IconEye, IconEyeOff } from "./icons";
 
 export function Field({ label, icon, ...inputProps }) {
   const id = useId();
@@ -10,6 +10,38 @@ export function Field({ label, icon, ...inputProps }) {
       <div className="au-input-wrap">
         {icon && <span className="au-input-icon">{icon}</span>}
         <input id={id} className="au-input" {...inputProps} />
+      </div>
+    </div>
+  );
+}
+
+/* A native <select> wearing the same shell as Field, so the class picker on
+   student signup does not read as a different species of control from the
+   name and email boxes above it. Native on purpose: on a phone this opens the
+   OS picker, which beats anything hand-rolled. */
+export function SelectField({ label, icon, hint, options, placeholder, value, ...selectProps }) {
+  const id = useId();
+  return (
+    <div className="au-field">
+      <div className="au-label-row">
+        <label className="au-label" htmlFor={id}>{label}</label>
+        {hint}
+      </div>
+      <div className="au-input-wrap">
+        {icon && <span className="au-input-icon">{icon}</span>}
+        <select
+          id={id}
+          className="au-input au-select"
+          value={value}
+          data-empty={value ? undefined : "true"}
+          {...selectProps}
+        >
+          <option value="">{placeholder}</option>
+          {options.map((option) => (
+            <option key={option.value} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+        <span className="au-select-chevron" aria-hidden="true"><IconChevronDown /></span>
       </div>
     </div>
   );

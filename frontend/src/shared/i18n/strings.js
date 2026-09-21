@@ -141,6 +141,10 @@
       show: "Show password",
       hide: "Hide password",
       forgot: "Forgot password?",
+      className: "Your class",
+      classPlaceholder: "Choose your class",
+      classLoading: "Loading classes",
+      classUnavailable: "Class list unavailable",
     },
     student: {
       eyebrow: "Practice mode",
@@ -171,6 +175,7 @@
     errors: {
       required: "Please fill in every field.",
       shortPassword: "Password needs at least 6 characters.",
+      pickClass: "Please choose your class.",
       badCredentials: "That email and password do not match.",
       signupFailed: "Could not create the account. This email may already be registered.",
       offline: "Cannot reach the server right now. Please try again in a moment.",
@@ -344,6 +349,10 @@
       show: "পাসওয়ার্ড দেখুন",
       hide: "পাসওয়ার্ড লুকান",
       forgot: "পাসওয়ার্ড ভুলে গেছেন?",
+      className: "আপনার ক্লাস",
+      classPlaceholder: "কোন ক্লাসে পড়েন বেছে নিন",
+      classLoading: "ক্লাসের লিস্ট আসছে",
+      classUnavailable: "ক্লাসের লিস্ট আসছে না",
     },
     student: {
       eyebrow: "প্র্যাকটিস মোড",
@@ -374,6 +383,7 @@
     errors: {
       required: "সব ঘর পূরণ করুন।",
       shortPassword: "পাসওয়ার্ড অন্তত ৬ অক্ষরের হতে হবে।",
+      pickClass: "আপনি কোন ক্লাসে পড়েন সেটা বেছে নিন।",
       badCredentials: "ইমেইল আর পাসওয়ার্ড মিলছে না।",
       signupFailed: "অ্যাকাউন্ট তৈরি হলো না। এই ইমেইল দিয়ে হয়তো আগেই অ্যাকাউন্ট খোলা আছে।",
       offline: "সার্ভারে পৌঁছানো যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",

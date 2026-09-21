@@ -274,4 +274,25 @@ export const quickAnswer = (params) => {
   return api.post("/generate/quick-answer", params);
 };
 
+// ──── ADMIN CONSOLE ────
+// Every one of these is behind require_admin on the server; the role check in
+// ProtectedRoute only decides what to render, never what is allowed.
+export const getAdminOverview = () => api.get("/admin/overview");
+export const getAdminSignups = (days = 90) => api.get(`/admin/signups?days=${days}`);
+export const getAdminContentMix = () => api.get("/admin/content-mix");
+export const getAdminClasses = () => api.get("/admin/classes");
+export const getAdminCoverage = () => api.get("/admin/coverage");
+export const getAdminJobHealth = (days = 7) => api.get(`/admin/job-health?days=${days}`);
+
+export const getAdminUsers = ({ role, q, includeDeleted, limit = 50, offset = 0 } = {}) => {
+  const params = new URLSearchParams({ limit, offset });
+  if (role) params.set("role", role);
+  if (q) params.set("q", q);
+  if (includeDeleted) params.set("include_deleted", "true");
+  return api.get(`/admin/users?${params.toString()}`);
+};
+
+export const deleteAdminUser = (userId) => api.delete(`/admin/users/${userId}`);
+export const restoreAdminUser = (userId) => api.post(`/admin/users/${userId}/restore`);
+
 export default api;

@@ -24,8 +24,7 @@ from sqlalchemy.orm import Session
 
 # Import the new gemini_client instead of the old genai object
 from core.config import SMART_MODEL, qdrant_client, gemini_client, COLLECTION_NAME, EMBEDDING_MODEL
-from models.db_models import User, Teacher
-from schemas.user import UserCreate
+from models.db_models import User
 # for delete specific pdf from qdrant................................................
 from qdrant_client.models import Filter, FieldCondition, MatchValue, FilterSelector
 # from sqlalchemy.orm import Session
@@ -321,31 +320,13 @@ def load_prompt_template(filename: str) -> str:
         return f.read()
 
 # --- USER LOGIC ---
-def create_user(db: Session, user: UserCreate):
-    db_user = db.query(User).filter(User.email == user.email).first()
-    if db_user:
-        return None 
-    
- 
-    new_user = User(
-        name=user.name,
-        email=user.email,
-        password=user.password,
-        role=user.role
-    )
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-    
-    # If role is teacher, also create teacher record
-    if user.role == "teacher":
-        from datetime import date
-        new_teacher = Teacher(teacher_id=new_user.user_id, join_date=date.today())
-        db.add(new_teacher)
-        db.commit()
-    
-
-    return new_user
+# NOTE: a second `create_user` used to live here. It stored the password in
+# PLAIN TEXT and wrote whatever `role` the caller passed, including "admin".
+# Nothing routed to it — POST /users/ has always used routers/users.py — so it
+# was never exploitable, but it sat one import away from the real signup
+# endpoint and would have quietly reintroduced both holes the moment anyone
+# reached for it. Deleted rather than fixed: signup belongs in exactly one
+# place, and that place hashes the password and refuses the admin role.
 
 def get_users(db: Session, skip: int = 0, limit: int = 100):
     return db.query(User).offset(skip).limit(limit).all()

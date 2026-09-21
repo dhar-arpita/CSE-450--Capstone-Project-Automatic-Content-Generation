@@ -217,3 +217,72 @@ export const IconCalendar = () => (
     <path d="M3.5 9.6h17M8.5 3.2v3.4M15.5 3.2v3.4" />
   </svg>
 );
+
+/* A mortarboard — the class a student belongs to, on the signup form. */
+export const IconSchool = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M12 4.2 2.8 8.6 12 13l9.2-4.4L12 4.2Z" />
+    <path d="M6.4 10.6v4.6c0 1.6 2.5 2.9 5.6 2.9s5.6-1.3 5.6-2.9v-4.6" />
+    <path d="M21.2 8.6v5" />
+  </svg>
+);
+
+export const IconChevronDown = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="m6.5 9.8 5.5 5.2 5.5-5.2" />
+  </svg>
+);
+
+/* ── admin console ─────────────────────────────────────────────────────── */
+
+export const IconUsers = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <circle cx="9.2" cy="8.4" r="3.4" />
+    <path d="M2.8 19.4c.8-3.3 3.4-5 6.4-5s5.6 1.7 6.4 5" />
+    <path d="M16.4 5.4a3.4 3.4 0 0 1 0 6.1M18 14.8c2 .6 3.3 2.1 3.8 4.6" />
+  </svg>
+);
+
+/* A trace with one spike — the job queue's pulse. */
+export const IconPulse = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M2.8 12.6h4.1l2.3-6.4 3.6 12.2 2.4-5.8h6" />
+  </svg>
+);
+
+/* Stacked sheets — the curriculum, chapter on chapter. */
+export const IconLayers = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="m12 3.2 8.6 4.3-8.6 4.3-8.6-4.3 8.6-4.3Z" />
+    <path d="m3.4 12.4 8.6 4.3 8.6-4.3M3.4 16.9l8.6 4.3 8.6-4.3" />
+  </svg>
+);
+
+export const IconSearch = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <circle cx="10.8" cy="10.8" r="6.4" />
+    <path d="m15.6 15.6 4.2 4.2" />
+  </svg>
+);
+
+export const IconTrash = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M4.6 6.6h14.8M9.4 6.6V4.9c0-.6.5-1.1 1.1-1.1h3c.6 0 1.1.5 1.1 1.1v1.7" />
+    <path d="M6.6 6.6 7.7 19a1.6 1.6 0 0 0 1.6 1.4h5.4A1.6 1.6 0 0 0 16.3 19L17.4 6.6" />
+  </svg>
+);
+
+export const IconUndo = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M4.2 9.4h7.2a5.6 5.6 0 1 1 0 11.2H7.6" />
+    <path d="m4.2 9.4 4-4M4.2 9.4l4 4" />
+  </svg>
+);
+
+/* A circle with a slice cut out — the share one group holds of the whole. */
+export const IconShare = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <circle cx="12" cy="12" r="8.4" />
+    <path d="M12 3.6V12l6.6 5.2" />
+  </svg>
+);

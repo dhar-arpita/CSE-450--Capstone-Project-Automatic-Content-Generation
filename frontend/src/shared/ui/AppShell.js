@@ -27,7 +27,14 @@ export const APP_NAV = [
   { to: "/profile", key: "profile", Icon: IconUser2 },
 ];
 
-export default function AppShell({ breadcrumb, user, onLogout, rail, tone, width, children }) {
+/* `nav` and `home` exist so the admin console can reuse this chrome with its
+   own destinations instead of forking the shell. A nav item may carry a
+   ready-made `label`; otherwise its `key` is looked up under app.nav, which is
+   how the teacher nav above has always worked. */
+export default function AppShell({
+  breadcrumb, user, onLogout, rail, tone, width, children,
+  nav = APP_NAV, home = "/dashboard",
+}) {
   const { t, lang, toggleLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
   const [navOpen, setNavOpen] = useState(false);
@@ -39,11 +46,11 @@ export default function AppShell({ breadcrumb, user, onLogout, rail, tone, width
     <div className={`as${tone ? ` as-tone-${tone}` : ""}${navOpen ? " is-nav-open" : ""}`}>
       <aside className="as-side">
         <div className="as-side-top">
-          <BrandLogo to="/dashboard" />
+          <BrandLogo to={home} />
         </div>
 
         <nav className="as-nav" aria-label={t("app.nav.dashboard")}>
-          {APP_NAV.map(({ to, key, Icon, end }) => (
+          {nav.map(({ to, key, Icon, end, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -52,7 +59,7 @@ export default function AppShell({ breadcrumb, user, onLogout, rail, tone, width
               className={({ isActive }) => `as-nav-item${isActive ? " is-active" : ""}`}
             >
               <Icon />
-              {t(`app.nav.${key}`)}
+              {label || t(`app.nav.${key}`)}
             </NavLink>
           ))}
         </nav>
@@ -113,7 +120,7 @@ export default function AppShell({ breadcrumb, user, onLogout, rail, tone, width
           <div className="as-top-right">
             <NotificationBell />
             {/* The chip is the way to the profile from anywhere in the app. */}
-            <Link className="as-user" to="/profile">
+            <Link className="as-user" to={user?.role === "admin" ? home : "/profile"}>
               <span className="as-avatar">{initial}</span>
               <span className="as-user-text">
                 <span className="as-user-name">{user?.name || "—"}</span>
