@@ -12,7 +12,7 @@ from core.security import (
     get_current_user_from_header, require_admin
 )
 from models.db_models import Class, User, Student, Teacher
-from schemas.user import UserCreate, UserResponse, LoginRequest, TokenResponse
+from schemas.user import UserCreate, UserResponse, LoginRequest, TokenResponse, UpdateClassRequest
 from services import rag_service
 
 router = APIRouter(tags=["Users"])
@@ -84,7 +84,10 @@ def create_user(user: UserCreate, db: Session = Depends(get_db)):
         user_id=db_user.user_id,
         name=db_user.name,
         email=db_user.email,
-        role=db_user.role
+        role=db_user.role,
+        # Already validated against the Class table above, and normalized to
+        # None for non-students by UserCreate's validator.
+        class_name=user.class_name,
     )
 
 
@@ -97,7 +100,7 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
     - Issue JWT token if credentials are valid
     """
     user = db.query(User).filter(User.email == req.email).first()
-    
+
     if not user or not verify_password(req.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
@@ -107,18 +110,28 @@ def login_user(req: LoginRequest, db: Session = Depends(get_db)):
     # something an unauthenticated caller should be able to probe for.
     if user.deleted_at is not None:
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    
+
     # Create tokens
     access_token = create_access_token(data={"sub": str(user.user_id)})
     refresh_token = create_refresh_token(data={"sub": str(user.user_id)})
-    
+
+    # The frontend needs the student's class up front — to scope the subject
+    # list without asking for it again — so it rides along on login, not just
+    # signup. None for teachers/admins and for pre-existing students whose
+    # account predates this field.
+    student_class = None
+    if user.role == "student":
+        student = db.query(Student).filter(Student.student_id == user.user_id).first()
+        student_class = student.class_name if student else None
+
     return TokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
         user_id=user.user_id,
         name=user.name,
         email=user.email,
-        role=user.role
+        role=user.role,
+        class_name=student_class,
     )
 
 
@@ -139,13 +152,57 @@ def read_users(
 
 
 @router.get("/users/me", response_model=UserResponse)
-def read_current_user(current_user: User = Depends(get_current_user_from_header)):
+def read_current_user(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
     """Get current logged-in user info."""
+    student_class = None
+    if current_user.role == "student":
+        student = db.query(Student).filter(Student.student_id == current_user.user_id).first()
+        student_class = student.class_name if student else None
+
     return UserResponse(
         user_id=current_user.user_id,
         name=current_user.name,
         email=current_user.email,
-        role=current_user.role
+        role=current_user.role,
+        class_name=student_class,
+    )
+
+
+@router.patch("/students/me/class", response_model=UserResponse)
+def update_my_class(
+    body: UpdateClassRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Let a student move themselves up a class.
+
+    The only field on a student's own account they're allowed to change —
+    everything else about identity (name, email, role) stays fixed. Validated
+    against the Class table the same way signup validates it.
+    """
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only a student has a class to update.")
+
+    known = db.query(Class).filter(Class.class_name == body.class_name).first()
+    if not known:
+        raise HTTPException(status_code=400, detail=f"Unknown class '{body.class_name}'.")
+
+    student = db.query(Student).filter(Student.student_id == current_user.user_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student record not found.")
+
+    student.class_name = body.class_name
+    db.commit()
+
+    return UserResponse(
+        user_id=current_user.user_id,
+        name=current_user.name,
+        email=current_user.email,
+        role=current_user.role,
+        class_name=student.class_name,
     )
 
 

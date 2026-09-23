@@ -181,6 +181,10 @@ html[lang="bn"] .pf-section-label { letter-spacing: .02em; text-transform: none;
 .pf-bar-quiz       { fill: var(--viz-2); stroke: var(--viz-2-line); }
 .pf-bar-study_note { fill: var(--viz-3); stroke: var(--viz-3-line); }
 .pf-bar-upload     { fill: var(--viz-4); stroke: var(--viz-4-line); }
+/* A student's fourth series — chatbot practice — instead of a teacher's
+   uploads. Same colour slot, its own class so both profiles can read their
+   own legend label without the other's key leaking through. */
+.pf-bar-practice   { fill: var(--viz-4); stroke: var(--viz-4-line); }
 
 .pf-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 16px; }
 .pf-legend-item { display: flex; align-items: center; gap: 7px; font-size: .84rem; color: var(--dhi-muted); }
@@ -192,6 +196,7 @@ html[lang="bn"] .pf-section-label { letter-spacing: .02em; text-transform: none;
 .pf-legend-swatch.pf-bar-quiz       { background: var(--viz-2); border-color: var(--viz-2-line); }
 .pf-legend-swatch.pf-bar-study_note { background: var(--viz-3); border-color: var(--viz-3-line); }
 .pf-legend-swatch.pf-bar-upload     { background: var(--viz-4); border-color: var(--viz-4-line); }
+.pf-legend-swatch.pf-bar-practice   { background: var(--viz-4); border-color: var(--viz-4-line); }
 
 .pf-empty {
   display: grid;

@@ -1,54 +1,79 @@
-// features/chatbot/ChatbotPage.js — Redesigned with 10MS-inspired UI
+// features/chatbot/ChatbotPage.js — "Practice with Progga", built on the same
+// AppShell/studio chrome as the Worksheet/Quiz/Study Note studios.
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import BrandLogo from "../../shared/brand/BrandLogo";
+import AppShell from "../../shared/ui/AppShell";
+import { IconChatbot, IconCheck, IconPlus, IconSpark } from "../../shared/ui/icons";
 import {
   getClasses, getSubjects, getChapters, getTopics, chatHistory, chatSessions,
 } from "../../shared/services/api";
 import { useChatSession } from "../../shared/services/useChatSession";
+import "../../shared/ui/studio.css";
+import "../../shared/ui/SavedContentList.css";
 
 /* ---------- bilingual UI text ---------- */
 const TXT = {
   bangla: {
-    subtitle: "প্রশ্ন করুন বা প্র্যাকটিস করুন — আপনার ভাষায়",
-    step1: "আপনি কী নিয়ে পড়তে চান?",
+    breadcrumb: "প্রজ্ঞার সাথে প্র্যাকটিস",
+    pageTitle: "প্রজ্ঞার সাথে প্র্যাকটিস",
+    subtitle: "প্রশ্ন করো বা প্র্যাকটিস করো — নিজের ভাষায়।",
+    setupLabel: "সেটআপ",
+    step1: "তুমি কী নিয়ে পড়তে চাও?",
+    step2Title: "কী করতে চাও বেছে নাও",
     selectClass: "ক্লাস বেছে নিন", selectSubject: "বিষয় বেছে নিন",
     selectChapter: "অধ্যায় বেছে নিন", selectTopic: "টপিক বেছে নিন",
     classL: "ক্লাস", subjectL: "বিষয়", chapterL: "অধ্যায় (ঐচ্ছিক)", topicL: "টপিক (ঐচ্ছিক)",
-    lang: "ভাষা:",
-    hintReady: "নিচের একটা tab বেছে নিন — যা করবেন সব এখানে জমতে থাকবে।",
-    hintPick: "শুরু করতে অন্তত বিষয় select করুন।",
-    tabQA: "❓ প্রশ্ন করুন", tabSet: "📝 প্র্যাকটিস সেট", tabOne: "🎯 একটা একটা করে",
-    qaTitle: "❓ প্রশ্ন করুন",
-    samplesHint: "নিচের যেকোনো প্রশ্নে ক্লিক করুন, অথবা নিজে টাইপ করুন:",
-    askPlaceholder: "আরেকটা প্রশ্ন লিখুন...", askBtn: "জিজ্ঞেস করুন",
+    lang: "উত্তরের ভাষা:",
+    hintReady: "উপরে থেকে একটা মোড বেছে নাও — যা করবে সব এখানে জমতে থাকবে।",
+    hintPick: "শুরু করতে অন্তত একটা বিষয় বেছে নাও।",
+    modeQaTitle: "প্রশ্ন করো", modeSetTitle: "প্র্যাকটিস সেট", modeOneTitle: "একটা একটা করে", modeQuizTitle: "কুইজ",
+    qaTitle: "❓ প্রশ্ন করো",
+    samplesHint: "নিচের যেকোনো প্রশ্নে ক্লিক করো, অথবা নিজে টাইপ করো:",
+    askPlaceholder: "আরেকটা প্রশ্ন লিখো...", askBtn: "জিজ্ঞেস করো",
     answering: "⌛ উত্তর তৈরি হচ্ছে...",
     keyPoints: "🔑 মূল পয়েন্ট", formula: "📐 সূত্র", examples: "💡 উদাহরণ", summary: "📌 সারসংক্ষেপ",
-    explainMore: "🔍 আরও বুঝিয়ে বলুন", explaining: "⌛ আরও বোঝাচ্ছি...",
+    explainMore: "🔍 আরও বুঝিয়ে বলো", explaining: "⌛ আরও বোঝানো হচ্ছে...",
     detailTitle: "🔍 বিস্তারিত ব্যাখ্যা", moreExamples: "আরও উদাহরণ",
     setTitle: "📝 প্র্যাকটিস সেট", setLabel: "সেট",
     generating: "⌛ প্রশ্ন তৈরি হচ্ছে...",
-    showAns: "👁️ উত্তর দেখান", hideAns: "উত্তর লুকান", anotherSet: "🔄 আরেকটা সেট দিন",
+    showAns: "👁️ উত্তর দেখাও", hideAns: "উত্তর লুকাও", anotherSet: "🔄 আরেকটা সেট দাও",
     oneTitle: "🎯 একটা একটা করে", qLabel: "প্রশ্ন",
-    hintBtn: "💡 Hint দিন", revealAns: "উত্তর দেখান", nextQ: "➡️ পরের প্রশ্ন",
-    didSolve: "আপনি কি পেরেছিলেন?", solved: "✅ পেরেছি", notSolved: "❌ পারিনি",
+    hintBtn: "💡 Hint দাও", revealAns: "উত্তর দেখাও", nextQ: "➡️ পরের প্রশ্ন",
+    didSolve: "তুমি কি পেরেছিলে?", solved: "✅ পেরেছি", notSolved: "❌ পারিনি",
     solvedMsg: "🎉 দারুণ!", notSolvedMsg: "ঠিক আছে, পরের বার হবে।",
-    newChat: "➕ নতুন কথোপকথন", history: "আগের সেশন", noSessions: "কোনো আগের সেশন নেই",
-    loadingSessions: "⏳ লোড হচ্ছে...",
+    newChat: "নতুন কথোপকথন", history: "আগের সেশন", noSessions: "কোনো আগের সেশন নেই",
+    loadingSessions: "লোড হচ্ছে...", loadingSession: "সেশন লোড হচ্ছে...",
+    loadingScope: "⌛ লোড হচ্ছে...",
     quizErrorMsg: "⚠️ কুইজ তৈরি করতে সমস্যা হয়েছে।",
-    quizRetry: "🔄 আবার চেষ্টা করুন",
-    quizStillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখুন।",
+    quizRetry: "🔄 আবার চেষ্টা করো",
+    quizStillRunning: "⏳ এখনো চলছে — একটু পরে আবার দেখো।",
+    wizardSubjectTitle: "কোন বিষয়ে প্র্যাকটিস করতে চাও?",
+    wizardSubjectSub: "একটা বিষয় বেছে নাও",
+    wizardChapterTitle: "কোন অধ্যায়?",
+    wizardChapterSub: "একটা অধ্যায় বেছে নাও, অথবা পুরো বিষয় নিয়ে প্র্যাকটিস শুরু করো",
+    wizardTopicTitle: "কোন টপিক?",
+    wizardTopicSub: "একটা টপিক বেছে নাও, অথবা পুরো অধ্যায় নিয়ে প্র্যাকটিস শুরু করো",
+    back: "← পেছনে যাও",
+    noSubjects: "এই ক্লাসের জন্য কোনো বিষয় পাওয়া যায়নি।",
+    noChapters: "এই বিষয়ে কোনো অধ্যায় পাওয়া যায়নি।",
+    noTopics: "এই অধ্যায়ে কোনো টপিক পাওয়া যায়নি।",
+    skipSubject: "+ সরাসরি এই বিষয়ের ওপর প্র্যাকটিস শুরু করো",
+    skipChapter: "+ সরাসরি এই অধ্যায়ের ওপর প্র্যাকটিস শুরু করো",
   },
   english: {
-    subtitle: "Ask questions or practice — in your language",
+    breadcrumb: "Practice with Progga",
+    pageTitle: "Practice with Progga",
+    subtitle: "Ask questions or practice — in your own language.",
+    setupLabel: "Setup",
     step1: "What do you want to study?",
+    step2Title: "Choose what to do",
     selectClass: "Select class", selectSubject: "Select subject",
     selectChapter: "Select chapter", selectTopic: "Select topic",
     classL: "Class", subjectL: "Subject", chapterL: "Chapter (optional)", topicL: "Topic (optional)",
-    lang: "Language:",
-    hintReady: "Pick a tab below — everything you do stays here; scroll up to see earlier ones.",
-    hintPick: "Select at least a Subject to start.",
-    tabQA: "❓ Ask", tabSet: "📝 Practice Set", tabOne: "🎯 One by one",
+    lang: "Answer language:",
+    hintReady: "Pick a mode above — everything you do stays here as you go.",
+    hintPick: "Select at least a subject to start.",
+    modeQaTitle: "Ask", modeSetTitle: "Practice Set", modeOneTitle: "One by one", modeQuizTitle: "Quiz",
     qaTitle: "❓ Ask a question",
     samplesHint: "Click any question below, or type your own:",
     askPlaceholder: "Type another question...", askBtn: "Ask",
@@ -63,11 +88,24 @@ const TXT = {
     hintBtn: "💡 Hint", revealAns: "Show answer", nextQ: "➡️ Next question",
     didSolve: "Did you solve it?", solved: "✅ Got it", notSolved: "❌ Missed it",
     solvedMsg: "🎉 Great job!", notSolvedMsg: "That's okay — next time!",
-    newChat: "➕ New conversation", history: "Past sessions", noSessions: "No past sessions",
-    loadingSessions: "⏳ Loading...",
+    newChat: "New conversation", history: "Past sessions", noSessions: "No past sessions",
+    loadingSessions: "Loading...", loadingSession: "Loading session...",
+    loadingScope: "⌛ Loading...",
     quizErrorMsg: "⚠️ Failed to generate quiz.",
     quizRetry: "🔄 Try Again",
     quizStillRunning: "⏳ Still running — check back in a moment.",
+    wizardSubjectTitle: "Which subject do you want to practice?",
+    wizardSubjectSub: "Pick a subject to get started",
+    wizardChapterTitle: "Which chapter?",
+    wizardChapterSub: "Pick a chapter, or start practicing the whole subject",
+    wizardTopicTitle: "Which topic?",
+    wizardTopicSub: "Pick a topic, or start practicing the whole chapter",
+    back: "← Back",
+    noSubjects: "No subjects found for this class.",
+    noChapters: "No chapters found for this subject.",
+    noTopics: "No topics found for this chapter.",
+    skipSubject: "+ Start practicing this whole subject",
+    skipChapter: "+ Start practicing this whole chapter",
   },
 };
 
@@ -79,15 +117,62 @@ function sessionTitle(s) {
   return str;
 }
 
-function SelectField({ label, icon, value, onChange, disabled, options, placeholder }) {
+function SelectField({ label, value, onChange, disabled, options, placeholder }) {
   return (
-    <div style={{ ...pillWrap, ...(disabled ? pillWrapDisabled : {}) }}>
-      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}
-        aria-label={label} style={pillSelect}>
-        <option value="">{placeholder}</option>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-      <span style={pillCaret}>▾</span>
+    <div className="gw-field">
+      <label className="gw-label">{label}</label>
+      <div className="gw-select">
+        <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} aria-label={label}>
+          <option value="">{placeholder}</option>
+          {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+             strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+/* ── the student wizard (Subject → Chapter → Topic) ────────────────────────
+   Every student, any class — one big-card decision per screen instead of
+   four dropdowns on one page. Chapter and topic are optional here (same as
+   the dropdown flow always allowed), so both those screens also offer a
+   "practice the whole X now" shortcut via skipToMode below. A student whose
+   account predates the class field still gets the SelectField grid above. */
+function PickCard({ label, onClick }) {
+  return (
+    <button type="button" className="gw-mode-card" onClick={onClick}>
+      <span className="gw-mode-icon">{label.charAt(0).toUpperCase()}</span>
+      <span className="gw-mode-title">{label}</span>
+    </button>
+  );
+}
+
+function TopicRow({ index, label, onClick }) {
+  return (
+    <button type="button" className="gw-topic-row" onClick={onClick}>
+      <span className="gw-topic-num">{index}</span>
+      <span className="gw-topic-name">{label}</span>
+      <svg className="gw-topic-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none"
+           stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+    </button>
+  );
+}
+
+function WizardCrumbs({ subjectName, chapterName, onSubject, onChapter }) {
+  return (
+    <div className="gw-crumb-bar">
+      <button type="button" className="gw-crumb-chip" onClick={onSubject}>{subjectName}</button>
+      {chapterName && (
+        <>
+          <span className="gw-crumb-sep">/</span>
+          <button type="button" className="gw-crumb-chip" onClick={onChapter}>{chapterName}</button>
+        </>
+      )}
     </div>
   );
 }
@@ -106,6 +191,10 @@ export default function ChatbotPage() {
   const [selectedSubject, setSelectedSubject] = useState("");
   const [selectedChapter, setSelectedChapter] = useState("");
   const [selectedTopicId, setSelectedTopicId] = useState("");
+  // Wizard-only: true once the student picks "practice the whole
+  // subject/chapter" instead of narrowing further, or once a past session is
+  // resumed (loadHistory sets this too — there's nothing left to pick).
+  const [skipToMode, setSkipToMode] = useState(false);
   const [language, setLanguage] = useState("bangla");
   const [mode, setMode] = useState(null);
 
@@ -123,7 +212,6 @@ export default function ChatbotPage() {
   const [setFeed, setSetFeed] = useState([]);
   const [obFeed, setObFeed] = useState([]);
   const [busy, setBusy] = useState(false);
-  const [historyLoaded, setHistoryLoaded] = useState(false);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [dropdownLoading, setDropdownLoading] = useState(false);
   const [sessions, setSessions] = useState([]);
@@ -134,7 +222,6 @@ export default function ChatbotPage() {
   const prevCount = useRef(0);
   const [quizFeed, setQuizFeed] = useState([]);
   const [quizError, setQuizError] = useState(null); // { blockId, message, isTimeout }
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const clearFeeds = () => {
     setSamples([]); setQuestion("");
@@ -147,6 +234,10 @@ export default function ChatbotPage() {
       const { data } = await chatHistory(sid);
       if (data && data.session_id) {
         setActiveSid(data.session_id);
+        // A resumed session has its scope (and usually its content) already
+        // decided — jump straight past the wizard to the mode/feed view
+        // rather than making them re-pick a subject with nothing to pick.
+        setSkipToMode(true);
         const sc = data.scope || {};
         if (sc.class_name) { setSelectedClass(sc.class_name); try { const r = await getSubjects(sc.class_name); setSubjectList(r.data || []); } catch { } }
         if (sc.subject_id) { setSelectedSubject(String(sc.subject_id)); try { const r = await getChapters(sc.subject_id); setChapterList(r.data || []); } catch { } }
@@ -176,22 +267,36 @@ export default function ChatbotPage() {
     if (!stored) { navigate("/login"); return; }
     const u = JSON.parse(stored);
     setUser(u);
-    getClasses().then(({ data }) => setClassList(data || [])).catch(() => { });
+    if (u.class_name) {
+      // A student's class is fixed at signup — skip the class picker and go
+      // straight to that class's subjects.
+      setSelectedClass(u.class_name);
+      getSubjects(u.class_name).then(({ data }) => setSubjectList(data || [])).catch(() => { });
+    } else {
+      getClasses().then(({ data }) => setClassList(data || [])).catch(() => { });
+    }
     refreshSessions(u.user_id);
   }, [navigate, refreshSessions]);
 
-  const didInitialLoad = useRef(false);
-  useEffect(() => {
-    if (!user || didInitialLoad.current) return;
-    didInitialLoad.current = true;
-    setHistoryLoaded(true);
-  }, [user]);
+  // Pre-existing accounts predate the class field and have no class_name yet
+  // — they fall back to the manual picker below rather than being blocked.
+  const isStudentWithClass = !!user?.class_name;
 
   useEffect(() => {
     const count = qaFeed.length + setFeed.length + obFeed.length;
     if (count > prevCount.current) feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
     prevCount.current = count;
   }, [qaFeed, setFeed, obFeed]);
+
+  const handleLogout = () => {
+    ["access_token", "refresh_token", "user", "chatbot_session_id"].forEach((k) =>
+      localStorage.removeItem(k)
+    );
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("activeJob:"))
+      .forEach((k) => localStorage.removeItem(k));
+    navigate("/", { state: { splash: true } });
+  };
 
   const openSession = async (sid) => {
     if (sid === activeSid || sessionLoading) return;
@@ -203,8 +308,17 @@ export default function ChatbotPage() {
 
   const newChat = () => {
     chat.resetSession(); setActiveSid(null); clearFeeds();
-    setSelectedClass(""); setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
-    setSubjectList([]); setChapterList([]); setTopicList([]);
+    setSkipToMode(false);
+    setSelectedSubject(""); setSelectedChapter(""); setSelectedTopicId("");
+    setChapterList([]); setTopicList([]);
+    if (isStudentWithClass) {
+      // The class picker is hidden for these students — re-populate their
+      // class's subjects instead of leaving the (invisible) class blank.
+      setSubjectList([]);
+      getSubjects(user.class_name).then(({ data }) => setSubjectList(data || [])).catch(() => { });
+    } else {
+      setSelectedClass(""); setSubjectList([]);
+    }
   };
 
   const resetOnSelectionChange = () => { chat.resetSession(); setActiveSid(null); clearFeeds(); };
@@ -225,6 +339,38 @@ export default function ChatbotPage() {
   const onTopic = (v) => { setSelectedTopicId(v); resetOnSelectionChange(); };
   const onLanguage = (v) => { if (!langLocked) setLanguage(v); };
   const canStart = !!selectedSubject;
+
+  // Wizard-only: going back a step just clears that level's selection and
+  // everything under it — chapterList/subjectList are still cached from the
+  // forward trip, so no refetch is needed.
+  const backToSubjectStep = () => {
+    setSkipToMode(false);
+    setSelectedSubject(""); setChapterList([]); setSelectedChapter("");
+    setTopicList([]); setSelectedTopicId("");
+    resetOnSelectionChange();
+  };
+  const backToChapterStep = () => {
+    setSkipToMode(false);
+    setSelectedChapter(""); setTopicList([]); setSelectedTopicId("");
+    resetOnSelectionChange();
+  };
+  // Undoes whichever way the mode step was reached — a topic pick (clearing
+  // it lands back on the topic step) or a skip from chapter/subject (clearing
+  // the flag lands back wherever selectedChapter/selectedSubject say it
+  // should, since the step is derived from that state either way).
+  const backFromMode = () => {
+    setSkipToMode(false);
+    setSelectedTopicId("");
+  };
+  const wizardStep = skipToMode ? "picker"
+    : !selectedSubject ? "subject"
+    : !selectedChapter ? "chapter"
+    : !selectedTopicId ? "topic"
+    : "picker";
+  const showModeStep = !isStudentWithClass || wizardStep === "picker";
+  const selectedSubjectName = subjectList.find((s) => String(s.subject_id) === String(selectedSubject))?.name || "";
+  const selectedChapterObj = chapterList.find((c) => String(c.chapter_id) === String(selectedChapter));
+  const selectedChapterName = selectedChapterObj ? `Ch ${selectedChapterObj.chapter_no}: ${selectedChapterObj.name}` : "";
   const langLocked = qaFeed.length > 0 || setFeed.length > 0 || obFeed.length > 0;
   const afterFirstContent = () => refreshSessions(user.user_id);
 
@@ -361,486 +507,520 @@ export default function ChatbotPage() {
     } catch { }
   };
 
-  return (
-    <div style={pageStyle}>
-      <style>{`@keyframes skeletonPulse { 0% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }`}</style>
-      {/* ===== TOP NAVBAR ===== */}
-      <nav style={navStyle}>
-        <div style={navInner}>
-          {/* Logo */}
-          <BrandLogo onClick={() => navigate(-1)} tone="light" />
+  const MODES = [
+    { key: "qa", icon: "❓", color: "#ef4444", bg: "#fee2e2", title: t.modeQaTitle, sub: language === "bangla" ? "Instant answer পাও" : "Get an instant answer", action: openQA },
+    { key: "set", icon: "📝", color: "#0ea5e9", bg: "#e0f2fe", title: t.modeSetTitle, sub: language === "bangla" ? "Questions practice করো" : "Practice questions", action: openSet },
+    { key: "oneByone", icon: "🎯", color: "#16a34a", bg: "#dcfce7", title: t.modeOneTitle, sub: language === "bangla" ? "Step by step practice" : "Step by step practice", action: openOneByOne },
+    { key: "quiz", icon: "📋", color: "#f59e0b", bg: "#fef3c7", title: t.modeQuizTitle, sub: language === "bangla" ? "MCQ quiz নাও" : "Take an MCQ quiz", action: openQuiz },
+  ];
 
-          {/* Center - Breadcrumb */}
-          <div style={navCenter}>
-            <span style={navBreadcrumb}>
-              🏠 / <span style={{color:"#7c3aed", fontWeight:700, marginLeft:"4px"}}>Study Chatbot</span>
-            </span>
-          </div>
+  const totalStepOneFields = isStudentWithClass ? 3 : 4;
+  const chosenStepOne = [
+    ...(isStudentWithClass ? [] : [selectedClass]),
+    selectedSubject, selectedChapter, selectedTopicId,
+  ].filter(Boolean).length;
 
-          {/* Right Side */}
-          <div style={navRight}>
-            <div style={langToggle}>
-              {[["bangla","BN"],["english","EN"]].map(([v,l]) => (
-                <button key={v} onClick={() => onLanguage(v)} disabled={langLocked}
-                  style={langBtn(language === v, langLocked && language !== v)}>{l}</button>
-              ))}
-            </div>
-            <div style={userBadge}>
-              <div style={userAvatar}>{(user?.name || "S")[0].toUpperCase()}</div>
-              <span style={userName}>{user?.name || "Test Student"}</span>
-            </div>
-          </div>
+  const rail = (
+    <section className="as-panel sc">
+      <button type="button" onClick={newChat} disabled={sessionLoading}
+        className="wg-solid" style={{ width: "100%", justifyContent: "center", marginBottom: "18px" }}>
+        <IconPlus /> {t.newChat}
+      </button>
+      <h3 className="sc-title">{t.history}</h3>
+      {sessionsListLoading && <p className="sc-note">{t.loadingSessions}</p>}
+      {!sessionsListLoading && sessions.length === 0 && (
+        <div className="sc-empty">
+          <span className="sc-empty-mark"><IconSpark /></span>
+          <p>{t.noSessions}</p>
         </div>
-      </nav>
-
-      {/* ===== MAIN LAYOUT ===== */}
-      <div style={layoutStyle}>
-        {/* SIDEBAR */}
-        <aside style={sidebarStyle}>
-          <button onClick={newChat} disabled={sessionLoading} style={{...newChatBtnStyle, ...(sessionLoading ? {opacity:0.5, cursor:"not-allowed"} : {})}}>
-            <span>➕</span> {t.newChat}
-          </button>
-          <div style={sidebarSectionLabel}>{t.history}</div>
-          <div style={sessionListStyle}>
-            {sessionsListLoading && (
-              <>
-                <div style={sessionSkeleton} />
-                <div style={sessionSkeleton} />
-                <div style={sessionSkeleton} />
-                <div style={{...emptySession, marginTop:"4px"}}>{t.loadingSessions}</div>
-              </>
-            )}
-            {!sessionsListLoading && sessions.length === 0 && <div style={emptySession}>{t.noSessions}</div>}
-            {!sessionsListLoading && sessions.map((s) => {
-              const isLoadingThis = loadingSid === s.session_id;
-              const isDisabled = sessionLoading && !isLoadingThis;
-              return (
-                <button key={s.session_id} onClick={() => openSession(s.session_id)}
+      )}
+      {!sessionsListLoading && sessions.length > 0 && (
+        <ul className="sc-list">
+          {sessions.map((s) => {
+            const isLoadingThis = loadingSid === s.session_id;
+            const isDisabled = sessionLoading && !isLoadingThis;
+            return (
+              <li key={s.session_id}>
+                <button type="button"
+                  className={`sc-item${s.session_id === activeSid ? " is-active" : ""}`}
                   disabled={isDisabled}
-                  style={{...sessionItemStyle(s.session_id === activeSid), ...(isDisabled ? {opacity:0.5, cursor:"not-allowed"} : {}), ...(isLoadingThis ? {border:"2px solid #7c3aed"} : {})}}>
-                  <span style={{fontSize:"14px"}}>{isLoadingThis ? "⏳" : "📖"}</span>
-                  <span style={{flex:1, textAlign:"left", lineHeight:1.4}}>{sessionTitle(s)}</span>
+                  aria-current={s.session_id === activeSid ? "true" : undefined}
+                  onClick={() => openSession(s.session_id)}>
+                  <span className="sc-item-name">{isLoadingThis ? "⏳ " : ""}{sessionTitle(s)}</span>
                 </button>
-              );
-            })}
-          </div>
-        </aside>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
 
-        {/* MAIN CONTENT */}
-        <div style={mainStyle}>
-          {/* ===== AI STUDY BUDDY HEADER CARD ===== */}
-          <div style={buddyCard}>
-            <div style={buddyLeft}>
-              <div style={buddyAvatar}>🤖</div>
-              <div>
-                <h1 style={buddyTitle}> <span style={{color:"#7c3aed"}}>AI Study Buddy</span></h1>
-                <p style={buddySub}>{t.subtitle}</p>
+  return (
+    <AppShell breadcrumb={t.breadcrumb} user={user} onLogout={handleLogout} tone="chatbot" rail={rail}>
+      <section className="gw-head">
+        <span className="gw-head-icon"><IconChatbot /></span>
+        <div>
+          <h1>{t.pageTitle}</h1>
+          <p>{t.subtitle}</p>
+        </div>
+      </section>
+
+      <div style={langRow}>
+        <span style={langRowLabel}>{t.lang}</span>
+        <div style={langToggle}>
+          {[["bangla", "BN"], ["english", "EN"]].map(([v, l]) => (
+            <button key={v} type="button" onClick={() => onLanguage(v)} disabled={langLocked}
+              style={langBtn(language === v, langLocked && language !== v)}>{l}</button>
+          ))}
+        </div>
+      </div>
+
+      {isStudentWithClass ? (
+        <>
+          {wizardStep === "subject" && (
+            <section className="as-panel gw-step">
+              <header className="gw-step-head">
+                <span className="gw-step-no">1</span>
+                <div className="gw-step-text">
+                  <h2>{t.wizardSubjectTitle}</h2>
+                  <p>{t.wizardSubjectSub}</p>
+                </div>
+              </header>
+              {subjectList.length === 0 ? (
+                <p className="gw-pick-empty">{t.noSubjects}</p>
+              ) : (
+                <div className="gw-mode-grid">
+                  {subjectList.map((s) => (
+                    <PickCard key={s.subject_id} label={s.name} onClick={() => onSubject(s.subject_id)} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {wizardStep === "chapter" && (
+            <section className="as-panel gw-step">
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "4px" }}>
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToSubjectStep}>{t.back}</button>
+                <button type="button" className="gw-sample-open" style={{ marginBottom: 0 }} onClick={() => setSkipToMode(true)}>
+                  {t.skipSubject}
+                </button>
+              </div>
+              <header className="gw-step-head">
+                <span className="gw-step-no">2</span>
+                <div className="gw-step-text">
+                  <h2>{t.wizardChapterTitle}</h2>
+                  <p>{t.wizardChapterSub}</p>
+                </div>
+              </header>
+              {chapterList.length === 0 ? (
+                <p className="gw-pick-empty">{t.noChapters}</p>
+              ) : (
+                <div className="gw-mode-grid">
+                  {chapterList.map((ch) => (
+                    <PickCard
+                      key={ch.chapter_id}
+                      label={`Ch ${ch.chapter_no}: ${ch.name}`}
+                      onClick={() => onChapter(ch.chapter_id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {wizardStep === "topic" && (
+            <section className="as-panel gw-step">
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "4px" }}>
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToChapterStep}>{t.back}</button>
+                <button type="button" className="gw-sample-open" style={{ marginBottom: 0 }} onClick={() => setSkipToMode(true)}>
+                  {t.skipChapter}
+                </button>
+              </div>
+              <header className="gw-step-head">
+                <span className="gw-step-no">3</span>
+                <div className="gw-step-text">
+                  <h2>{t.wizardTopicTitle}</h2>
+                  <p>{t.wizardTopicSub}</p>
+                </div>
+              </header>
+              {topicList.length === 0 ? (
+                <p className="gw-pick-empty">{t.noTopics}</p>
+              ) : (
+                <div className="gw-topic-list">
+                  {topicList.map((tp, i) => (
+                    <TopicRow key={tp.topic_id} index={i + 1} label={tp.name} onClick={() => onTopic(tp.topic_id)} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      ) : (
+        <section className="as-panel gw-step">
+          <header className="gw-step-head">
+            <span className={`gw-step-no${canStart ? " is-done" : ""}`}>
+              {canStart ? <IconCheck /> : "1"}
+            </span>
+            <div className="gw-step-text">
+              <h2>{t.step1}</h2>
+            </div>
+            <div className="gw-tally">
+              <span className="gw-tally-count">
+                {t.setupLabel} <strong>{chosenStepOne}/{totalStepOneFields}</strong>
+              </span>
+              <div className="gw-tally-track">
+                <div className="gw-tally-fill" style={{ width: `${(chosenStepOne / totalStepOneFields) * 100}%` }} />
               </div>
             </div>
-            <div style={liveBadge}><span style={liveDot} />LIVE</div>
-          </div>
+          </header>
 
-          {/* ===== STUDY SELECTION CARD ===== */}
-          <div style={studySelectCard}>
-            <div style={studySelectHeader}><span>📚</span><span>{t.step1}</span></div>
-            <div style={studySelectGrid}>
-              <SelectField label={t.classL} icon="🏫" value={selectedClass} onChange={onClass}
+          <div className="gw-fields">
+            {!isStudentWithClass && (
+              <SelectField label={t.classL} value={selectedClass} onChange={onClass}
                 placeholder={t.selectClass} options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))} />
-              <SelectField label={t.subjectL} icon="📚" value={selectedSubject} onChange={onSubject}
-                disabled={!selectedClass} placeholder={t.selectSubject}
-                options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))} />
-            </div>
-            <div style={studySelectGridSecondary}>
-              <SelectField label={t.chapterL} icon="🧩" value={selectedChapter} onChange={onChapter}
-                disabled={!selectedSubject} placeholder={t.selectChapter}
-                options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))} />
-              <SelectField label={t.topicL} icon="🎯" value={selectedTopicId} onChange={onTopic}
-                disabled={!selectedChapter} placeholder={t.selectTopic}
-                options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))} />
-            </div>
-
-            {/* HINT */}
-            <div style={hintBox}>
-              <span>💡</span>
-              <span style={{fontSize:"13px", color:"#6b7280", fontWeight:600}}>
-                {dropdownLoading ? (language === "bangla" ? "⌛ লোড হচ্ছে..." : "⌛ Loading...") : (canStart ? t.hintReady : t.hintPick)}
-              </span>
-            </div>
+            )}
+            <SelectField label={t.subjectL} value={selectedSubject} onChange={onSubject}
+              disabled={!selectedClass} placeholder={t.selectSubject}
+              options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))} />
+            <SelectField label={t.chapterL} value={selectedChapter} onChange={onChapter}
+              disabled={!selectedSubject} placeholder={t.selectChapter}
+              options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))} />
+            <SelectField label={t.topicL} value={selectedTopicId} onChange={onTopic}
+              disabled={!selectedChapter} placeholder={t.selectTopic}
+              options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))} />
           </div>
 
-          {/* ===== MODE GRID (2x2) ===== */}
-          <div style={modeGrid}>
-            {[
-              { key:"qa", icon:"❓", color:"#ef4444", bg:"#fee2e2", title:t.tabQA.replace(/^[^\p{L}]*/u,""), sub: language==="bangla" ? "Instant answer পাও" : "Get an instant answer" },
-              { key:"set", icon:"📝", color:"#0ea5e9", bg:"#e0f2fe", title:t.tabSet.replace(/^[^\p{L}]*/u,""), sub: language==="bangla" ? "Questions practice করুন" : "Practice questions" },
-              { key:"oneByone", icon:"🎯", color:"#16a34a", bg:"#dcfce7", title:t.tabOne.replace(/^[^\p{L}]*/u,""), sub: language==="bangla" ? "Step by step practice" : "Step by step practice" },
-              { key:"quiz", icon:"📋", color:"#f59e0b", bg:"#fef3c7", title:"Quiz", sub: language==="bangla" ? "MCQ quiz নিন" : "Take an MCQ quiz" },
-            ].map(({key, icon, color, bg, title, sub}) => (
-              <button key={key}
-                onClick={() => key==="qa" ? openQA() : key==="set" ? openSet() : key==="oneByone" ? openOneByOne() : openQuiz()}
-                disabled={!canStart || sessionLoading}
-                style={modeCard(color, mode === key, !canStart || sessionLoading)}>
-                <span style={modeCardIcon(bg)}>{icon}</span>
-                <span style={modeCardTitle}>{title}</span>
-                <span style={modeCardSub}>{sub}</span>
+          <p className={`gw-hint${canStart ? " is-done" : ""}`}>
+            <IconSpark />
+            {dropdownLoading ? t.loadingScope : (canStart ? t.hintReady : t.hintPick)}
+          </p>
+        </section>
+      )}
+
+      {/* ── STEP 2 · mode ── */}
+      {showModeStep && (
+        <section className="as-panel gw-step">
+          {isStudentWithClass && (
+            <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
+              <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backFromMode}>{t.back}</button>
+              <WizardCrumbs
+                subjectName={selectedSubjectName}
+                chapterName={selectedChapterName}
+                onSubject={backToSubjectStep}
+                onChapter={backToChapterStep}
+              />
+            </div>
+          )}
+          <header className="gw-step-head">
+            <span className={`gw-step-no${mode ? " is-done" : ""}`}>
+              {mode ? <IconCheck /> : "2"}
+            </span>
+            <div className="gw-step-text">
+              <h2>{t.step2Title}</h2>
+            </div>
+          </header>
+
+          <div className="gw-mode-grid">
+            {MODES.map(({ key, icon, color, bg, title, sub, action }) => (
+              <button key={key} type="button"
+                className={`gw-mode-card${mode === key ? " is-active" : ""}`}
+                style={{ "--mode-color": color, "--mode-wash": bg }}
+                onClick={action}
+                disabled={!canStart || sessionLoading}>
+                <span className="gw-mode-icon">{icon}</span>
+                <span className="gw-mode-title">{title}</span>
+                <span className="gw-mode-sub">{sub}</span>
               </button>
             ))}
           </div>
+        </section>
+      )}
 
-          {/* SESSION LOADING */}
-          {sessionLoading && (
-            <div style={loadingCard}>
-              <span style={{fontSize:"24px", animation:"spin 1s linear infinite"}}>⏳</span>
-              <span style={{fontWeight:700, color:"#7c3aed"}}>
-                {language === "bangla" ? "সেশন লোড হচ্ছে..." : "Loading session..."}
-              </span>
+      {/* SESSION LOADING */}
+      {sessionLoading && (
+        <div className="as-panel" style={loadingCard}>
+          <span className="wg-spinner" style={{ color: "var(--tone)" }} />
+          <span style={{ fontWeight: 700, color: "var(--tone)" }}>{t.loadingSession}</span>
+        </div>
+      )}
+
+      {/* QUIZ MODE */}
+      {mode === "quiz" && (
+        <section className="as-panel">
+          <h3 style={contentTitle}>📋 {t.modeQuizTitle}</h3>
+
+          {/* Client-side timeout — distinct from a real FAILED */}
+          {quizError?.isTimeout && (
+            <div style={quizTimeoutCard}>
+              <span>{t.quizStillRunning}</span>
             </div>
           )}
 
-          {/* QUIZ MODE */}
-          {mode === "quiz" && (
-            <div style={contentCard}>
-              <h3 style={contentTitle}>📋 Quiz</h3>
+          {/* Real FAILED — distinct from the timeout above, offers Retry */}
+          {quizError && !quizError.isTimeout && (
+            <div style={quizErrorCard}>
+              <span style={{ color: "#991b1b", fontWeight: 600, fontSize: "13px" }}>⚠️ {quizError.message}</span>
+              <button onClick={addQuiz} style={quizRetryBtn}>{t.quizRetry}</button>
+            </div>
+          )}
 
-              {/* Client-side timeout — distinct from a real FAILED */}
-              {quizError?.isTimeout && (
-                <div style={quizTimeoutCard}>
-                  <span>{t.quizStillRunning}</span>
-                </div>
-              )}
-
-              {/* Real FAILED — distinct from the timeout above, offers Retry */}
-              {quizError && !quizError.isTimeout && (
-                <div style={quizErrorCard}>
-                  <span style={{ color: "#991b1b", fontWeight: 600, fontSize: "13px" }}>⚠️ {quizError.message}</span>
-                  <button onClick={addQuiz} style={quizRetryBtn}>{t.quizRetry}</button>
-                </div>
-              )}
-
-              <div style={{display:"flex", flexDirection:"column", gap:"16px", marginTop:"12px"}}>
-                {quizFeed.map((b, idx) => {
-                  const correctCount = b.questions.filter(q => b.answers[q.question_number] === q.correct_option).length;
-                  return (
-                    <div key={b.id} style={feedBlock}>
-                      <div style={setLabel}>Quiz {idx + 1}</div>
-                      {b.loading && <p style={mutedText}>⌛ Quiz তৈরি হচ্ছে...</p>}
-                      {b.questions.map((q) => {
-                        const sel = b.answers[q.question_number];
-                        const answered = sel != null;
-                        const hints = b.hints[q.question_number] || [];
-                        const hintsUsed = b.hintsUsed[q.question_number] || 0;
-                        return (
-                          <div key={q.question_number} style={questionCard}>
-                            <div style={questionText}>{q.question_number}. {q.question_text}</div>
-                            <div style={{display:"flex", flexDirection:"column", gap:"6px", marginTop:"10px"}}>
-                              {q.options.map((opt) => {
-                                const isSelected = sel === opt.label;
-                                const isCorrect = opt.label === q.correct_option;
-                                let bg = "#f8fafc", border = "1.5px solid #e2e8f0", color = "#374151";
-                                if (answered) {
-                                  if (isCorrect) { bg = "#ecfdf5"; border = "1.5px solid #22c55e"; color = "#166534"; }
-                                  else if (isSelected) { bg = "#fef2f2"; border = "1.5px solid #ef4444"; color = "#991b1b"; }
-                                }
-                                return (
-                                  <button key={opt.label} onClick={() => selectQuizOption(b.id, q.question_number, opt.label)}
-                                    disabled={answered}
-                                    style={{textAlign:"left", padding:"10px 14px", borderRadius:"10px", background:bg, border, color, fontSize:"13px", fontWeight:600, cursor:answered?"default":"pointer", transition:"all 0.15s"}}>
-                                    {opt.label}. {opt.text}
-                                    {answered && isCorrect && " ✅"}
-                                    {answered && isSelected && !isCorrect && " ❌"}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                            {answered && (
-                              <div style={{marginTop:"8px", fontSize:"13px", fontWeight:700, color: sel===q.correct_option?"#16a34a":"#dc2626"}}>
-                                {sel===q.correct_option ? "✅ সঠিক!" : `❌ ভুল — সঠিক উত্তর: ${q.correct_option}`}
-                              </div>
-                            )}
-                            {hints.map((h,i) => <div key={i} style={hintRevealStyle}>💡 Hint {i+1}: {h}</div>)}
-                            {!answered && hintsUsed < 2 && (
-                              <button onClick={() => quizHint(b.id, q.question_number, q.content_id)}
-                                style={{...actionBtn("#f59e0b"), marginTop:"8px", padding:"6px 12px", fontSize:"12px"}}>
-                                💡 Hint ({hintsUsed}/2)
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+            {quizFeed.map((b, idx) => {
+              const correctCount = b.questions.filter(q => b.answers[q.question_number] === q.correct_option).length;
+              return (
+                <div key={b.id} style={feedBlock}>
+                  <div style={setLabel}>Quiz {idx + 1}</div>
+                  {b.loading && <p style={mutedText}>⌛ Quiz তৈরি হচ্ছে...</p>}
+                  {b.questions.map((q) => {
+                    const sel = b.answers[q.question_number];
+                    const answered = sel != null;
+                    const hints = b.hints[q.question_number] || [];
+                    const hintsUsed = b.hintsUsed[q.question_number] || 0;
+                    return (
+                      <div key={q.question_number} style={questionCard}>
+                        <div style={questionText}>{q.question_number}. {q.question_text}</div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "10px" }}>
+                          {q.options.map((opt) => {
+                            const isSelected = sel === opt.label;
+                            const isCorrect = opt.label === q.correct_option;
+                            let bg = "var(--dhi-surface-sunken)", border = "1.5px solid var(--dhi-line)", color = "var(--dhi-ink)";
+                            if (answered) {
+                              if (isCorrect) { bg = "#ecfdf5"; border = "1.5px solid #22c55e"; color = "#166534"; }
+                              else if (isSelected) { bg = "#fef2f2"; border = "1.5px solid #ef4444"; color = "#991b1b"; }
+                            }
+                            return (
+                              <button key={opt.label} onClick={() => selectQuizOption(b.id, q.question_number, opt.label)}
+                                disabled={answered}
+                                style={{ textAlign: "left", padding: "10px 14px", borderRadius: "10px", background: bg, border, color, fontSize: "13px", fontWeight: 600, cursor: answered ? "default" : "pointer", transition: "all 0.15s" }}>
+                                {opt.label}. {opt.text}
+                                {answered && isCorrect && " ✅"}
+                                {answered && isSelected && !isCorrect && " ❌"}
                               </button>
-                            )}
-                          </div>
-                        );
-                      })}
-                      {b.questions.length > 0 && (
-                        <div style={{display:"flex", gap:"10px", alignItems:"center", marginTop:"12px", flexWrap:"wrap"}}>
-                          <span style={{fontWeight:800, fontSize:"14px", color:"#0f172a"}}>
-                            স্কোর: {correctCount}/{b.questions.length}
-                          </span>
-                          <button onClick={addQuiz} disabled={!b.isLatest||busy} style={actionBtn("#7c3aed")}>📋 আরও Quiz</button>
+                            );
+                          })}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Q&A MODE */}
-          {mode === "qa" && (
-            <div style={contentCard}>
-              <h3 style={contentTitle}>{t.qaTitle}</h3>
-              {qaFeed.length === 0 && samples.length > 0 && (
-                <div style={{marginTop:"12px"}}>
-                  <p style={mutedText}>{t.samplesHint}</p>
-                  <div style={{display:"flex", flexDirection:"column", gap:"8px"}}>
-                    {samples.map((s,i) => (
-                      <button key={i} onClick={() => doAsk(s)} style={sampleBtnStyle}>{s}</button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div style={{display:"flex", flexDirection:"column", gap:"18px", marginTop:"16px"}}>
-                {qaFeed.map((b) => (
-                  <div key={b.id} style={feedBlock}>
-                    <div style={userBubbleStyle}>🙋 {b.question}</div>
-                    {b.loading && <p style={mutedText}>{t.answering}</p>}
-                    {b.answer && (
-                      <div style={answerCardStyle}>
-                        {b.answer.intro && <p style={{margin:0, fontSize:"15px", color:"#0f172a", lineHeight:1.7, fontWeight:500}}>{b.answer.intro}</p>}
-                        {b.answer.key_points?.length > 0 && (
-                          <div style={infoBlock("#f0fdf4","#bbf7d0")}>
-                            <div style={blockLabel}>{t.keyPoints}</div>
-                            <ul style={ulStyle}>{b.answer.key_points.map((k,i) => <li key={i}>{k}</li>)}</ul>
+                        {answered && (
+                          <div style={{ marginTop: "8px", fontSize: "13px", fontWeight: 700, color: sel === q.correct_option ? "#16a34a" : "#dc2626" }}>
+                            {sel === q.correct_option ? "✅ সঠিক!" : `❌ ভুল — সঠিক উত্তর: ${q.correct_option}`}
                           </div>
                         )}
-                        {b.answer.formula?.length > 0 && (
-                          <div style={infoBlock("#fefce8","#fde047")}>
-                            <div style={blockLabel}>{t.formula}</div>
-                            <ul style={ulStyle}>{b.answer.formula.map((f,i) => <li key={i} style={{fontFamily:"monospace"}}>{f}</li>)}</ul>
-                          </div>
-                        )}
-                        {b.answer.examples?.length > 0 && (
-                          <div style={infoBlock("#eff6ff","#bfdbfe")}>
-                            <div style={blockLabel}>{t.examples}</div>
-                            <ul style={ulStyle}>{b.answer.examples.map((e,i) => <li key={i}>{e}</li>)}</ul>
-                          </div>
-                        )}
-                        {b.answer.summary && (
-                          <div style={infoBlock("#f5f3ff","#ddd6fe")}>
-                            <div style={blockLabel}>{t.summary}</div>
-                            <p style={{margin:0, fontSize:"14px", color:"#0f172a"}}>{b.answer.summary}</p>
-                          </div>
-                        )}
-                        {!b.explain && (
-                          <button onClick={() => doExplainMore(b.id)} disabled={b.explainLoading}
-                            style={actionBtn("#7c3aed")}>
-                            {b.explainLoading ? t.explaining : t.explainMore}
+                        {hints.map((h, i) => <div key={i} style={hintRevealStyle}>💡 Hint {i + 1}: {h}</div>)}
+                        {!answered && hintsUsed < 2 && (
+                          <button onClick={() => quizHint(b.id, q.question_number, q.content_id)}
+                            style={{ ...actionBtn("#f59e0b"), marginTop: "8px", padding: "6px 12px", fontSize: "12px" }}>
+                            💡 Hint ({hintsUsed}/2)
                           </button>
                         )}
-                        {b.explain && (
-                          <div style={infoBlock("#faf5ff","#e9d5ff")}>
-                            <div style={blockLabel}>{t.detailTitle}</div>
-                            {b.explain.detailed_explanation && <p style={{fontSize:"14px", color:"#0f172a", lineHeight:1.7}}>{b.explain.detailed_explanation}</p>}
-                            {b.explain.more_examples?.length > 0 && (
-                              <>
-                                <div style={{...blockLabel, marginTop:"8px"}}>{t.moreExamples}</div>
-                                <ul style={ulStyle}>{b.explain.more_examples.map((e,i) => <li key={i}>{e}</li>)}</ul>
-                              </>
-                            )}
-                            {b.explain.analogy && <p style={{fontSize:"14px", color:"#6b21a8", marginTop:"8px", fontStyle:"italic"}}>🧠 {b.explain.analogy}</p>}
-                          </div>
-                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div style={askRow}>
-                <input value={question} onChange={(e) => setQuestion(e.target.value)}
-                  onKeyDown={(e) => e.key==="Enter" && doAsk()}
-                  placeholder={t.askPlaceholder} style={inputStyle} />
-                <button onClick={() => doAsk()} disabled={busy} style={actionBtn("#7c3aed")}>
-                  {busy ? "⌛" : t.askBtn}
-                </button>
-              </div>
-            </div>
-          )}
+                    );
+                  })}
+                  {b.questions.length > 0 && (
+                    <div style={{ display: "flex", gap: "10px", alignItems: "center", marginTop: "12px", flexWrap: "wrap" }}>
+                      <span style={{ fontWeight: 800, fontSize: "14px", color: "var(--dhi-ink)" }}>
+                        স্কোর: {correctCount}/{b.questions.length}
+                      </span>
+                      <button onClick={addQuiz} disabled={!b.isLatest || busy} style={actionBtn("var(--tone)")}>📋 আরও Quiz</button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-          {/* SET MODE */}
-          {mode === "set" && (
-            <div style={contentCard}>
-              <h3 style={contentTitle}>{t.setTitle}</h3>
-              <div style={{display:"flex", flexDirection:"column", gap:"16px", marginTop:"12px"}}>
-                {setFeed.map((b, idx) => (
-                  <div key={b.id} style={feedBlock}>
-                    <div style={setLabel}>{t.setLabel} {idx+1}</div>
-                    {b.loading && <p style={mutedText}>{t.generating}</p>}
-                    {b.questions.map((q,i) => (
-                      <div key={i} style={questionCard}>
-                        <div style={questionText}>{i+1}. {q.question}
-                          {q.type && <span style={typeTagStyle}>{q.type}</span>}
-                        </div>
-                        {b.showAnswers && q.answer && <div style={ansRevealStyle}>✅ {q.answer}</div>}
-                      </div>
-                    ))}
-                    {b.questions.length > 0 && (
-                      <div style={{display:"flex", gap:"10px", marginTop:"12px", flexWrap:"wrap"}}>
-                        <button onClick={() => toggleSetAnswers(b.id)} style={actionBtn("#64748b")}>{b.showAnswers ? t.hideAns : t.showAns}</button>
-                        <button onClick={addSet} disabled={!b.isLatest||busy} style={actionBtn("#0ea5e9")}>{t.anotherSet}</button>
-                      </div>
-                    )}
-                  </div>
+      {/* Q&A MODE */}
+      {mode === "qa" && (
+        <section className="as-panel">
+          <h3 style={contentTitle}>{t.qaTitle}</h3>
+          {qaFeed.length === 0 && samples.length > 0 && (
+            <div style={{ marginTop: "12px" }}>
+              <p style={mutedText}>{t.samplesHint}</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {samples.map((s, i) => (
+                  <button key={i} onClick={() => doAsk(s)} style={sampleBtnStyle}>{s}</button>
                 ))}
               </div>
             </div>
           )}
-
-          {/* ONE BY ONE MODE */}
-          {mode === "oneByone" && (
-            <div style={contentCard}>
-              <h3 style={contentTitle}>{t.oneTitle}</h3>
-              <div style={{display:"flex", flexDirection:"column", gap:"16px", marginTop:"12px"}}>
-                {obFeed.map((b, idx) => (
-                  <div key={b.id} style={feedBlock}>
-                    <div style={setLabel}>{t.qLabel} {idx+1}</div>
-                    {b.loading && <p style={mutedText}>{t.generating}</p>}
-                    {b.question && (
-                      <div style={questionCard}>
-                        <div style={{...questionText, fontSize:"15px"}}>{b.question}</div>
-                        {b.hints.map((h,i) => <div key={i} style={hintRevealStyle}>💡 Hint {i+1}: {h}</div>)}
-                        {b.answer && <div style={ansRevealStyle}>✅ {b.answer}</div>}
-                        {b.answer && b.selfReport === null && (
-                          <div style={{display:"flex", gap:"10px", marginTop:"12px", alignItems:"center", flexWrap:"wrap"}}>
-                            <span style={{fontSize:"13px", fontWeight:700, color:"#475569"}}>{t.didSolve}</span>
-                            <button onClick={() => obReport(b.id, true)} style={actionBtn("#16a34a")}>{t.solved}</button>
-                            <button onClick={() => obReport(b.id, false)} style={actionBtn("#ef4444")}>{t.notSolved}</button>
-                          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "18px", marginTop: "16px" }}>
+            {qaFeed.map((b) => (
+              <div key={b.id} style={feedBlock}>
+                <div style={userBubbleStyle}>🙋 {b.question}</div>
+                {b.loading && <p style={mutedText}>{t.answering}</p>}
+                {b.answer && (
+                  <div style={answerCardStyle}>
+                    {b.answer.intro && <p style={{ margin: 0, fontSize: "15px", color: "var(--dhi-ink)", lineHeight: 1.7, fontWeight: 500 }}>{b.answer.intro}</p>}
+                    {b.answer.key_points?.length > 0 && (
+                      <div style={infoBlock("#f0fdf4", "#bbf7d0")}>
+                        <div style={blockLabel}>{t.keyPoints}</div>
+                        <ul style={ulStyle}>{b.answer.key_points.map((k, i) => <li key={i}>{k}</li>)}</ul>
+                      </div>
+                    )}
+                    {b.answer.formula?.length > 0 && (
+                      <div style={infoBlock("#fefce8", "#fde047")}>
+                        <div style={blockLabel}>{t.formula}</div>
+                        <ul style={ulStyle}>{b.answer.formula.map((f, i) => <li key={i} style={{ fontFamily: "monospace" }}>{f}</li>)}</ul>
+                      </div>
+                    )}
+                    {b.answer.examples?.length > 0 && (
+                      <div style={infoBlock("#eff6ff", "#bfdbfe")}>
+                        <div style={blockLabel}>{t.examples}</div>
+                        <ul style={ulStyle}>{b.answer.examples.map((e, i) => <li key={i}>{e}</li>)}</ul>
+                      </div>
+                    )}
+                    {b.answer.summary && (
+                      <div style={infoBlock("#f5f3ff", "#ddd6fe")}>
+                        <div style={blockLabel}>{t.summary}</div>
+                        <p style={{ margin: 0, fontSize: "14px", color: "var(--dhi-ink)" }}>{b.answer.summary}</p>
+                      </div>
+                    )}
+                    {!b.explain && (
+                      <button onClick={() => doExplainMore(b.id)} disabled={b.explainLoading}
+                        style={actionBtn("var(--tone)")}>
+                        {b.explainLoading ? t.explaining : t.explainMore}
+                      </button>
+                    )}
+                    {b.explain && (
+                      <div style={infoBlock("#faf5ff", "#e9d5ff")}>
+                        <div style={blockLabel}>{t.detailTitle}</div>
+                        {b.explain.detailed_explanation && <p style={{ fontSize: "14px", color: "var(--dhi-ink)", lineHeight: 1.7 }}>{b.explain.detailed_explanation}</p>}
+                        {b.explain.more_examples?.length > 0 && (
+                          <>
+                            <div style={{ ...blockLabel, marginTop: "8px" }}>{t.moreExamples}</div>
+                            <ul style={ulStyle}>{b.explain.more_examples.map((e, i) => <li key={i}>{e}</li>)}</ul>
+                          </>
                         )}
-                        {b.selfReport !== null && (
-                          <div style={{marginTop:"10px", fontSize:"13px", fontWeight:700, color:b.selfReport?"#16a34a":"#dc2626"}}>
-                            {b.selfReport ? t.solvedMsg : t.notSolvedMsg}
-                          </div>
-                        )}
-                        <div style={{display:"flex", gap:"10px", flexWrap:"wrap", marginTop:"14px"}}>
-                          {b.hintsUsed < 3 && !b.answer && (
-                            <button onClick={() => obHint(b.id)} style={actionBtn("#f59e0b")}>{t.hintBtn} ({b.hintsUsed}/3)</button>
-                          )}
-                          {!b.answer && <button onClick={() => obReveal(b.id)} style={actionBtn("#64748b")}>{t.revealAns}</button>}
-                          <button onClick={nextOB} disabled={!b.isLatest||busy} style={actionBtn("#16a34a")}>{t.nextQ}</button>
-                        </div>
+                        {b.explain.analogy && <p style={{ fontSize: "14px", color: "#6b21a8", marginTop: "8px", fontStyle: "italic" }}>🧠 {b.explain.analogy}</p>}
                       </div>
                     )}
                   </div>
-                ))}
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
+          <div style={askRow}>
+            <input value={question} onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && doAsk()}
+              placeholder={t.askPlaceholder} style={inputStyle} />
+            <button onClick={() => doAsk()} disabled={busy} style={actionBtn("var(--tone)")}>
+              {busy ? "⌛" : t.askBtn}
+            </button>
+          </div>
+        </section>
+      )}
 
-          <div ref={feedEndRef} />
-        </div>
-      </div>
-    </div>
+      {/* SET MODE */}
+      {mode === "set" && (
+        <section className="as-panel">
+          <h3 style={contentTitle}>{t.setTitle}</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+            {setFeed.map((b, idx) => (
+              <div key={b.id} style={feedBlock}>
+                <div style={setLabel}>{t.setLabel} {idx + 1}</div>
+                {b.loading && <p style={mutedText}>{t.generating}</p>}
+                {b.questions.map((q, i) => (
+                  <div key={i} style={questionCard}>
+                    <div style={questionText}>{i + 1}. {q.question}
+                      {q.type && <span style={typeTagStyle}>{q.type}</span>}
+                    </div>
+                    {b.showAnswers && q.answer && <div style={ansRevealStyle}>✅ {q.answer}</div>}
+                  </div>
+                ))}
+                {b.questions.length > 0 && (
+                  <div style={{ display: "flex", gap: "10px", marginTop: "12px", flexWrap: "wrap" }}>
+                    <button onClick={() => toggleSetAnswers(b.id)} style={actionBtn("#64748b")}>{b.showAnswers ? t.hideAns : t.showAns}</button>
+                    <button onClick={addSet} disabled={!b.isLatest || busy} style={actionBtn("#0ea5e9")}>{t.anotherSet}</button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ONE BY ONE MODE */}
+      {mode === "oneByone" && (
+        <section className="as-panel">
+          <h3 style={contentTitle}>{t.oneTitle}</h3>
+          <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginTop: "12px" }}>
+            {obFeed.map((b, idx) => (
+              <div key={b.id} style={feedBlock}>
+                <div style={setLabel}>{t.qLabel} {idx + 1}</div>
+                {b.loading && <p style={mutedText}>{t.generating}</p>}
+                {b.question && (
+                  <div style={questionCard}>
+                    <div style={{ ...questionText, fontSize: "15px" }}>{b.question}</div>
+                    {b.hints.map((h, i) => <div key={i} style={hintRevealStyle}>💡 Hint {i + 1}: {h}</div>)}
+                    {b.answer && <div style={ansRevealStyle}>✅ {b.answer}</div>}
+                    {b.answer && b.selfReport === null && (
+                      <div style={{ display: "flex", gap: "10px", marginTop: "12px", alignItems: "center", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--dhi-ink-soft)" }}>{t.didSolve}</span>
+                        <button onClick={() => obReport(b.id, true)} style={actionBtn("#16a34a")}>{t.solved}</button>
+                        <button onClick={() => obReport(b.id, false)} style={actionBtn("#ef4444")}>{t.notSolved}</button>
+                      </div>
+                    )}
+                    {b.selfReport !== null && (
+                      <div style={{ marginTop: "10px", fontSize: "13px", fontWeight: 700, color: b.selfReport ? "#16a34a" : "#dc2626" }}>
+                        {b.selfReport ? t.solvedMsg : t.notSolvedMsg}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", marginTop: "14px" }}>
+                      {b.hintsUsed < 3 && !b.answer && (
+                        <button onClick={() => obHint(b.id)} style={actionBtn("#f59e0b")}>{t.hintBtn} ({b.hintsUsed}/3)</button>
+                      )}
+                      {!b.answer && <button onClick={() => obReveal(b.id)} style={actionBtn("#64748b")}>{t.revealAns}</button>}
+                      <button onClick={nextOB} disabled={!b.isLatest || busy} style={actionBtn("#16a34a")}>{t.nextQ}</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div ref={feedEndRef} />
+    </AppShell>
   );
 }
 
 /* ===== STYLES ===== */
-const pageStyle = { minHeight:"100vh", background:"#f1f5f9", fontFamily:"'Segoe UI', system-ui, sans-serif" };
+/* The content-language toggle is independent of the app's own English/বাংলা
+   switch in the rail below — this one locks once a conversation starts,
+   because switching languages mid-chat would orphan the existing feed. */
+const langRow = { display: "flex", alignItems: "center", gap: "10px" };
+const langRowLabel = { fontSize: ".88rem", fontWeight: 600, color: "var(--dhi-ink-soft)" };
+const langToggle = { display: "flex", background: "var(--dhi-surface-sunken)", borderRadius: "999px", padding: "3px" };
+const langBtn = (active, faded) => ({ padding: "6px 16px", borderRadius: "999px", border: "none", background: active ? "var(--tone)" : "transparent", color: active ? "#fff" : "var(--dhi-muted)", fontSize: "12px", fontWeight: 700, cursor: faded ? "not-allowed" : "pointer", opacity: faded ? 0.4 : 1, transition: "all 0.15s" });
 
-// NAV — Dashboard Style (White, Clean)
-const navStyle = { background:"#fff", position:"sticky", top:0, zIndex:100, boxShadow:"0 1px 8px rgba(0,0,0,0.08)", borderBottom:"1px solid #e2e8f0" };
-const navInner = { maxWidth:"1300px", margin:"0 auto", padding:"0 24px", height:"64px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"16px" };
+const loadingCard = { display: "flex", alignItems: "center", gap: "14px", justifyContent: "center", padding: "24px" };
 
-// Logo
+const contentTitle = { margin: "0 0 4px", fontSize: "1.12rem", fontWeight: 700, color: "var(--dhi-ink)" };
 
-// Center
-const navCenter = { flex:1, display:"flex", justifyContent:"center" };
-const navBreadcrumb = { fontSize:"14px", fontWeight:600, color:"#94a3b8" };
+const feedBlock = { paddingBottom: "20px", borderBottom: "1px dashed var(--dhi-line)" };
+const setLabel = { fontSize: "11px", fontWeight: 800, color: "var(--dhi-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "10px" };
+const mutedText = { fontSize: "13px", color: "var(--dhi-muted)", fontWeight: 600 };
 
-// Right
-const navRight = { display:"flex", alignItems:"center", gap:"12px", flexShrink:0 };
-const langToggle = { display:"flex", background:"#f1f5f9", borderRadius:"999px", padding:"3px" };
-const langBtn = (active, faded) => ({ padding:"5px 12px", borderRadius:"999px", border:"none", background:active?"#7c3aed":"transparent", color:active?"#fff":"#64748b", fontSize:"12px", fontWeight:700, cursor:faded?"not-allowed":"pointer", opacity:faded?0.4:1, transition:"all 0.15s" });
-const userBadge = { display:"flex", alignItems:"center", gap:"8px" };
-const userAvatar = { width:"34px", height:"34px", borderRadius:"50%", background:"#7c3aed", color:"#fff", display:"flex", alignItems:"center", justifyContent:"center", fontWeight:800, fontSize:"14px" };
-const userName = { fontSize:"14px", fontWeight:600, color:"#0f172a" };
+const questionCard = { background: "var(--dhi-surface-sunken)", border: "1.5px solid var(--dhi-line)", borderRadius: "14px", padding: "16px", marginBottom: "10px" };
+const questionText = { fontWeight: 700, color: "var(--dhi-ink)", fontSize: "14px", lineHeight: 1.6 };
+const typeTagStyle = { marginLeft: "8px", fontSize: "10px", fontWeight: 700, color: "var(--tone)", background: "var(--tone-wash)", padding: "2px 8px", borderRadius: "999px", textTransform: "uppercase" };
+const ansRevealStyle = { marginTop: "10px", padding: "10px 14px", background: "#ecfdf5", border: "1.5px solid #86efac", borderRadius: "10px", fontSize: "13px", color: "#166534", fontWeight: 700 };
+const hintRevealStyle = { marginTop: "8px", padding: "10px 12px", background: "#fffbeb", border: "1.5px solid #fcd34d", borderRadius: "10px", fontSize: "13px", color: "#92400e", fontWeight: 600 };
 
-// AI STUDY BUDDY HEADER CARD
-const buddyCard = { background:"#fff", borderRadius:"18px", border:"1px solid #f3e8ff", boxShadow:"0 4px 16px rgba(124,58,237,0.06)", padding:"18px 20px", display:"flex", alignItems:"center", justifyContent:"space-between", gap:"14px" };
-const buddyLeft = { display:"flex", alignItems:"center", gap:"14px" };
-const buddyAvatar = { width:"46px", height:"46px", borderRadius:"14px", background:"#fee2e2", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"24px", flexShrink:0 };
-const buddyTitle = { margin:0, fontSize:"17px", fontWeight:800, color:"#0f172a" };
-const buddySub = { margin:"2px 0 0", fontSize:"12.5px", color:"#94a3b8", fontWeight:600 };
-const liveBadge = { display:"flex", alignItems:"center", gap:"6px", background:"#f3e8ff", color:"#7c3aed", fontSize:"11px", fontWeight:800, padding:"6px 14px", borderRadius:"999px", letterSpacing:"0.04em", flexShrink:0 };
-const liveDot = { width:"7px", height:"7px", borderRadius:"50%", background:"#22c55e", display:"inline-block" };
+const userBubbleStyle = { display: "inline-block", background: "var(--tone-wash)", color: "var(--dhi-ink)", padding: "10px 16px", borderRadius: "14px", fontSize: "14px", fontWeight: 700, marginBottom: "12px" };
+const answerCardStyle = { display: "flex", flexDirection: "column", gap: "12px", padding: "18px", background: "var(--dhi-surface-raised)", borderRadius: "14px", border: "1.5px solid var(--dhi-line)", boxShadow: "var(--dhi-shadow-sm)" };
+const infoBlock = (bg, border) => ({ padding: "14px 16px", borderRadius: "12px", background: bg, border: `1.5px solid ${border}` });
+const blockLabel = { fontSize: "12px", fontWeight: 800, color: "#374151", marginBottom: "8px", textTransform: "uppercase", letterSpacing: "0.04em" };
+const ulStyle = { margin: 0, paddingLeft: "20px", display: "flex", flexDirection: "column", gap: "5px", fontSize: "14px", color: "#374151", lineHeight: 1.6 };
 
-// MODE GRID (2x2 cards) - Kept exact same color setup from image
-const modeGrid = { display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:"14px" };
-const modeCard = (color, active, disabled) => ({ display:"flex", flexDirection:"column", alignItems:"flex-start", gap:"6px", textAlign:"left", background: active ? `${color}0d` : "#fff", border: `1.5px solid ${active ? color : "#e2e8f0"}`, borderLeft:`4px solid ${color}`, borderRadius:"16px", padding:"16px 18px", cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.45:1, boxShadow:"0 2px 10px rgba(0,0,0,0.05)", transition:"all 0.15s" });
-const modeCardIcon = (bg) => ({ width:"32px", height:"32px", borderRadius:"10px", background:bg, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"16px" });
-const modeCardTitle = { fontSize:"14.5px", fontWeight:800, color:"#0f172a" };
-const modeCardSub = { fontSize:"12px", color:"#94a3b8", fontWeight:600 };
+const askRow = { display: "flex", gap: "10px", marginTop: "18px" };
+const inputStyle = { flex: 1, padding: "12px 16px", borderRadius: "12px", border: "1.5px solid var(--dhi-line-strong)", fontSize: "14px", outline: "none", fontFamily: "inherit", background: "var(--dhi-field)", color: "var(--dhi-ink)" };
+const sampleBtnStyle = { textAlign: "left", background: "var(--dhi-surface-sunken)", border: "1.5px solid var(--dhi-line)", borderRadius: "12px", padding: "12px 16px", fontSize: "14px", color: "var(--dhi-ink-soft)", cursor: "pointer", fontWeight: 500, lineHeight: 1.5 };
 
-// STUDY SELECTION CARD
-const studySelectCard = { background:"#fff", borderRadius:"18px", border:"1px solid #e2e8f0", boxShadow:"0 4px 16px rgba(0,0,0,0.05)", padding:"18px 20px" };
-const studySelectHeader = { display:"flex", alignItems:"center", gap:"8px", fontSize:"14.5px", fontWeight:800, color:"#0f172a", marginBottom:"14px" };
-const studySelectGrid = { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:"12px" };
-const studySelectGridSecondary = { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:"12px", marginTop:"12px" };
-
-// LAYOUT
-const layoutStyle = { maxWidth:"1300px", margin:"0 auto", padding:"24px 20px 60px", display:"grid", gridTemplateColumns:"260px 1fr", gap:"20px", alignItems:"start" };
-
-// SIDEBAR
-const sidebarStyle = { position:"sticky", top:"80px", background:"#fff", borderRadius:"16px", boxShadow:"0 4px 20px rgba(0,0,0,0.08)", padding:"16px", display:"flex", flexDirection:"column", gap:"8px", maxHeight:"calc(100vh - 100px)", overflow:"hidden" };
-const newChatBtnStyle = { display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", width:"100%", padding:"12px", borderRadius:"10px", border:"none", background:"linear-gradient(135deg, #7c3aed, #9333ea)", color:"#fff", fontWeight:800, fontSize:"13px", cursor:"pointer", boxShadow:"0 4px 12px rgba(124,58,237,0.3)" };
-const sidebarSectionLabel = { fontSize:"11px", fontWeight:800, color:"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em", padding:"8px 4px 4px" };
-const sessionListStyle = { display:"flex", flexDirection:"column", gap:"6px", overflowY:"auto", flex:1, paddingRight:"4px" };
-const emptySession = { fontSize:"12px", color:"#94a3b8", padding:"8px 4px", textAlign:"center" };
-const sessionSkeleton = { height:"38px", borderRadius:"8px", marginBottom:"8px", background:"linear-gradient(90deg, #eef0f4 25%, #f7f8fa 37%, #eef0f4 63%)", backgroundSize:"400% 100%", animation:"skeletonPulse 1.4s ease infinite" };
-const sessionItemStyle = (active) => ({ display:"flex", alignItems:"center", gap:"8px", textAlign:"left", padding:"10px 12px", borderRadius:"10px", border: active?"2px solid #7c3aed":"1.5px solid #e2e8f0", background: active?"#faf5ff":"#f8fafc", color: active?"#7c3aed":"#374151", fontSize:"12px", fontWeight:600, cursor:"pointer" });
-
-// MAIN
-const mainStyle = { display:"flex", flexDirection:"column", gap:"18px" };
-
-const selectionCard = { background:"#fff", borderRadius:"20px", boxShadow:"0 4px 20px rgba(0,0,0,0.08)", padding:"28px", border:"1px solid #e2e8f0" };
-const cardHeader = { display:"flex", alignItems:"center", gap:"12px", marginBottom:"20px" };
-const stepBadge = { background:"linear-gradient(135deg, #22c55e, #16a34a)", color:"#fff", fontSize:"11px", fontWeight:800, padding:"5px 12px", borderRadius:"999px", letterSpacing:"0.06em" };
-const cardTitle = { margin:0, fontSize:"20px", fontWeight:800, color:"#0f172a" };
-const selectGrid = { display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(200px, 1fr))", gap:"14px" };
-
-const hintBox = { display:"flex", alignItems:"center", gap:"8px", background:"#f8fafc", border:"1px solid #e2e8f0", borderRadius:"10px", padding:"10px 14px", marginTop:"16px" };
-
-const tabsRow = { display:"flex", gap:"10px", flexWrap:"wrap", marginTop:"16px" };
-const modeTab = (color, active, disabled) => ({ padding:"11px 20px", borderRadius:"12px", border:`2px solid ${color}`, background: active ? color : "#fff", color: active ? "#fff" : color, fontWeight:800, fontSize:"13px", cursor:disabled?"not-allowed":"pointer", opacity:disabled?0.45:1, boxShadow: active ? `0 4px 12px ${color}44` : "none", transition:"all 0.15s" });
-
-const loadingCard = { background:"#fff", borderRadius:"16px", padding:"24px", display:"flex", alignItems:"center", gap:"14px", justifyContent:"center", boxShadow:"0 4px 20px rgba(0,0,0,0.06)" };
-
-const contentCard = { background:"#fff", borderRadius:"20px", boxShadow:"0 4px 20px rgba(0,0,0,0.08)", padding:"28px", border:"1px solid #e2e8f0" };
-const contentTitle = { margin:"0 0 4px", fontSize:"20px", fontWeight:800, color:"#0f172a" };
-
-const feedBlock = { paddingBottom:"20px", borderBottom:"1px dashed #e2e8f0" };
-const setLabel = { fontSize:"11px", fontWeight:800, color:"#64748b", textTransform:"uppercase", letterSpacing:"0.06em", marginBottom:"10px" };
-const mutedText = { fontSize:"13px", color:"#94a3b8", fontWeight:600 };
-
-const questionCard = { background:"#f8fafc", border:"1.5px solid #e2e8f0", borderRadius:"14px", padding:"16px", marginBottom:"10px" };
-const questionText = { fontWeight:700, color:"#0f172a", fontSize:"14px", lineHeight:1.6 };
-const typeTagStyle = { marginLeft:"8px", fontSize:"10px", fontWeight:700, color:"#7c3aed", background:"#faf5ff", padding:"2px 8px", borderRadius:"999px", textTransform:"uppercase" };
-const ansRevealStyle = { marginTop:"10px", padding:"10px 14px", background:"#ecfdf5", border:"1.5px solid #86efac", borderRadius:"10px", fontSize:"13px", color:"#166534", fontWeight:700 };
-const hintRevealStyle = { marginTop:"8px", padding:"10px 12px", background:"#fffbeb", border:"1.5px solid #fcd34d", borderRadius:"10px", fontSize:"13px", color:"#92400e", fontWeight:600 };
-
-const userBubbleStyle = { display:"inline-block", background:"linear-gradient(135deg, #faf5ff, #f3e8ff)", color:"#581c87", padding:"10px 16px", borderRadius:"14px", fontSize:"14px", fontWeight:700, marginBottom:"12px" };
-const answerCardStyle = { display:"flex", flexDirection:"column", gap:"12px", padding:"18px", background:"#fff", borderRadius:"14px", border:"1.5px solid #e2e8f0", boxShadow:"0 4px 16px rgba(0,0,0,0.06)" };
-const infoBlock = (bg, border) => ({ padding:"14px 16px", borderRadius:"12px", background:bg, border:`1.5px solid ${border}` });
-const blockLabel = { fontSize:"12px", fontWeight:800, color:"#374151", marginBottom:"8px", textTransform:"uppercase", letterSpacing:"0.04em" };
-const ulStyle = { margin:0, paddingLeft:"20px", display:"flex", flexDirection:"column", gap:"5px", fontSize:"14px", color:"#374151", lineHeight:1.6 };
-
-const askRow = { display:"flex", gap:"10px", marginTop:"18px" };
-const inputStyle = { flex:1, padding:"12px 16px", borderRadius:"12px", border:"1.5px solid #e2e8f0", fontSize:"14px", outline:"none", fontFamily:"inherit", background:"#f8fafc" };
-const sampleBtnStyle = { textAlign:"left", background:"#f8fafc", border:"1.5px solid #e2e8f0", borderRadius:"12px", padding:"12px 16px", fontSize:"14px", color:"#374151", cursor:"pointer", fontWeight:500, lineHeight:1.5 };
-
-const actionBtn = (color) => ({ padding:"10px 18px", borderRadius:"10px", border:"none", background:color, color:"#fff", fontWeight:700, fontSize:"13px", cursor:"pointer", boxShadow:`0 3px 10px ${color}44` });
-
-// PILL SELECT STYLES (dropdown fields)
-const pillWrap = { display:"flex", alignItems:"center", gap:"8px", background:"#fff", border:"1.5px solid #e2e8f0", borderRadius:"12px", padding:"12px 16px" };
-const pillWrapDisabled = { background:"#f1f5f9", opacity:0.6 };
-const pillSelect = { flex:1, border:"none", outline:"none", background:"transparent", fontSize:"13.5px", fontWeight:600, color:"#0f172a", appearance:"none", fontFamily:"inherit", cursor:"pointer", minWidth:0 };
-const pillCaret = { color:"#94a3b8", fontSize:"12px", flexShrink:0 };
+const actionBtn = (color) => ({ padding: "10px 18px", borderRadius: "10px", border: "none", background: color, color: "#fff", fontWeight: 700, fontSize: "13px", cursor: "pointer" });
 
 // QUIZ ERROR / TIMEOUT CARDS
 const quizTimeoutCard = {

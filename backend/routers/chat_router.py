@@ -15,11 +15,12 @@ from core.config import (
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from models.db_models import (
-    Subject, Chapter, Topic, User,  
+    Subject, Chapter, Topic, User,
     LearningSession, StudentInteraction, GeneratedContent,
 )
 from services.rag_service import get_embedding, load_prompt_template
 from services.generation_service import search_curriculum_context_for_quiz
+from services.class_scope import assert_student_class, class_for_topic
 from agents.json_utils import repair_json
 from agents.qa_answer_agent import run_qa_answer_agent, run_explain_more_agent
 
@@ -127,8 +128,12 @@ def _get_or_create_session(db: Session, student_id: int,
                             subject_id: Optional[int] = None,
                             chapter_id: Optional[int] = None) -> LearningSession:
     if session_id:
+        # Scoped to student_id: a session_id that exists but belongs to
+        # someone else falls through to starting a fresh session below,
+        # rather than resuming (and writing into) a stranger's history.
         session = db.query(LearningSession).filter(
-            LearningSession.session_id == session_id
+            LearningSession.session_id == session_id,
+            LearningSession.student_id == student_id,
         ).first()
         if session:
             return session
@@ -284,6 +289,7 @@ def qa_samples(
         raise HTTPException(status_code=403, detail="Only students can use chatbot")
     
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
     ctx = _scope_context(s)
     if _no_content(ctx):
         return {"samples": [], "message": "no content for this scope"}
@@ -312,6 +318,7 @@ def qa_ask(
     student_id = current_user.user_id 
     
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
 
     if s["chapter_id"]:
         qvec = get_embedding(req.question, is_query=True)
@@ -372,7 +379,11 @@ def qa_explain_more(
         raise HTTPException(status_code=403, detail="Only students can use chatbot")
     
     student_id = current_user.user_id
-    
+
+    # explain_more never went through _resolve_scope — it only ever took a
+    # topic_id — so it bypassed the class check entirely.
+    assert_student_class(db, current_user, class_for_topic(db, req.topic_id))
+
     result = run_explain_more_agent(
         question=req.question,
         previous_answer=req.previous_answer,
@@ -406,6 +417,7 @@ def practice_generate(
     
     student_id = current_user.user_id 
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
     ctx = _scope_context(s)
     if _no_content(ctx):
         ctx = ""
@@ -470,6 +482,7 @@ def practice_session_start(
     student_id = current_user.user_id  
     
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
     ctx = _scope_context(s)
     if _no_content(ctx):
         ctx = ""
@@ -507,20 +520,25 @@ def practice_session_hint(
   
     if current_user.role != "student":
         raise HTTPException(status_code=403, detail="Only students can use chatbot")
-    
-    # hint limit content onujayi: quiz_question -> 2, one-by-one (practice_question) -> 3
-    _content_for_limit = db.query(GeneratedContent).filter(
-        GeneratedContent.content_id == req.content_id
-    ).first()
-    _max_hints = 2 if (_content_for_limit and _content_for_limit.content_type == "quiz_question") else 3
-    if req.hints_used >= _max_hints:
-        return {"hint": None, "message": f"You have already used the maximum number of hints ({_max_hints}) for this question."}
 
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == req.content_id
     ).first()
-    if not content:
+    # Ownership, checked before anything else runs: content_id alone used to
+    # be enough to pull a hint for any question in the database — worksheets
+    # and other students' practice sessions included. It has to trace back to
+    # a learning session owned by this student.
+    owns_content = content and content.learning_session_id and db.query(LearningSession).filter(
+        LearningSession.session_id == content.learning_session_id,
+        LearningSession.student_id == current_user.user_id,
+    ).first()
+    if not owns_content:
         return {"hint": None, "message": "Question not found."}
+
+    # hint limit content onujayi: quiz_question -> 2, one-by-one (practice_question) -> 3
+    _max_hints = 2 if content.content_type == "quiz_question" else 3
+    if req.hints_used >= _max_hints:
+        return {"hint": None, "message": f"You have already used the maximum number of hints ({_max_hints}) for this question."}
 
     if content.explanation:
         hints = json.loads(content.explanation)
@@ -563,7 +581,19 @@ def practice_session_answer(
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == req.content_id
     ).first()
-    if not content:
+    # Ownership: this used to return content.answer_key for *any* content_id
+    # in the database — the answer key for someone else's worksheet included.
+    # req.session_id has to be the session that actually holds this content,
+    # and that session has to belong to this student.
+    owns_content = (
+        content
+        and content.learning_session_id == req.session_id
+        and db.query(LearningSession).filter(
+            LearningSession.session_id == req.session_id,
+            LearningSession.student_id == current_user.user_id,
+        ).first()
+    )
+    if not owns_content:
         return {"message": "Question not found."}
 
     interaction = db.query(StudentInteraction).filter(
@@ -592,6 +622,7 @@ def practice_session_next(
     student_id = current_user.user_id 
     
     s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
     ctx = _scope_context(s)
     if _no_content(ctx):
         ctx = ""
@@ -834,6 +865,11 @@ def chat_quiz_generate(
 ):
     if current_user.role != "student":
         return {"questions": [], "message": "Quiz is for students only."}
+
+    # This dispatches straight to a worker without ever calling
+    # _resolve_scope, so — like explain_more — it bypassed the class check.
+    s = _resolve_scope(db, req.subject_id, req.chapter_id, req.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
 
     # tasks.generation_tasks imports this module's helpers, so import it here
     # rather than at the top to avoid a circular import.

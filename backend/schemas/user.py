@@ -38,6 +38,15 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UpdateClassRequest(BaseModel):
+    """Request body for PATCH /students/me/class.
+
+    A student's class is fixed at signup, but not forever — they move up a
+    grade every year, so this is the one field on the account a student is
+    allowed to change themselves."""
+    class_name: str
+
+
 class TokenResponse(BaseModel):
     """Response after successful login/signup."""
     access_token: str
@@ -47,6 +56,9 @@ class TokenResponse(BaseModel):
     name: str
     email: EmailStr
     role: str
+    # Only meaningful for students; None for teachers/admins and for students
+    # whose account predates the class field (see docs/STUDENT_CLASS_SCOPING.md).
+    class_name: Optional[str] = None
 
 
 class UserResponse(BaseModel):
@@ -55,6 +67,7 @@ class UserResponse(BaseModel):
     name: str
     email: EmailStr
     role: str
+    class_name: Optional[str] = None
 
     class Config:
         from_attributes = True

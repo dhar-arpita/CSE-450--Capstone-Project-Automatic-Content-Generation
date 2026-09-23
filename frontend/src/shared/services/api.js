@@ -110,6 +110,13 @@ export const getMyActivity = (days = 30) => api.get(`/stats/me/activity?days=${d
 export const getMyNotifications = (limit = 20) =>
   api.get(`/stats/me/notifications?limit=${limit}`);
 export const getMyClasses = (limit = 6) => api.get(`/stats/me/classes?limit=${limit}`);
+// A student's equivalent of getMyClasses — one class each, so subjects are
+// the meaningful breakdown instead.
+export const getMySubjects = (limit = 6) => api.get(`/stats/me/subjects?limit=${limit}`);
+// The one field on their own account a student can change themselves —
+// moving up a class each year.
+export const updateMyClass = (className) =>
+  api.patch("/students/me/class", { class_name: className });
 
 
 // ──── CURRICULUM ENDPOINTS ────

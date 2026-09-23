@@ -82,6 +82,7 @@ export default function SignupPage() {
         name: data.name,
         email: data.email,
         role: data.role,
+        class_name: data.class_name ?? null,
       }));
       navigate("/dashboard");
     } catch (err) {

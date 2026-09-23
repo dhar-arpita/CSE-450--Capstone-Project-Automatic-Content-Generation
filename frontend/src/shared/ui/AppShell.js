@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import { Link, NavLink } from "react-router-dom";
 import BrandLogo from "../brand/BrandLogo";
 import NotificationBell from "./NotificationBell";
+import TeenDoodles from "./TeenDoodles";
 import { useI18n } from "../i18n";
 import { useTheme } from "../theme";
 import {
-  IconClose, IconGlobe, IconHome, IconLogout, IconMenu, IconMoon, IconNotes,
-  IconQuiz, IconSheet, IconSun, IconUpload, IconUser2,
+  IconChatbot, IconClose, IconGlobe, IconHome, IconLogout, IconMenu, IconMoon,
+  IconNotes, IconQuiz, IconSheet, IconSun, IconUpload, IconUser2,
 } from "./icons";
 import "./AppShell.css";
 
@@ -27,13 +28,29 @@ export const APP_NAV = [
   { to: "/profile", key: "profile", Icon: IconUser2 },
 ];
 
+/* Students get the same chrome as teachers, but they can't upload their own
+   material — that slot becomes the practice chatbot instead. */
+export const STUDENT_NAV = [
+  { to: "/dashboard", key: "dashboard", Icon: IconHome, end: true },
+  { to: "/generate", key: "worksheet", Icon: IconSheet },
+  { to: "/quiz", key: "quiz", Icon: IconQuiz },
+  { to: "/study-notes", key: "notes", Icon: IconNotes },
+  { to: "/chatbot", key: "chatbot", Icon: IconChatbot },
+  { to: "/profile", key: "profile", Icon: IconUser2 },
+];
+
 /* `nav` and `home` exist so the admin console can reuse this chrome with its
    own destinations instead of forking the shell. A nav item may carry a
    ready-made `label`; otherwise its `key` is looked up under app.nav, which is
-   how the teacher nav above has always worked. */
+   how the teacher nav above has always worked.
+
+   When a page doesn't pass `nav` explicitly, the rail picks it from the
+   signed-in user's role — so every shared page (worksheet, quiz, notes,
+   profile) shows the right rail for whoever is looking at it, not just the
+   dashboard. */
 export default function AppShell({
   breadcrumb, user, onLogout, rail, tone, width, children,
-  nav = APP_NAV, home = "/dashboard",
+  nav, home = "/dashboard",
 }) {
   const { t, lang, toggleLang } = useI18n();
   const { theme, toggleTheme } = useTheme();
@@ -41,16 +58,18 @@ export default function AppShell({
 
   const closeNav = () => setNavOpen(false);
   const initial = user?.name?.charAt(0)?.toUpperCase() || "U";
+  const isStudent = user?.role === "student";
+  const resolvedNav = nav || (isStudent ? STUDENT_NAV : APP_NAV);
 
   return (
-    <div className={`as${tone ? ` as-tone-${tone}` : ""}${navOpen ? " is-nav-open" : ""}`}>
+    <div className={`as${tone ? ` as-tone-${tone}` : ""}${isStudent ? " is-student" : ""}${navOpen ? " is-nav-open" : ""}`}>
       <aside className="as-side">
         <div className="as-side-top">
           <BrandLogo to={home} />
         </div>
 
         <nav className="as-nav" aria-label={t("app.nav.dashboard")}>
-          {nav.map(({ to, key, Icon, end, label }) => (
+          {resolvedNav.map(({ to, key, Icon, end, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -100,6 +119,7 @@ export default function AppShell({
       )}
 
       <div className="as-body">
+        {isStudent && <TeenDoodles />}
         <header className="as-top">
           <button
             type="button"

@@ -1,0 +1,59 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   Teen theme — the playful layer used only on student-facing pages (classes
+   1–10, so the teacher's plain professional chrome stays as-is and this
+   layer never renders for them).
+
+   It is deliberately additive: a floating doodle backdrop plus a couple of
+   bouncier motion rules. Nothing here changes layout, so it composes with
+   whatever page it's dropped into.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.teen-doodles {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.td {
+  position: absolute;
+  opacity: .16;
+  animation: teen-float 7s ease-in-out infinite;
+}
+.td svg { display: block; }
+
+.td-1 { top: 8%;   right: 7%;  color: var(--dhi-violet);     animation-duration: 8s; }
+.td-2 { top: 22%;  right: 22%; color: var(--dhi-sun);        animation-duration: 5.5s; animation-delay: -1.2s; }
+.td-3 { top: 14%;  left: 4%;   color: var(--dhi-sky);        animation-duration: 9s;   animation-delay: -3s; }
+.td-4 { bottom: 16%; left: 8%; color: var(--dhi-coral);      animation-duration: 6.5s; animation-delay: -2s; }
+.td-5 { bottom: 10%; right: 12%; color: var(--dhi-leaf);     animation-duration: 8.5s; animation-delay: -4.5s; }
+.td-6 { bottom: 28%; right: 30%; color: var(--dhi-petal);    animation-duration: 6s;   animation-delay: -1.8s; }
+
+[data-theme="dark"] .td { opacity: .13; }
+
+@keyframes teen-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-10px) rotate(4deg); }
+}
+
+@media (max-width: 900px) {
+  /* Half the flock is plenty once the page narrows — any more and they start
+     drifting into the actual content instead of framing it. */
+  .td-2, .td-4, .td-6 { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .td { animation: none; }
+}
+
+/* ── bouncier hover, used sparingly on the cards a student actually clicks ── */
+@keyframes teen-pop {
+  0%   { transform: scale(.94); opacity: 0; }
+  100% { transform: scale(1);   opacity: 1; }
+}
+.teen-pop { animation: teen-pop .32s cubic-bezier(.2,.8,.2,1.4) both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .teen-pop { animation: none; }
+}

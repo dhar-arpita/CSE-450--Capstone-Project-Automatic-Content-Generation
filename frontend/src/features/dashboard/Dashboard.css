@@ -132,6 +132,20 @@ html[lang="bn"] .db-head h2 { letter-spacing: 0; line-height: 1.45; }
   border-color: var(--card-accent);
   box-shadow: var(--dhi-shadow-md);
 }
+/* A student's cards get a slightly playful wobble on hover instead of the
+   teacher's plain lift — same shell, same CSS, just a bit more alive for a
+   class-1-10 audience. .is-student comes from AppShell, which only sets it
+   for a signed-in student, so Dashboard.js (the teacher view) never sees it. */
+.is-student .db-card:hover {
+  transform: translateY(-4px) rotate(-.6deg) scale(1.015);
+}
+.is-student .db-hero-mark {
+  animation: teen-float 7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .is-student .db-card:hover { transform: translateY(-3px); }
+  .is-student .db-hero-mark { animation: none; }
+}
 .db-card:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 3px; }
 
 .db-card-tile {
@@ -179,6 +193,53 @@ html[lang="bn"] .db-head h2 { letter-spacing: 0; line-height: 1.45; }
   letter-spacing: .04em;
 }
 html[lang="bn"] .db-badge { letter-spacing: 0; font-size: .76rem; }
+
+/* ── progress note + continue card (student only) ────────────────────────
+   Dashboard.js (the teacher view) never renders these classes — they exist
+   purely for StudentDashboard.js's progress section, which replaces the
+   platform-wide stat tiles with something personal to read on landing. */
+.db-progress-note { display: flex; flex-direction: column; gap: 14px; }
+.db-progress-msg {
+  margin: 0;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--dhi-surface-tint);
+  color: var(--dhi-forest);
+  font-size: 1rem;
+  font-weight: 650;
+  line-height: 1.55;
+}
+.db-continue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 18px 22px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 16px;
+  background: var(--dhi-surface-raised);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1), border-color .18s ease;
+}
+.db-continue:hover { transform: translateY(-2px); border-color: var(--acc-4); }
+.db-continue-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.db-continue-label { font-size: .8rem; font-weight: 650; color: var(--dhi-muted); }
+.db-continue-subject {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--dhi-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-continue-cta { flex: 0 0 auto; font-size: .9rem; font-weight: 700; color: var(--acc-4); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .db-continue { transition: none; }
+  .db-continue:hover { transform: none; }
+}
 
 /* ── stat row ──────────────────────────────────────────────────────────── */
 .db-stats {

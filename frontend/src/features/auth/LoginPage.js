@@ -50,6 +50,10 @@ export default function LoginPage({ role }) {
         name: data.name,
         email: data.email,
         role: data.role,
+        // Only meaningful for students; null for teachers/admins. Lets the
+        // content pages skip asking for a class the student already picked
+        // at signup.
+        class_name: data.class_name ?? null,
       }));
       // The admin's home is the console; there is no teacher dashboard for
       // them to land on.

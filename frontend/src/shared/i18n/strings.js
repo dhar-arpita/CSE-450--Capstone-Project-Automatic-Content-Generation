@@ -193,6 +193,7 @@
       quiz: "Quiz Generation",
       notes: "Study Note Generation",
       upload: "Custom Uploads (Optional)",
+      chatbot: "Practice with Progga",
       profile: "Profile",
     },
     notif: {
@@ -401,6 +402,7 @@
       quiz: "কুইজ প্রস্তুত করুন",
       notes: "স্টাডি নোট তৈরি",
       upload: "নিজের মেটেরিয়াল আপলোড (ঐচ্ছিক)",
+      chatbot: "প্রজ্ঞার সাথে প্র্যাকটিস",
       profile: "প্রোফাইল",
     },
     notif: {

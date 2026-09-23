@@ -45,10 +45,39 @@
 .as-tone-notes { --tone: var(--acc-3); --tone-wash: var(--acc-3-wash); --page-bg: #eef6fa; }
 /* uploads — autumn */
 .as-tone-upload { --tone: var(--acc-4); --tone-wash: var(--acc-4-wash); --page-bg: #faf2e6; }
+/* practice chatbot — same slot as uploads on the student dashboard card, so
+   the studio page carries the same accent as the card that opens it. */
+.as-tone-chatbot { --tone: var(--acc-4); --tone-wash: var(--acc-4-wash); --page-bg: #faf2e6; }
 
 [data-theme="dark"] .as-tone-quiz  { --page-bg: #140a10; }
 [data-theme="dark"] .as-tone-notes { --page-bg: #071317; }
 [data-theme="dark"] .as-tone-upload { --page-bg: #171107; }
+
+/* every student (any class, any tier) — a soft, warm background consistent
+   across every studio, on top of whatever --tone that page would otherwise
+   carry. Two classes on one element beats one, so this outranks the tone
+   rules above regardless of source order. Teachers and admins never get
+   is-student, so their pages are untouched.
+
+   The tiled doodles (book, globe, magnifying glass, palette, apple, plus
+   sign, paper airplane, flask) are original line art in the app's own
+   accent colors — same technique the dashboard hero background already
+   used, not a traced copy of any reference image. */
+.as.is-student {
+  --page-bg: #eefaf1;
+  background-color: var(--page-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(70,70)' stroke='%23FC6467' stroke-width='1.8' opacity='0.4'%3E%3Cpath d='M-18 -12 C-9 -15 0 -12 0 -12 L0 13 C-9 10 -18 13 -18 13 Z'/%3E%3Cpath d='M18 -12 C9 -15 0 -12 0 -12 L0 13 C9 10 18 13 18 13 Z'/%3E%3C/g%3E%3Cg transform='translate(560,60)' stroke='%231B5138' stroke-width='1.8' opacity='0.4'%3E%3Ccircle cx='0' cy='0' r='18'/%3E%3Cellipse cx='0' cy='0' rx='7' ry='18'/%3E%3Cpath d='M-18 0 H18'/%3E%3Cpath d='M-15 -9 Q0 -4 15 -9'/%3E%3Cpath d='M-15 9 Q0 4 15 9'/%3E%3C/g%3E%3Cg transform='translate(300,40)' stroke='%234E2780' stroke-width='1.8' opacity='0.4'%3E%3Ccircle cx='-3' cy='-3' r='13'/%3E%3Cline x1='7' y1='7' x2='20' y2='20'/%3E%3C/g%3E%3Cg transform='translate(600,210)' stroke='%23EF94CA' stroke-width='1.8' opacity='0.4'%3E%3Cpath d='M-18 2 C-19 -13 -4 -21 9 -16 C21 -11 21 3 11 6 C5 8 6 14 10 16 C4 20 -6 19 -13 12 C-18 7 -18 5 -18 2 Z'/%3E%3Ccircle cx='-8' cy='-6' r='1.6' fill='%23EF94CA' stroke='none'/%3E%3Ccircle cx='2' cy='-11' r='1.6' fill='%23EF94CA' stroke='none'/%3E%3Ccircle cx='11' cy='-3' r='1.6' fill='%23EF94CA' stroke='none'/%3E%3C/g%3E%3Cg transform='translate(40,230)' stroke='%23FC6467' stroke-width='1.8' opacity='0.4'%3E%3Cpath d='M0 -8 C-15 -13 -21 1 -14 12 C-9 19 -4 19 0 16 C4 19 9 19 14 12 C21 1 15 -13 0 -8 Z'/%3E%3Cpath d='M0 -8 L2 -17'/%3E%3Cpath d='M2 -17 Q9 -19 11 -13'/%3E%3C/g%3E%3Cg transform='translate(450,300)' stroke='%23E08E00' stroke-width='2' opacity='0.4'%3E%3Cline x1='0' y1='-12' x2='0' y2='12'/%3E%3Cline x1='-12' y1='0' x2='12' y2='0'/%3E%3C/g%3E%3Cg transform='translate(200,300)' stroke='%230F5F6E' stroke-width='1.8' opacity='0.4'%3E%3Cpath d='M-18 8 L18 -14 L4 16 L0 4 Z'/%3E%3Cpath d='M-18 8 L0 4 L4 16'/%3E%3C/g%3E%3Cg transform='translate(330,190)' stroke='%234E2780' stroke-width='1.8' opacity='0.4'%3E%3Cpath d='M-6 -18 H6 M-4 -18 V-4 L-14 14 Q-16 20 -10 20 H10 Q16 20 14 14 L4 -4 V-18'/%3E%3Cpath d='M-9 8 H9'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 640px 360px;
+}
+[data-theme="dark"] .as.is-student {
+  --page-bg: #0c1f13;
+  background-color: var(--page-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='640' height='360'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cg transform='translate(70,70)' stroke='%23FF8F92' stroke-width='1.8' opacity='0.3'%3E%3Cpath d='M-18 -12 C-9 -15 0 -12 0 -12 L0 13 C-9 10 -18 13 -18 13 Z'/%3E%3Cpath d='M18 -12 C9 -15 0 -12 0 -12 L0 13 C9 10 18 13 18 13 Z'/%3E%3C/g%3E%3Cg transform='translate(560,60)' stroke='%237ED3A3' stroke-width='1.8' opacity='0.3'%3E%3Ccircle cx='0' cy='0' r='18'/%3E%3Cellipse cx='0' cy='0' rx='7' ry='18'/%3E%3Cpath d='M-18 0 H18'/%3E%3Cpath d='M-15 -9 Q0 -4 15 -9'/%3E%3Cpath d='M-15 9 Q0 4 15 9'/%3E%3C/g%3E%3Cg transform='translate(300,40)' stroke='%23B08BE0' stroke-width='1.8' opacity='0.3'%3E%3Ccircle cx='-3' cy='-3' r='13'/%3E%3Cline x1='7' y1='7' x2='20' y2='20'/%3E%3C/g%3E%3Cg transform='translate(600,210)' stroke='%23FFB8DC' stroke-width='1.8' opacity='0.3'%3E%3Cpath d='M-18 2 C-19 -13 -4 -21 9 -16 C21 -11 21 3 11 6 C5 8 6 14 10 16 C4 20 -6 19 -13 12 C-18 7 -18 5 -18 2 Z'/%3E%3Ccircle cx='-8' cy='-6' r='1.6' fill='%23FFB8DC' stroke='none'/%3E%3Ccircle cx='2' cy='-11' r='1.6' fill='%23FFB8DC' stroke='none'/%3E%3Ccircle cx='11' cy='-3' r='1.6' fill='%23FFB8DC' stroke='none'/%3E%3C/g%3E%3Cg transform='translate(40,230)' stroke='%23FF8F92' stroke-width='1.8' opacity='0.3'%3E%3Cpath d='M0 -8 C-15 -13 -21 1 -14 12 C-9 19 -4 19 0 16 C4 19 9 19 14 12 C21 1 15 -13 0 -8 Z'/%3E%3Cpath d='M0 -8 L2 -17'/%3E%3Cpath d='M2 -17 Q9 -19 11 -13'/%3E%3C/g%3E%3Cg transform='translate(450,300)' stroke='%23F2C97D' stroke-width='2' opacity='0.3'%3E%3Cline x1='0' y1='-12' x2='0' y2='12'/%3E%3Cline x1='-12' y1='0' x2='12' y2='0'/%3E%3C/g%3E%3Cg transform='translate(200,300)' stroke='%234FAAB8' stroke-width='1.8' opacity='0.3'%3E%3Cpath d='M-18 8 L18 -14 L4 16 L0 4 Z'/%3E%3Cpath d='M-18 8 L0 4 L4 16'/%3E%3C/g%3E%3Cg transform='translate(330,190)' stroke='%23B08BE0' stroke-width='1.8' opacity='0.3'%3E%3Cpath d='M-6 -18 H6 M-4 -18 V-4 L-14 14 Q-16 20 -10 20 H10 Q16 20 14 14 L4 -4 V-18'/%3E%3Cpath d='M-9 8 H9'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 640px 360px;
+}
+[data-theme="dark"] .as-tone-chatbot { --page-bg: #171107; }
 
 /* ── left rail ─────────────────────────────────────────────────────────── */
 .as-side {
@@ -128,7 +157,15 @@
 .as-icon-btn:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 2px; }
 
 /* ── top bar ───────────────────────────────────────────────────────────── */
-.as-body { display: flex; flex-direction: column; min-width: 0; }
+/* position: relative so the student-only doodle backdrop (an absolutely
+   positioned first child, z-index: 0) has something to anchor to. .as-top is
+   already sticky with its own z-index and needs no change; .as-grid and
+   .as-foot are plain flow elements, so they're bumped above the doodle layer
+   explicitly — otherwise an unpositioned sibling paints *under* a positioned
+   one with z-index: 0, and the doodles would sit on top of the content. */
+.as-body { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.as-body > .as-grid,
+.as-body > .as-foot { position: relative; z-index: 1; }
 
 .as-top {
   position: sticky;

@@ -113,6 +113,14 @@ export const IconUpload = () => (
   </svg>
 );
 
+export const IconChatbot = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <rect x="3.5" y="6.5" width="17" height="12" rx="3" />
+    <path d="M12 6.5V3.8M9 12.2v.01M15 12.2v.01" />
+    <path d="M8.6 15.6c1 .9 5.8.9 6.8 0" />
+  </svg>
+);
+
 export const IconGlobe = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
     <circle cx="12" cy="12" r="9" />

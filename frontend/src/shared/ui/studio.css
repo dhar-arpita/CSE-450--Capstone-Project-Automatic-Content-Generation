@@ -373,6 +373,150 @@ html[lang="bn"] .gw-head h1 { line-height: 1.35; letter-spacing: 0; }
   .wg-spinner { animation-duration: 1.6s; }
 }
 
+/* ── mode picker (practice chatbot's step 2) ───────────────────────────────
+   Each mode keeps its own accent — --mode-color/--mode-wash, set inline per
+   card — rather than the page's single --tone, because the four modes are a
+   set of siblings, not sub-steps of one flow. */
+.gw-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+@media (max-width: 560px) {
+  .gw-mode-grid { grid-template-columns: minmax(0, 1fr); }
+}
+.gw-mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 20px;
+  border: 1.5px solid var(--dhi-line);
+  border-left: 4px solid var(--mode-color, var(--tone));
+  border-radius: 18px;
+  background: var(--dhi-surface-raised);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1.4), box-shadow .18s ease, border-color .15s ease, background .15s ease;
+}
+.gw-mode-card:hover:not(:disabled) { transform: translateY(-3px) scale(1.015); box-shadow: var(--dhi-shadow-md); }
+.gw-mode-card:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 2px; }
+.gw-mode-card.is-active {
+  border-color: var(--mode-color, var(--tone));
+  background: color-mix(in srgb, var(--mode-color, var(--tone)) 10%, var(--dhi-surface-raised));
+}
+.gw-mode-card:disabled { opacity: .45; cursor: not-allowed; }
+.gw-mode-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: var(--mode-wash, var(--tone-wash));
+  font-size: 16px;
+}
+.gw-mode-title { font-size: .98rem; font-weight: 700; color: var(--dhi-ink); }
+.gw-mode-sub { font-size: .84rem; color: var(--dhi-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .gw-mode-card { transition: none; }
+  .gw-mode-card:hover { transform: none; }
+}
+
+/* ── the primary-student worksheet wizard (Subject → Chapter → Topic) ─────
+   Subject and Chapter reuse .gw-mode-grid/.gw-mode-card above — same "pick
+   one of these big friendly cards" shape. Topic gets its own row list
+   instead: topic names run longer than a subject or chapter name, and there
+   are usually more of them, so a single column of full-width rows reads
+   better than a grid of squares. */
+.gw-pick-empty {
+  padding: 20px;
+  border-radius: 14px;
+  background: var(--dhi-surface-sunken);
+  color: var(--dhi-muted);
+  font-size: .95rem;
+  text-align: center;
+}
+
+.gw-topic-list { display: flex; flex-direction: column; gap: 10px; }
+.gw-topic-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 20px;
+  border: 1.5px solid var(--dhi-line);
+  border-radius: 16px;
+  background: var(--dhi-surface-raised);
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .16s cubic-bezier(.2, .8, .2, 1), border-color .15s ease, box-shadow .15s ease;
+}
+.gw-topic-row:hover { transform: translateX(4px); border-color: var(--tone); box-shadow: var(--dhi-shadow-sm); }
+.gw-topic-row:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 2px; }
+.gw-topic-num {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--tone-wash);
+  color: var(--tone);
+  font-weight: 700;
+  font-size: .88rem;
+}
+.gw-topic-name { flex: 1; min-width: 0; font-size: 1rem; font-weight: 650; color: var(--dhi-ink); }
+.gw-topic-arrow { flex: 0 0 auto; color: var(--tone); }
+@media (prefers-reduced-motion: reduce) {
+  .gw-topic-row { transition: none; }
+  .gw-topic-row:hover { transform: none; }
+}
+
+/* breadcrumb of what's been picked so far, each chip jumping back a step */
+/* margin lives on whatever wraps this (alongside the back button on the
+   generate step) rather than here, now that it's never a lone top-level
+   element. */
+.gw-crumb-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gw-crumb-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--tone-wash);
+  color: var(--dhi-ink);
+  font-family: inherit;
+  font-size: .86rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.gw-crumb-chip.is-current { background: var(--tone); color: #fff; cursor: default; }
+.gw-crumb-sep { color: var(--dhi-muted); font-size: .8rem; }
+
+.gw-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 18px;
+  padding: 9px 16px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 12px;
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-ink);
+  font-family: inherit;
+  font-size: .9rem;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color .18s ease;
+}
+.gw-back-btn:hover { border-color: var(--tone); }
+
 /* ── file drop zone (upload studio) ────────────────────────────────────── */
 .gw-drop {
   display: flex;

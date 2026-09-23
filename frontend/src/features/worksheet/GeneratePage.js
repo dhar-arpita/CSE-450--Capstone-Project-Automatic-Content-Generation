@@ -38,6 +38,16 @@ const TXT = {
     savedFailed: "আপনার ওয়ার্কশিটগুলো আনা গেল না।",
     levels: { easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
     languages: { bangla: "বাংলা", english: "ইংরেজি" },
+    wizardSubjectTitle: "কোন বিষয়ে ওয়ার্কশিট বানাতে চাও?",
+    wizardSubjectSub: "একটা বিষয় বেছে নাও",
+    wizardChapterTitle: "কোন অধ্যায়?",
+    wizardChapterSub: "একটা অধ্যায় বেছে নাও",
+    wizardTopicTitle: "কোন টপিক?",
+    wizardTopicSub: "একটা টপিক বেছে নাও, তারপর ওয়ার্কশিট বানানো শুরু করো",
+    back: "← পেছনে যাও",
+    noSubjects: "এই ক্লাসের জন্য কোনো বিষয় পাওয়া যায়নি।",
+    noChapters: "এই বিষয়ে কোনো অধ্যায় পাওয়া যায়নি।",
+    noTopics: "এই অধ্যায়ে কোনো টপিক পাওয়া যায়নি।",
   },
   english: {
     breadcrumb: "Worksheet Studio",
@@ -62,6 +72,16 @@ const TXT = {
     savedFailed: "Could not load your worksheets.",
     levels: { easy: "Easy", medium: "Medium", hard: "Hard" },
     languages: { bangla: "Bangla", english: "English" },
+    wizardSubjectTitle: "Which subject do you want a worksheet for?",
+    wizardSubjectSub: "Pick a subject to get started",
+    wizardChapterTitle: "Which chapter?",
+    wizardChapterSub: "Pick a chapter",
+    wizardTopicTitle: "Which topic?",
+    wizardTopicSub: "Pick a topic, then start building your worksheet",
+    back: "← Back",
+    noSubjects: "No subjects found for this class.",
+    noChapters: "No chapters found for this subject.",
+    noTopics: "No topics found for this chapter.",
   },
 };
 
@@ -85,6 +105,46 @@ function SelectField({ label, value, onChange, options, placeholder, disabled })
           <path d="m6 9 6 6 6-6" />
         </svg>
       </div>
+    </div>
+  );
+}
+
+/* ── the student wizard (Subject → Chapter → Topic) ────────────────────────
+   Every student, any class — one big-card decision per screen instead of
+   four dropdowns on one page. A teacher (or a student whose account
+   predates the class field) still gets the SelectField grid above. */
+function PickCard({ label, onClick }) {
+  return (
+    <button type="button" className="gw-mode-card" onClick={onClick}>
+      <span className="gw-mode-icon">{label.charAt(0).toUpperCase()}</span>
+      <span className="gw-mode-title">{label}</span>
+    </button>
+  );
+}
+
+function TopicRow({ index, label, onClick }) {
+  return (
+    <button type="button" className="gw-topic-row" onClick={onClick}>
+      <span className="gw-topic-num">{index}</span>
+      <span className="gw-topic-name">{label}</span>
+      <svg className="gw-topic-arrow" viewBox="0 0 24 24" width="18" height="18" fill="none"
+           stroke="currentColor" strokeWidth="2.1" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M9 6l6 6-6 6" />
+      </svg>
+    </button>
+  );
+}
+
+function WizardCrumbs({ subjectName, chapterName, onSubject, onChapter }) {
+  return (
+    <div className="gw-crumb-bar">
+      <button type="button" className="gw-crumb-chip" onClick={onSubject}>{subjectName}</button>
+      {chapterName && (
+        <>
+          <span className="gw-crumb-sep">/</span>
+          <button type="button" className="gw-crumb-chip" onClick={onChapter}>{chapterName}</button>
+        </>
+      )}
     </div>
   );
 }
@@ -126,11 +186,28 @@ export default function GeneratePage() {
       navigate("/login");
       return;
     }
-    setUser(JSON.parse(storedUser));
-    getClasses()
-      .then(({ data }) => setClassList(data || []))
-      .catch((err) => console.error("Classes load failed", err));
+    const parsedUser = JSON.parse(storedUser);
+    setUser(parsedUser);
+
+    if (parsedUser.role === "student" && parsedUser.class_name) {
+      // A student's class is fixed at signup — skip the class picker and go
+      // straight to that class's subjects instead of making them pick it
+      // again every time.
+      setSelectedClass(parsedUser.class_name);
+      getSubjects(parsedUser.class_name)
+        .then(({ data }) => setSubjectList(data || []))
+        .catch((err) => console.error("Subjects load failed", err));
+    } else {
+      getClasses()
+        .then(({ data }) => setClassList(data || []))
+        .catch((err) => console.error("Classes load failed", err));
+    }
   }, [navigate]);
+
+  // Pre-existing student accounts predate the class field and have no
+  // class_name yet — they fall back to the manual picker below rather than
+  // being blocked. Every other student gets the card wizard.
+  const isStudentWithClass = user?.role === "student" && !!user?.class_name;
 
   const handleLogout = () => {
     ["access_token", "refresh_token", "user", "chatbot_session_id"].forEach((k) =>
@@ -171,8 +248,78 @@ export default function GeneratePage() {
     } catch (err) { console.error(err); }
   };
 
-  const chosen = [selectedClass, selectedSubject, selectedChapter, selectedTopicId].filter(Boolean).length;
-  const ready = chosen === 4;
+  // Wizard-only: going back a step just clears that level's selection and
+  // everything under it — chapterList/subjectList are still cached from the
+  // forward trip, so no refetch is needed.
+  const backToSubjectStep = () => {
+    setSelectedSubject(""); setChapterList([]); setSelectedChapter("");
+    setTopicList([]); setSelectedTopicId("");
+  };
+  const backToChapterStep = () => {
+    setSelectedChapter(""); setTopicList([]); setSelectedTopicId("");
+  };
+  const backToTopicStep = () => { setSelectedTopicId(""); };
+  const primaryStep = !selectedSubject ? "subject" : !selectedChapter ? "chapter" : !selectedTopicId ? "topic" : "generate";
+  const selectedSubjectName = subjectList.find((s) => String(s.subject_id) === String(selectedSubject))?.name || "";
+  const selectedChapterObj = chapterList.find((c) => String(c.chapter_id) === String(selectedChapter));
+  const selectedChapterName = selectedChapterObj ? `Ch ${selectedChapterObj.chapter_no}: ${selectedChapterObj.name}` : "";
+
+  const totalFields = isStudentWithClass ? 3 : 4;
+  const chosen = [
+    ...(isStudentWithClass ? [] : [selectedClass]),
+    selectedSubject, selectedChapter, selectedTopicId,
+  ].filter(Boolean).length;
+  const ready = chosen === totalFields;
+
+  // Shared between the two flows below: the non-primary Step 2 panel and the
+  // wizard's final "generate" screen render the exact same sample-upload +
+  // WorksheetGenerator block.
+  const generatorSection = (
+    <>
+      {!showSampleInput ? (
+        <button type="button" className="gw-sample-open" onClick={() => setShowSampleInput(true)}>
+          {t.addSample}
+        </button>
+      ) : (
+        <div className="gw-sample">
+          <div className="gw-sample-head">
+            <strong>{t.uploadRef}</strong>
+            <button
+              type="button"
+              className="gw-sample-cancel"
+              onClick={() => { setShowSampleInput(false); setSampleFile(null); }}
+            >
+              {t.cancel}
+            </button>
+          </div>
+          <input
+            type="file"
+            accept=".pdf,.txt"
+            onChange={(e) => setSampleFile(e.target.files[0])}
+          />
+          <p className="gw-sample-help">{t.refHelper}</p>
+          {sampleFile && (
+            <p className="gw-sample-picked">
+              <IconCheck />
+              {t.selected} {sampleFile.name}
+            </p>
+          )}
+        </div>
+      )}
+
+      <div style={{ marginTop: "22px" }}>
+        <WorksheetGenerator
+          selectedTopicId={selectedTopicId}
+          user={user}
+          sampleFile={sampleFile}
+          language={language}
+          openRequest={openRequest}
+          onContentChange={setActiveContentId}
+          onGenerated={() => setListVersion((v) => v + 1)}
+        />
+      </div>
+    </>
+  );
 
   return (
     <AppShell
@@ -205,118 +352,178 @@ export default function GeneratePage() {
         </div>
       </section>
 
-      {/* ── STEP 1 · curriculum ── */}
-      <section className="as-panel gw-step">
-        <header className="gw-step-head">
-          <span className={`gw-step-no${ready ? " is-done" : ""}`}>
-            {ready ? <IconCheck /> : "1"}
-          </span>
-          <div className="gw-step-text">
-            <h2>{t.step1Title}</h2>
-            <p>{t.step1Sub}</p>
-          </div>
-          <div className="gw-tally">
-            <span className="gw-tally-count">
-              {t.setupLabel} <strong>{chosen}/4</strong>
-            </span>
-            <div className="gw-tally-track">
-              <div className="gw-tally-fill" style={{ width: `${(chosen / 4) * 100}%` }} />
+      {isStudentWithClass ? (
+        <>
+          {/* ── wizard step: subject ── */}
+          {primaryStep === "subject" && (
+            <section className="as-panel gw-step">
+              <header className="gw-step-head">
+                <span className="gw-step-no">1</span>
+                <div className="gw-step-text">
+                  <h2>{t.wizardSubjectTitle}</h2>
+                  <p>{t.wizardSubjectSub}</p>
+                </div>
+              </header>
+              {subjectList.length === 0 ? (
+                <p className="gw-pick-empty">{t.noSubjects}</p>
+              ) : (
+                <div className="gw-mode-grid">
+                  {subjectList.map((s) => (
+                    <PickCard key={s.subject_id} label={s.name} onClick={() => handleSubjectChange(s.subject_id)} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── wizard step: chapter ── */}
+          {primaryStep === "chapter" && (
+            <section className="as-panel gw-step">
+              <button type="button" className="gw-back-btn" onClick={backToSubjectStep}>{t.back}</button>
+              <header className="gw-step-head">
+                <span className="gw-step-no">2</span>
+                <div className="gw-step-text">
+                  <h2>{t.wizardChapterTitle}</h2>
+                  <p>{t.wizardChapterSub}</p>
+                </div>
+              </header>
+              {chapterList.length === 0 ? (
+                <p className="gw-pick-empty">{t.noChapters}</p>
+              ) : (
+                <div className="gw-mode-grid">
+                  {chapterList.map((ch) => (
+                    <PickCard
+                      key={ch.chapter_id}
+                      label={`Ch ${ch.chapter_no}: ${ch.name}`}
+                      onClick={() => handleChapterChange(ch.chapter_id)}
+                    />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── wizard step: topic ── */}
+          {primaryStep === "topic" && (
+            <section className="as-panel gw-step">
+              <button type="button" className="gw-back-btn" onClick={backToChapterStep}>{t.back}</button>
+              <header className="gw-step-head">
+                <span className="gw-step-no">3</span>
+                <div className="gw-step-text">
+                  <h2>{t.wizardTopicTitle}</h2>
+                  <p>{t.wizardTopicSub}</p>
+                </div>
+              </header>
+              {topicList.length === 0 ? (
+                <p className="gw-pick-empty">{t.noTopics}</p>
+              ) : (
+                <div className="gw-topic-list">
+                  {topicList.map((tp, i) => (
+                    <TopicRow key={tp.topic_id} index={i + 1} label={tp.name} onClick={() => setSelectedTopicId(tp.topic_id)} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* ── wizard step: generate — same panel as the non-primary Step 2 ── */}
+          {primaryStep === "generate" && (
+            <section className="as-panel gw-step">
+              <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToTopicStep}>{t.back}</button>
+                <WizardCrumbs
+                  subjectName={selectedSubjectName}
+                  chapterName={selectedChapterName}
+                  onSubject={backToSubjectStep}
+                  onChapter={backToChapterStep}
+                />
+              </div>
+              <header className="gw-step-head">
+                <span className="gw-step-no is-done"><IconCheck /></span>
+                <div className="gw-step-text">
+                  <h2>{t.step2Title}</h2>
+                </div>
+              </header>
+              {generatorSection}
+            </section>
+          )}
+        </>
+      ) : (
+        <>
+          {/* ── STEP 1 · curriculum ── */}
+          <section className="as-panel gw-step">
+            <header className="gw-step-head">
+              <span className={`gw-step-no${ready ? " is-done" : ""}`}>
+                {ready ? <IconCheck /> : "1"}
+              </span>
+              <div className="gw-step-text">
+                <h2>{t.step1Title}</h2>
+                <p>{t.step1Sub}</p>
+              </div>
+              <div className="gw-tally">
+                <span className="gw-tally-count">
+                  {t.setupLabel} <strong>{chosen}/{totalFields}</strong>
+                </span>
+                <div className="gw-tally-track">
+                  <div className="gw-tally-fill" style={{ width: `${(chosen / totalFields) * 100}%` }} />
+                </div>
+              </div>
+            </header>
+
+            <div className="gw-fields">
+              {!isStudentWithClass && (
+                <SelectField
+                  label={t.classL}
+                  value={selectedClass}
+                  onChange={handleClassChange}
+                  placeholder={t.selectClass}
+                  options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
+                />
+              )}
+              <SelectField
+                label={t.subjectL}
+                value={selectedSubject}
+                onChange={handleSubjectChange}
+                disabled={!selectedClass}
+                placeholder={t.selectSubject}
+                options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
+              />
+              <SelectField
+                label={t.chapterL}
+                value={selectedChapter}
+                onChange={handleChapterChange}
+                disabled={!selectedSubject}
+                placeholder={t.selectChapter}
+                options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
+              />
+              <SelectField
+                label={t.topicL}
+                value={selectedTopicId}
+                onChange={setSelectedTopicId}
+                disabled={!selectedChapter}
+                placeholder={t.selectTopic}
+                options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
+              />
             </div>
-          </div>
-        </header>
 
-        <div className="gw-fields">
-          <SelectField
-            label={t.classL}
-            value={selectedClass}
-            onChange={handleClassChange}
-            placeholder={t.selectClass}
-            options={classList.map((c) => ({ value: c.class_name, label: c.class_name }))}
-          />
-          <SelectField
-            label={t.subjectL}
-            value={selectedSubject}
-            onChange={handleSubjectChange}
-            disabled={!selectedClass}
-            placeholder={t.selectSubject}
-            options={subjectList.map((s) => ({ value: s.subject_id, label: s.name }))}
-          />
-          <SelectField
-            label={t.chapterL}
-            value={selectedChapter}
-            onChange={handleChapterChange}
-            disabled={!selectedSubject}
-            placeholder={t.selectChapter}
-            options={chapterList.map((ch) => ({ value: ch.chapter_id, label: `Ch ${ch.chapter_no}: ${ch.name}` }))}
-          />
-          <SelectField
-            label={t.topicL}
-            value={selectedTopicId}
-            onChange={setSelectedTopicId}
-            disabled={!selectedChapter}
-            placeholder={t.selectTopic}
-            options={topicList.map((tp) => ({ value: tp.topic_id, label: tp.name }))}
-          />
-        </div>
+            <p className={`gw-hint${ready ? " is-done" : ""}`}>
+              <IconSpark />
+              {ready ? t.hintDone : t.hintPending}
+            </p>
+          </section>
 
-        <p className={`gw-hint${ready ? " is-done" : ""}`}>
-          <IconSpark />
-          {ready ? t.hintDone : t.hintPending}
-        </p>
-      </section>
-
-      {/* ── STEP 2 · settings, optional style sample, generate ── */}
-      <section className="as-panel gw-step">
-        <header className="gw-step-head">
-          <span className="gw-step-no">2</span>
-          <div className="gw-step-text">
-            <h2>{t.step2Title}</h2>
-          </div>
-        </header>
-
-        {!showSampleInput ? (
-          <button type="button" className="gw-sample-open" onClick={() => setShowSampleInput(true)}>
-            {t.addSample}
-          </button>
-        ) : (
-          <div className="gw-sample">
-            <div className="gw-sample-head">
-              <strong>{t.uploadRef}</strong>
-              <button
-                type="button"
-                className="gw-sample-cancel"
-                onClick={() => { setShowSampleInput(false); setSampleFile(null); }}
-              >
-                {t.cancel}
-              </button>
-            </div>
-            <input
-              type="file"
-              accept=".pdf,.txt"
-              onChange={(e) => setSampleFile(e.target.files[0])}
-            />
-            <p className="gw-sample-help">{t.refHelper}</p>
-            {sampleFile && (
-              <p className="gw-sample-picked">
-                <IconCheck />
-                {t.selected} {sampleFile.name}
-              </p>
-            )}
-          </div>
-        )}
-
-        <div style={{ marginTop: "22px" }}>
-          <WorksheetGenerator
-            selectedTopicId={selectedTopicId}
-            user={user}
-            sampleFile={sampleFile}
-            language={language}
-            openRequest={openRequest}
-            onContentChange={setActiveContentId}
-            onGenerated={() => setListVersion((v) => v + 1)}
-          />
-        </div>
-      </section>
+          {/* ── STEP 2 · settings, optional style sample, generate ── */}
+          <section className="as-panel gw-step">
+            <header className="gw-step-head">
+              <span className="gw-step-no">2</span>
+              <div className="gw-step-text">
+                <h2>{t.step2Title}</h2>
+              </div>
+            </header>
+            {generatorSection}
+          </section>
+        </>
+      )}
     </AppShell>
   );
 }

@@ -29,6 +29,7 @@ from services.cache_service import (
     mark_not_seed,
 )
 from core.security import require_teacher_or_admin
+from services.class_scope import assert_student_class, class_for_chapter, class_for_subject, class_for_topic
 from schemas.cache import (
     PromoteToSeedRequest, PromoteResponse,
     SeedRequest,
@@ -51,6 +52,33 @@ import json
 import ast
 
 router = APIRouter(prefix="/generate", tags=["Worksheet Generation"])
+
+
+def _owns_content(db: Session, current_user: User, content: GeneratedContent) -> bool:
+    """Whether this content_id is this user's to read or act on.
+
+    Ownership runs through the session table rather than a column on
+    generated_content — same as /my/content above: a teacher/admin's own
+    generation hangs off teacher_session_id, a student's off
+    learning_session_id. Without this, any content_id (worksheet, quiz,
+    someone else's practice question) could be read or refined by anyone
+    who is merely logged in, by walking the integer.
+    """
+    if current_user.role == "admin":
+        return True
+    if current_user.role == "student":
+        if not content.learning_session_id:
+            return False
+        return db.query(LearningSession).filter(
+            LearningSession.session_id == content.learning_session_id,
+            LearningSession.student_id == current_user.user_id,
+        ).first() is not None
+    if not content.teacher_session_id:
+        return False
+    return db.query(TeacherSession).filter(
+        TeacherSession.session_id == content.teacher_session_id,
+        TeacherSession.teacher_id == current_user.user_id,
+    ).first() is not None
 
 
 @router.post("/worksheet")
@@ -78,6 +106,8 @@ async def create_worksheet(
     subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+
+    assert_student_class(db, current_user, subject.class_name)
 
     # ── STEP 2: Cache read ───────────────────────────────────────────────────
     # Bypassed when a style sample was uploaded (the output is sample-specific)
@@ -153,6 +183,8 @@ async def create_study_note(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
+    assert_student_class(db, current_user, subject.class_name)
+
     # ── Cache read ───────────────────────────────────────────────────────────
     if not refresh:
         key = normalize_key(
@@ -198,7 +230,7 @@ def download_worksheet_pdf(
         GeneratedContent.content_id == content_id
     ).first()
 
-    if not content:
+    if not content or not _owns_content(db, current_user, content):
         raise HTTPException(status_code=404, detail="Worksheet not found")
 
     try:
@@ -240,7 +272,7 @@ def get_worksheet(
         GeneratedContent.content_id == content_id
     ).first()
 
-    if not content:
+    if not content or not _owns_content(db, current_user, content):
         raise HTTPException(status_code=404, detail="Worksheet not found")
 
     problems = []
@@ -281,37 +313,46 @@ def list_my_content(
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db),
 ):
-    """Everything this teacher has generated of one kind, newest first.
+    """Everything this person has generated of one kind, newest first.
 
     Ownership runs through the session table rather than a column on
     generated_content: services/cache_service._save_generated_content opens a
     teacher_session for a teacher or admin and a learning_session for a
-    student, and hangs the content off whichever it made. teacher.teacher_id
-    is a foreign key onto user.user_id, so the join below is the teacher's own
-    work and nobody else's.
+    student, and hangs the content off whichever it made — same split as
+    _owns_content above, so a student sees their own generations here too,
+    not just a teacher's.
 
     Cache seeds are excluded — those are pre-warmed rows written by
-    scripts/warm_cache.py, not something this teacher made.
+    scripts/warm_cache.py, not something this person made.
     """
     wanted = [c.strip() for c in content_type.split(",") if c.strip()]
     if not wanted:
         return {"content_type": content_type, "items": []}
 
+    base = db.query(
+        GeneratedContent.content_id,
+        GeneratedContent.difficulty_level,
+        GeneratedContent.num_problems,
+        GeneratedContent.language,
+        GeneratedContent.generated_at,
+        GeneratedContent.content_type,
+        Topic.name.label("topic_name"),
+        Chapter.name.label("chapter_name"),
+        Chapter.chapter_no,
+        Subject.name.label("subject_name"),
+        Subject.class_name,
+    )
+    if current_user.role == "student":
+        base = base.join(
+            LearningSession, LearningSession.session_id == GeneratedContent.learning_session_id
+        ).filter(LearningSession.student_id == current_user.user_id)
+    else:
+        base = base.join(
+            TeacherSession, TeacherSession.session_id == GeneratedContent.teacher_session_id
+        ).filter(TeacherSession.teacher_id == current_user.user_id)
+
     rows = (
-        db.query(
-            GeneratedContent.content_id,
-            GeneratedContent.difficulty_level,
-            GeneratedContent.num_problems,
-            GeneratedContent.language,
-            GeneratedContent.generated_at,
-            GeneratedContent.content_type,
-            Topic.name.label("topic_name"),
-            Chapter.name.label("chapter_name"),
-            Chapter.chapter_no,
-            Subject.name.label("subject_name"),
-            Subject.class_name,
-        )
-        .join(TeacherSession, TeacherSession.session_id == GeneratedContent.teacher_session_id)
+        base
         # The chain is coalesced because it is not always complete: a chapter-scope
         # quiz has no topic_id and a subject-scope quiz has neither topic nor
         # chapter, so those rows carry the ids directly on generated_content.
@@ -325,7 +366,6 @@ def list_my_content(
             Subject,
             Subject.subject_id == func.coalesce(GeneratedContent.subject_id, Chapter.subject_id),
         )
-        .filter(TeacherSession.teacher_id == current_user.user_id)
         .filter(GeneratedContent.content_type.in_(wanted))
         .filter(GeneratedContent.is_cache_seed.is_(False))
         .order_by(GeneratedContent.generated_at.desc())
@@ -375,7 +415,7 @@ async def refine_worksheet(
     content = db.query(GeneratedContent).filter(
         GeneratedContent.content_id == content_id
     ).first()
-    if not content:
+    if not content or not _owns_content(db, current_user, content):
         raise HTTPException(status_code=404, detail="Content not found")
 
     topic = db.query(Topic).filter(Topic.topic_id == content.topic_id).first()
@@ -389,6 +429,8 @@ async def refine_worksheet(
     subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+
+    assert_student_class(db, current_user, subject.class_name)
 
     # The refinement pipeline itself now runs in tasks/generation_tasks.py.
     return dispatch_job(
@@ -459,6 +501,8 @@ async def create_quiz(
 
     else:
         raise HTTPException(status_code=400, detail="scope must be 'topic', 'chapter', or 'subject'")
+
+    assert_student_class(db, current_user, subject.class_name if subject else None)
 
     quiz_content_type = QUIZ_CONTENT_TYPE_BY_SCOPE[scope]
 
@@ -532,6 +576,13 @@ def quick_answer(
     quiz_subject request on subject_id, exactly as the quiz endpoint keys them,
     so a seed seeded for one is found by the other.
     """
+    resolved_class = (
+        class_for_topic(db, body.topic_id)
+        or class_for_chapter(db, body.chapter_id)
+        or class_for_subject(db, body.subject_id)
+    )
+    assert_student_class(db, current_user, resolved_class)
+
     try:
         key = build_seed_key(
             content_type=body.content_type,

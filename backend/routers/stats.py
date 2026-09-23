@@ -13,26 +13,35 @@ from sqlalchemy.orm import Session
 from core.config import get_db
 from core.security import get_current_user_from_header
 from models.db_models import (
-    Chapter, Class, GeneratedContent, GenerationJob, IngestionJob, Subject,
-    TeacherSession, Topic, UploadRequest, User,
+    Chapter, Class, GeneratedContent, GenerationJob, IngestionJob, LearningSession,
+    Subject, TeacherSession, Topic, UploadRequest, User,
 )
 
-# generated_content.content_type values, grouped the way a teacher thinks about
-# them. Quizzes are stored one type per scope; the profile counts them together.
+# generated_content.content_type values, grouped the way a person thinks about
+# them. Quizzes are stored one type per scope from the worksheet studio
+# (quiz_topic/chapter/subject) and one row per question from the chatbot
+# (quiz_question) — both count as "quizzes". PRACTICE_TYPES only ever come
+# from the chatbot (chat_router.py's _save_interaction), so they are only
+# ever non-zero for a student.
 WORKSHEET_TYPES = ("worksheet",)
-QUIZ_TYPES = ("quiz_topic", "quiz_chapter", "quiz_subject")
+QUIZ_TYPES = ("quiz_topic", "quiz_chapter", "quiz_subject", "quiz_question")
 NOTE_TYPES = ("study_note",)
+PRACTICE_TYPES = ("qa_answer", "qa_explain_more", "practice_set", "practice_question")
 
 
-def _mine(db: Session, user_id: int):
-    """Content this teacher made. Ownership runs through teacher_session, and
-    cache seeds are excluded — nobody generated those through the product."""
-    return (
-        db.query(GeneratedContent)
-        .join(TeacherSession, TeacherSession.session_id == GeneratedContent.teacher_session_id)
-        .filter(TeacherSession.teacher_id == user_id)
-        .filter(GeneratedContent.is_cache_seed.is_(False))
-    )
+def _mine(db: Session, current_user: User):
+    """Content this person made. Ownership runs through teacher_session for a
+    teacher/admin and through learning_session for a student — the same split
+    generation.py's _owns_content uses. Cache seeds are excluded — nobody
+    generated those through the product."""
+    q = db.query(GeneratedContent).filter(GeneratedContent.is_cache_seed.is_(False))
+    if current_user.role == "student":
+        return q.join(
+            LearningSession, LearningSession.session_id == GeneratedContent.learning_session_id
+        ).filter(LearningSession.student_id == current_user.user_id)
+    return q.join(
+        TeacherSession, TeacherSession.session_id == GeneratedContent.teacher_session_id
+    ).filter(TeacherSession.teacher_id == current_user.user_id)
 
 router = APIRouter(prefix="/stats", tags=["Stats"])
 
@@ -81,12 +90,27 @@ def my_totals(
     uid = current_user.user_id
 
     by_type = dict(
-        _mine(db, uid)
+        _mine(db, current_user)
         .with_entities(GeneratedContent.content_type, func.count(GeneratedContent.content_id))
         .group_by(GeneratedContent.content_type)
         .all()
     )
     total_of = lambda types: sum(by_type.get(t, 0) for t in types)  # noqa: E731
+
+    # A student doesn't upload files — the fourth tile is how many practice
+    # sessions with Progga they've started instead.
+    if current_user.role == "student":
+        sessions = (
+            db.query(func.count(LearningSession.session_id))
+            .filter(LearningSession.student_id == uid)
+            .scalar()
+        ) or 0
+        return {
+            "worksheets": total_of(WORKSHEET_TYPES),
+            "quizzes": total_of(QUIZ_TYPES),
+            "study_notes": total_of(NOTE_TYPES),
+            "sessions": sessions,
+        }
 
     uploads = (
         db.query(func.count(UploadRequest.request_id))
@@ -119,7 +143,7 @@ def my_activity(
 
     day = func.date(GeneratedContent.generated_at)
     rows = (
-        _mine(db, uid)
+        _mine(db, current_user)
         .with_entities(day.label("day"), GeneratedContent.content_type,
                        func.count(GeneratedContent.content_id))
         .filter(GeneratedContent.generated_at >= datetime.combine(first, datetime.min.time()))
@@ -136,10 +160,13 @@ def my_activity(
         .all()
     )
 
+    # "upload" only ever fills for a teacher and "practice" only ever fills
+    # for a student — both keys are always present so either profile page can
+    # read the series it wants without a role check of its own.
     buckets = {
         (first + timedelta(days=i)).isoformat():
             {"date": (first + timedelta(days=i)).isoformat(),
-             "worksheet": 0, "quiz": 0, "study_note": 0, "upload": 0, "total": 0}
+             "worksheet": 0, "quiz": 0, "study_note": 0, "practice": 0, "upload": 0, "total": 0}
         for i in range(days)
     }
 
@@ -152,6 +179,8 @@ def my_activity(
             continue
         if content_type in QUIZ_TYPES:
             bucket["quiz"] += count
+        elif content_type in PRACTICE_TYPES:
+            bucket["practice"] += count
         elif content_type in NOTE_TYPES:
             bucket["study_note"] += count
         elif content_type in WORKSHEET_TYPES:
@@ -256,7 +285,7 @@ def my_classes(
         row[field] += count
 
     content_rows = (
-        _mine(db, uid)
+        _mine(db, current_user)
         .outerjoin(Topic, Topic.topic_id == GeneratedContent.topic_id)
         .outerjoin(Chapter, Chapter.chapter_id == func.coalesce(GeneratedContent.chapter_id, Topic.chapter_id))
         .outerjoin(Subject, Subject.subject_id == func.coalesce(GeneratedContent.subject_id, Chapter.subject_id))
@@ -281,4 +310,41 @@ def my_classes(
     for row in items:
         row["total"] = row["content"] + row["uploads"]
 
+    return {"items": items[:limit]}
+
+
+@router.get("/me/subjects")
+def my_subjects(
+    limit: int = Query(6, ge=1, le=20),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user_from_header),
+):
+    """Which subjects this person actually practices, by volume.
+
+    A student belongs to one class, so a class breakdown (my_classes above)
+    has nothing to say about them — this is the equivalent view scoped one
+    level down, by subject instead. Same coalesced curriculum chain as
+    my_classes, same reasoning.
+    """
+    tally = {}
+
+    rows = (
+        _mine(db, current_user)
+        .outerjoin(Topic, Topic.topic_id == GeneratedContent.topic_id)
+        .outerjoin(Chapter, Chapter.chapter_id == func.coalesce(GeneratedContent.chapter_id, Topic.chapter_id))
+        .outerjoin(Subject, Subject.subject_id == func.coalesce(GeneratedContent.subject_id, Chapter.subject_id))
+        .with_entities(Subject.name, func.count(GeneratedContent.content_id))
+        .group_by(Subject.name)
+        .all()
+    )
+    for subject_name, count in rows:
+        if not subject_name:
+            continue
+        tally[subject_name] = tally.get(subject_name, 0) + count
+
+    items = sorted(
+        ({"subject_name": name, "total": count} for name, count in tally.items()),
+        key=lambda r: r["total"],
+        reverse=True,
+    )
     return {"items": items[:limit]}
