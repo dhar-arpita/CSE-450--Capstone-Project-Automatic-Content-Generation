@@ -397,16 +397,13 @@ def list_my_content(
 @router.post("/refine")
 async def refine_worksheet(
     content_id: int = Form(...),
-    current_problems: str = Form(...),
+    # The frontend still sends current_problems; it is accepted and ignored.
+    # The task refines the problems saved on the row, so a stale client copy
+    # can no longer overwrite a newer version.
     refinements: str = Form(...),
     current_user: User = Depends(get_current_user_from_header),
     db: Session = Depends(get_db)
 ):
-    try:
-        current_problems_list = json.loads(current_problems)
-    except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid current_problems JSON: {e}")
-
     try:
         refinements_list = json.loads(refinements)
     except json.JSONDecodeError as e:
@@ -417,6 +414,15 @@ async def refine_worksheet(
     ).first()
     if not content or not _owns_content(db, current_user, content):
         raise HTTPException(status_code=404, detail="Content not found")
+    if content.content_type != "worksheet":
+        raise HTTPException(status_code=400, detail="Only worksheets can be refined")
+    # A seed is shared: every cache hit clones it. Refining it in place would
+    # change the worksheet every later user receives.
+    if content.is_cache_seed:
+        raise HTTPException(
+            status_code=409,
+            detail="This worksheet is a shared cached copy and cannot be refined",
+        )
 
     topic = db.query(Topic).filter(Topic.topic_id == content.topic_id).first()
     if not topic:
@@ -437,7 +443,6 @@ async def refine_worksheet(
         db, refine_worksheet_task, "refine", current_user.user_id,
         {
             "content_id": content_id,
-            "current_problems": current_problems_list,
             "refinements": refinements_list,
         },
     )
