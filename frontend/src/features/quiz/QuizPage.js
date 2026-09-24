@@ -32,6 +32,8 @@ const TXT = {
     savedEmpty: "এখনো কোনো কুইজ তৈরি হয়নি — প্রথমটা বানিয়ে ফেলুন!",
     savedLoading: "লোড হচ্ছে…",
     savedFailed: "আপনার কুইজগুলো আনা গেল না।",
+    searchPlaceholder: "ক্লাস, অধ্যায় বা বিষয় লিখে সার্চ করুন",
+    noResults: "এই সার্চে কিছু পাওয়া যায়নি।",
     levels: { mixed: "মিক্সড", easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
     languages: { bangla: "বাংলা", english: "ইংরেজি" },
     wizardSubjectTitle: "কোন বিষয়ে কুইজ দিতে চাও?",
@@ -64,6 +66,8 @@ const TXT = {
     savedEmpty: "No quiz generated yet, get your first one!",
     savedLoading: "Loading…",
     savedFailed: "Could not load your quizzes.",
+    searchPlaceholder: "Search by class, chapter or subject",
+    noResults: "No matches for that search.",
     levels: { mixed: "Mixed", easy: "Easy", medium: "Medium", hard: "Hard" },
     languages: { bangla: "Bangla", english: "English" },
     wizardSubjectTitle: "Which subject do you want a quiz on?",
@@ -294,6 +298,8 @@ export default function QuizPage() {
             failed: t.savedFailed,
             levels: t.levels,
             languages: t.languages,
+            searchPlaceholder: t.searchPlaceholder,
+            noResults: t.noResults,
           }}
         />
       }

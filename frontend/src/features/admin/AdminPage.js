@@ -13,6 +13,18 @@ import {
 } from "../../shared/ui/icons";
 import "./admin.css";
 
+// content_type values written by the Proggya practice/Q&A chatbot rather
+// than by a teacher's studio — see backend/routers/chat_router.py and
+// tasks/generation_tasks.py's generate_chat_quiz_task. Flagged in "What is
+// being made" so the row's real source is visible, not just its shape.
+const CHATBOT_CONTENT_TYPES = new Set([
+  "qa_answer", "qa_explain_more", "practice_set", "practice_question", "quiz_question",
+]);
+
+const PREFERS_REDUCED_MOTION =
+  typeof window !== "undefined" && typeof window.matchMedia === "function" &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 /* ═══════════════════════════════════════════════════════════════════════════
    The platform administrator's console.
 
@@ -34,7 +46,6 @@ const TXT = {
     nav: { overview: "এক নজরে", people: "ইউজার", ops: "সিস্টেম", curriculum: "কারিকুলাম" },
     crumb: { overview: "এক নজরে", people: "ইউজার", ops: "সিস্টেম", curriculum: "কারিকুলাম" },
 
-    subtitle: "পুরো প্ল্যাটফর্মে কী হচ্ছে, এক জায়গায়।",
     demoNote: (n) => `${n}টা ডেমো অ্যাকাউন্টের কাজ এই হিসাবের বাইরে রাখা হয়েছে।`,
 
     kpi: {
@@ -47,7 +58,8 @@ const TXT = {
     signupsSub: "গত ৯০ দিনে প্রতিদিন কে কে অ্যাকাউন্ট খুলেছেন",
     signupsEmpty: "গত ৯০ দিনে নতুন কেউ সাইন আপ করেননি।",
     mixTitle: "কী ধরনের কনটেন্ট হচ্ছে",
-    mixType: "ধরন", mixDifficulty: "ডিফিকাল্টি", mixLanguage: "ভাষা",
+    mixType: "ধরন", mixByClass: "ক্লাস অনুযায়ী", mixLanguage: "ভাষা",
+    proggyaTag: "(প্রজ্ঞা)",
 
     peopleTitle: "ইউজার",
     peopleSub: (n) => `${n} জন`,
@@ -96,7 +108,6 @@ const TXT = {
     nav: { overview: "Overview", people: "People", ops: "Operations", curriculum: "Curriculum" },
     crumb: { overview: "Overview", people: "People", ops: "Operations", curriculum: "Curriculum" },
 
-    subtitle: "Everything happening across the platform, in one place.",
     demoNote: (n) => `${n} demo accounts are excluded from these figures.`,
 
     kpi: {
@@ -109,7 +120,8 @@ const TXT = {
     signupsSub: "New accounts per day, last 90 days",
     signupsEmpty: "No new accounts in the last 90 days.",
     mixTitle: "What is being made",
-    mixType: "Type", mixDifficulty: "Difficulty", mixLanguage: "Language",
+    mixType: "Type", mixByClass: "By class", mixLanguage: "Language",
+    proggyaTag: "(proggya)",
 
     peopleTitle: "People",
     peopleSub: (n) => `${n} accounts`,
@@ -156,6 +168,32 @@ const TXT = {
 };
 
 const num = (n) => (typeof n === "number" ? n.toLocaleString() : "—");
+
+/* A KPI tile's headline number, counting up from 0 on mount rather than
+   appearing pre-formed. Purely a render-time flourish — it never blocks
+   whatever real value it is given, and a `null` while the request is still
+   in flight just renders the dash `num()` would have. */
+function CountUp({ value, duration = 900, suffix = "" }) {
+  const [display, setDisplay] = useState(0);
+
+  useEffect(() => {
+    if (typeof value !== "number") return;
+    if (PREFERS_REDUCED_MOTION) { setDisplay(value); return; }
+    let raf;
+    const start = performance.now();
+    const tick = (now) => {
+      const p = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - p, 3);
+      setDisplay(Math.round(value * eased));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => raf && cancelAnimationFrame(raf);
+  }, [value, duration]);
+
+  if (typeof value !== "number") return <>—</>;
+  return <>{display.toLocaleString()}{suffix}</>;
+}
 
 /* A request that reports three states rather than two. Folding "it broke"
    into "there is nothing" is how a 500 goes unnoticed for a week — the panel
@@ -231,7 +269,8 @@ function SignupChart({ items, t }) {
               cursor += v;
               return (
                 <rect key={`${d.date}-${key}`} className={`ad-bar-${key}`}
-                      x={x} y={rectY} width={barW} height={Math.max(1.5, h)} rx="2" />
+                      x={x} y={rectY} width={barW} height={Math.max(1.5, h)} rx="2"
+                      style={{ animationDelay: `${Math.min(i, 60) * 6}ms` }} />
               );
             });
           })}
@@ -259,11 +298,17 @@ function MixList({ rows }) {
   const top = Math.max(...rows.map((r) => r.count));
   return (
     <ul className="ad-mix">
-      {rows.slice(0, 7).map((r) => (
+      {rows.slice(0, 7).map((r, i) => (
         <li key={r.key}>
-          <span className="ad-mix-key" title={r.key}>{r.key.replace(/_/g, " ")}</span>
+          <span className="ad-mix-key" title={r.tag ? `${r.key} ${r.tag}` : r.key}>
+            <span className="ad-mix-key-text">{r.key.replace(/_/g, " ")}</span>
+            {r.tag && <span className="ad-mix-tag">{r.tag}</span>}
+          </span>
           <span className="ad-mix-track">
-            <span className="ad-mix-fill" style={{ width: `${(r.count / top) * 100}%` }} />
+            <span
+              className="ad-mix-fill"
+              style={{ width: `${(r.count / top) * 100}%`, animationDelay: `${i * 55}ms` }}
+            />
           </span>
           <span className="ad-mix-n">{num(r.count)}</span>
         </li>
@@ -272,10 +317,28 @@ function MixList({ rows }) {
   );
 }
 
+// "bangla" and "bengali" are the same language under two different stored
+// spellings (content-mix.py normalises case/whitespace but deliberately
+// keeps them as separate rows, since they are genuinely different stored
+// values). The admin console has no use for that distinction, so the two
+// counts are folded into one here rather than in the query everything else
+// still relies on.
+function mergeBanglaBengali(rows) {
+  if (!rows) return rows;
+  const merged = new Map();
+  for (const r of rows) {
+    const key = r.key === "bengali" ? "bangla" : r.key;
+    merged.set(key, (merged.get(key) || 0) + r.count);
+  }
+  return Array.from(merged, ([key, count]) => ({ key, count }))
+    .sort((a, b) => b.count - a.count);
+}
+
 function OverviewView({ t }) {
   const overview = useEndpoint(getAdminOverview, []);
   const signups = useEndpoint(() => getAdminSignups(90), []);
   const mix = useEndpoint(getAdminContentMix, []);
+  const classes = useEndpoint(getAdminClasses, []);
 
   const o = overview.data;
   const coverage = o && o.chapters
@@ -283,27 +346,44 @@ function OverviewView({ t }) {
     : null;
 
   const kpis = [
-    { key: "teachers", Icon: IconUser2, value: num(o?.teachers), viz: 1 },
-    { key: "students", Icon: IconUsers, value: num(o?.students), viz: 2 },
-    { key: "content", Icon: IconSheet, value: num(o?.generated_content), viz: 3 },
-    { key: "uploads", Icon: IconUpload, value: num(o?.uploads), viz: 4 },
-    { key: "classes", Icon: IconLayers, value: num(o?.classes), viz: 1 },
+    { key: "teachers", Icon: IconUser2, raw: o?.teachers, viz: 1 },
+    { key: "students", Icon: IconUsers, raw: o?.students, viz: 2 },
+    { key: "content", Icon: IconSheet, raw: o?.generated_content, viz: 3 },
+    { key: "uploads", Icon: IconUpload, raw: o?.uploads, viz: 4 },
+    { key: "classes", Icon: IconLayers, raw: o?.classes, viz: 1 },
     {
       key: "coverage", Icon: IconCheck,
-      value: coverage === null ? "—" : `${coverage}%`,
+      raw: coverage, suffix: "%",
       foot: o ? t.ofChapters(num(o.chapters_covered), num(o.chapters)) : null,
       viz: 3,
     },
   ];
 
+  const byType = mix.data?.by_type?.map((r) => ({
+    ...r,
+    tag: CHATBOT_CONTENT_TYPES.has(r.key) ? t.proggyaTag : null,
+  }));
+  const byLanguage = mergeBanglaBengali(mix.data?.by_language);
+  // Which classes are getting the most generated content, replacing the old
+  // difficulty column — reuses the same per-class counts the Curriculum tab
+  // already fetches, rather than a new endpoint for one more chart.
+  const byClass = classes.data?.items
+    ?.map((c) => ({ key: c.class_name, count: c.content }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count);
+
   return (
     <>
       <div className="ad-kpis">
-        {kpis.map(({ key, Icon, value, foot, viz }) => (
+        {kpis.map(({ key, Icon, raw, suffix, foot, viz }) => (
           <div className="ad-kpi" key={key} style={{ "--kpi": `var(--viz-${viz})` }}>
             <span className="ad-kpi-mark"><Icon /></span>
             <span className="ad-kpi-label">{t.kpi[key]}</span>
-            <strong className="ad-kpi-n">{overview.loading ? "·" : value}</strong>
+            <strong className="ad-kpi-n">
+              {overview.loading ? "·" : (
+                <CountUp value={typeof raw === "number" ? raw : null} suffix={suffix || ""} />
+              )}
+            </strong>
             {foot && <span className="ad-kpi-foot">{foot}</span>}
           </div>
         ))}
@@ -318,7 +398,7 @@ function OverviewView({ t }) {
                 <span className="ad-split-fill ad-bar-teacher"
                       style={{ width: `${o.teacher_share}%` }} />
                 <span className="ad-split-fill ad-bar-student"
-                      style={{ width: `${o.student_share}%` }} />
+                      style={{ width: `${o.student_share}%`, animationDelay: "90ms" }} />
               </div>
               <div className="ad-split-keys">
                 <span><b>{o.teacher_share}%</b>{t.legendTeacher} · {num(o.teachers)}</span>
@@ -338,15 +418,15 @@ function OverviewView({ t }) {
         <div className="ad-mix-cols">
           <div>
             <h3 className="ad-sub">{t.mixType}</h3>
-            <MixList rows={mix.data?.by_type} />
+            <MixList rows={byType} />
           </div>
           <div>
-            <h3 className="ad-sub">{t.mixDifficulty}</h3>
-            <MixList rows={mix.data?.by_difficulty} />
+            <h3 className="ad-sub">{t.mixByClass}</h3>
+            <MixList rows={byClass} />
           </div>
           <div>
             <h3 className="ad-sub">{t.mixLanguage}</h3>
-            <MixList rows={mix.data?.by_language} />
+            <MixList rows={byLanguage} />
           </div>
         </div>
       </Panel>
@@ -770,7 +850,6 @@ export default function AdminPage({ view = "overview" }) {
           <p className="ad-eyebrow">{t.console}</p>
           <h1>{t.nav[view] || t.nav.overview}</h1>
         </div>
-        <p className="ad-head-sub">{t.subtitle}</p>
       </header>
 
       <div className="ad-views">

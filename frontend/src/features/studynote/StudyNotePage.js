@@ -31,6 +31,8 @@ const TXT = {
     savedEmpty: "এখনো কোনো স্টাডি নোট তৈরি হয়নি — প্রথমটা বানিয়ে ফেলুন!",
     savedLoading: "লোড হচ্ছে…",
     savedFailed: "আপনার স্টাডি নোটগুলো আনা গেল না।",
+    searchPlaceholder: "ক্লাস, অধ্যায় বা বিষয় লিখে সার্চ করুন",
+    noResults: "এই সার্চে কিছু পাওয়া যায়নি।",
     levels: {},
     languages: { bangla: "বাংলা", english: "ইংরেজি" },
     wizardSubjectTitle: "কোন বিষয়ে স্টাডি নোট বানাতে চাও?",
@@ -61,6 +63,8 @@ const TXT = {
     savedEmpty: "No study note generated yet, get your first one!",
     savedLoading: "Loading…",
     savedFailed: "Could not load your study notes.",
+    searchPlaceholder: "Search by class, chapter or subject",
+    noResults: "No matches for that search.",
     levels: {},
     languages: { bangla: "Bangla", english: "English" },
     wizardSubjectTitle: "Which subject do you want a study note for?",
@@ -263,6 +267,8 @@ export default function StudyNotePage() {
             failed: t.savedFailed,
             levels: t.levels,
             languages: t.languages,
+            searchPlaceholder: t.searchPlaceholder,
+            noResults: t.noResults,
           }}
         />
       }

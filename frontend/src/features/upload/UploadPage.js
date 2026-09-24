@@ -41,6 +41,8 @@ const TXT = {
     savedEmpty: "এখনো কিছু আপলোড করা হয়নি — প্রথম ফাইলটা আপলোড করুন!",
     savedLoading: "লোড হচ্ছে…",
     savedFailed: "আপলোডের তালিকা আনা গেল না।",
+    searchPlaceholder: "ফাইলের নাম, ক্লাস বা বিষয় লিখে সার্চ করুন",
+    noResults: "এই সার্চে কিছু পাওয়া যায়নি।",
     statuses: { completed: "সম্পন্ন", failed: "ব্যর্থ", pending: "অপেক্ষমাণ", processing: "চলছে" },
     tipsTitle: "ভালো ফলাফলের জন্য টিপস",
     tips: [
@@ -70,6 +72,8 @@ const TXT = {
     savedEmpty: "Nothing uploaded yet, upload your first file!",
     savedLoading: "Loading…",
     savedFailed: "Could not load your uploads.",
+    searchPlaceholder: "Search by file name, class or subject",
+    noResults: "No matches for that search.",
     statuses: { completed: "Completed", failed: "Failed", pending: "Pending", processing: "Processing" },
     tipsTitle: "Tips for Best Results",
     tips: [
@@ -255,6 +259,8 @@ export default function UploadPage() {
             loading: t.savedLoading,
             failed: t.savedFailed,
             statuses: t.statuses,
+            searchPlaceholder: t.searchPlaceholder,
+            noResults: t.noResults,
           }}
         />
       }
