@@ -2,12 +2,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DhiMark from "../../shared/brand/DhiMark";
 import { useI18n } from "../../shared/i18n";
-import { getMyActivity, getMyTotals, chatSessions, getMyMistakes } from "../../shared/services/api";
+import { getMyActivity, getMyTotals, chatSessions } from "../../shared/services/api";
 import AppShell from "../../shared/ui/AppShell";
-import {
-  IconBolt, IconChatbot, IconNotes, IconQuiz, IconRocket, IconSchool,
-  IconSheet, IconSpark, IconTrendUp, IconTrophy,
-} from "../../shared/ui/icons";
+import { IconBolt, IconChatbot, IconNotes, IconQuiz, IconSheet } from "../../shared/ui/icons";
 import "./Dashboard.css";
 
 /* Same shell as the teacher dashboard (Dashboard.js) — same hero, cards,
@@ -27,8 +24,6 @@ const DASHBOARD_STRINGS = {
     statSessions: "Progga Sessions",
     continueLabel: "Continue where you left off",
     continueCta: "Continue",
-    mistakeReminder: (n) => `You have ${n} unfixed mistakes waiting — go fix them`,
-    mistakeReminderCta: "Review",
     quickActionsTitle: "Quick Actions",
     quickActionsSubtitle: "Choose what you want to create or explore today",
     getStarted: "Get started",
@@ -90,8 +85,6 @@ const DASHBOARD_STRINGS = {
     statSessions: "প্রজ্ঞার সেশন",
     continueLabel: "যেখানে রেখেছিলে, সেখান থেকে চালিয়ে যাও",
     continueCta: "চালিয়ে যাও",
-    mistakeReminder: (n) => `তোমার ${n}টা ভুল প্রশ্ন এখনো ঠিক করা হয়নি — গিয়ে ঠিক করে ফেলো`,
-    mistakeReminderCta: "দেখো",
     quickActionsTitle: "দ্রুত কাজ শুরু করুন",
     quickActionsSubtitle: "আজ কী তৈরি বা প্র্যাকটিস করতে চাও বেছে নাও",
     getStarted: "শুরু করুন",
@@ -142,11 +135,6 @@ const DASHBOARD_STRINGS = {
     ],
   },
 };
-
-// Below this many open (unfixed) mistakes, the dashboard stays quiet — a
-// student with one or two wrong answers doesn't need a nudge; a pile of
-// them sitting unresolved is worth surfacing.
-const MISTAKE_REMINDER_THRESHOLD = 5;
 
 /* tiny hook for counting-up numbers */
 function useCountUp(target, duration = 1200) {
@@ -207,28 +195,17 @@ function StatRing({ value, label, accent }) {
    talk, not a stat tile. */
 function getSummary(count, lang) {
   if (lang === "bn") {
-    if (count === 0) return "আজই শুরু করো — প্রথম সেশনটা সবচেয়ে গুরুত্বপূর্ণ!";
-    if (count < 5) return `দারুণ শুরু! ${count}টা সেশন হয়ে গেছে — এগিয়ে যাও!`;
-    if (count < 20) return `${count}টা সেশন! তুমি নিয়মিত প্র্যাকটিস করছ — চালিয়ে যাও!`;
-    if (count < 50) return `${count}টা সেশন সম্পন্ন! তোমার পরিশ্রম দেখে গর্ব হচ্ছে!`;
-    return `${count}টা সেশন! তুমি একজন সত্যিকারের শিক্ষার্থী — অসাধারণ!`;
+    if (count === 0) return "আজই শুরু করো — প্রথম সেশনটা সবচেয়ে গুরুত্বপূর্ণ! 🚀";
+    if (count < 5) return `দারুণ শুরু! ${count}টা সেশন হয়ে গেছে — এগিয়ে যাও! 💪`;
+    if (count < 20) return `${count}টা সেশন! তুমি নিয়মিত প্র্যাকটিস করছ — চালিয়ে যাও! 🌟`;
+    if (count < 50) return `${count}টা সেশন সম্পন্ন! তোমার পরিশ্রম দেখে গর্ব হচ্ছে! 🏆`;
+    return `${count}টা সেশন! তুমি একজন সত্যিকারের শিক্ষার্থী — অসাধারণ! 🎓`;
   }
-  if (count === 0) return "Start today — your first session is the most important!";
-  if (count < 5) return `Great start! ${count} sessions done — keep going!`;
-  if (count < 20) return `${count} sessions! You're building a great habit!`;
-  if (count < 50) return `${count} sessions completed! Your dedication is inspiring!`;
-  return `${count} sessions! You're a true learner — amazing!`;
-}
-
-/* Which line-art icon goes with the summary above, by the same tier
-   boundaries as getSummary — a real SVG component instead of an emoji glyph,
-   to match the rest of the app's icon set rather than the OS's emoji font. */
-function getSummaryIcon(count) {
-  if (count === 0) return IconRocket;
-  if (count < 5) return IconTrendUp;
-  if (count < 20) return IconSpark;
-  if (count < 50) return IconTrophy;
-  return IconSchool;
+  if (count === 0) return "Start today — your first session is the most important! 🚀";
+  if (count < 5) return `Great start! ${count} sessions done — keep going! 💪`;
+  if (count < 20) return `${count} sessions! You're building a great habit! 🌟`;
+  if (count < 50) return `${count} sessions completed! Your dedication is inspiring! 🏆`;
+  return `${count} sessions! You're a true learner — amazing! 🎓`;
 }
 
 /* Consecutive days with any activity, most recent first. A quiet day-so-far
@@ -275,13 +252,11 @@ export default function StudentDashboard() {
   const [activity, setActivity] = useState([]);
   const [totals, setTotals] = useState(null);
   const [recentSession, setRecentSession] = useState(null);
-  const [mistakeTotal, setMistakeTotal] = useState(0);
   const navigate = useNavigate();
 
   const { lang } = useI18n();
 
   const t = DASHBOARD_STRINGS[lang] || DASHBOARD_STRINGS.bn;
-  const SummaryIcon = getSummaryIcon(totals?.sessions ?? 0);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -308,12 +283,6 @@ export default function StudentDashboard() {
         setRecentSession(list[0] || null);
       })
       .catch(() => setRecentSession(null));
-
-    // limit=1: the reminder below only needs the real unresolved count, not
-    // the list itself (that's Profile's job).
-    getMyMistakes(1)
-      .then(({ data }) => setMistakeTotal(data?.total ?? 0))
-      .catch(() => setMistakeTotal(0));
   }, [navigate]);
 
   const streak = useMemo(() => computeStreak(activity), [activity]);
@@ -439,10 +408,7 @@ export default function StudentDashboard() {
       </section>
 
       <section className="db-progress-note">
-        <p className="db-progress-msg">
-          <span className="db-progress-icon"><SummaryIcon /></span>
-          {getSummary(totals?.sessions ?? 0, lang)}
-        </p>
+        <p className="db-progress-msg">{getSummary(totals?.sessions ?? 0, lang)}</p>
         {recentSession && (
           <button type="button" className="db-continue" onClick={() => navigate("/chatbot")}>
             <span className="db-continue-text">
@@ -450,12 +416,6 @@ export default function StudentDashboard() {
               <span className="db-continue-subject">{recentSession.subject_name || "—"}</span>
             </span>
             <span className="db-continue-cta">{t.continueCta} →</span>
-          </button>
-        )}
-        {mistakeTotal >= MISTAKE_REMINDER_THRESHOLD && (
-          <button type="button" className="db-mistake-reminder" onClick={() => navigate("/profile")}>
-            <span className="db-mistake-reminder-text">{t.mistakeReminder(mistakeTotal)}</span>
-            <span className="db-mistake-reminder-cta">{t.mistakeReminderCta} →</span>
           </button>
         )}
       </section>

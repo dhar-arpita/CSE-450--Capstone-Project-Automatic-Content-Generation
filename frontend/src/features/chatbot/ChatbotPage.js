@@ -1,11 +1,11 @@
 // features/chatbot/ChatbotPage.js — "Practice with Progga", built on the same
 // AppShell/studio chrome as the Worksheet/Quiz/Study Note studios.
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import AppShell from "../../shared/ui/AppShell";
 import { IconChatbot, IconCheck, IconPlus, IconSpark } from "../../shared/ui/icons";
 import {
-  getClasses, getSubjects, getChapters, getTopics, chatHistory, chatSessions, retryMistake,
+  getClasses, getSubjects, getChapters, getTopics, chatHistory, chatSessions,
 } from "../../shared/services/api";
 import { useChatSession } from "../../shared/services/useChatSession";
 import "../../shared/ui/studio.css";
@@ -59,8 +59,6 @@ const TXT = {
     noTopics: "এই অধ্যায়ে কোনো টপিক পাওয়া যায়নি।",
     skipSubject: "+ সরাসরি এই বিষয়ের ওপর প্র্যাকটিস শুরু করো",
     skipChapter: "+ সরাসরি এই অধ্যায়ের ওপর প্র্যাকটিস শুরু করো",
-    mistakeTryAgain: "আবার চেষ্টা করো",
-    mistakeMoveOn: "পরে করব",
   },
   english: {
     breadcrumb: "Practice with Progga",
@@ -108,8 +106,6 @@ const TXT = {
     noTopics: "No topics found for this chapter.",
     skipSubject: "+ Start practicing this whole subject",
     skipChapter: "+ Start practicing this whole chapter",
-    mistakeTryAgain: "Try again",
-    mistakeMoveOn: "I'll do this later",
   },
 };
 
@@ -186,7 +182,6 @@ const newId = () => `b${++_bid}`;
 
 export default function ChatbotPage() {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [user, setUser] = useState(null);
   const [classList, setClassList] = useState([]);
   const [subjectList, setSubjectList] = useState([]);
@@ -228,24 +223,12 @@ export default function ChatbotPage() {
   const [quizFeed, setQuizFeed] = useState([]);
   const [quizError, setQuizError] = useState(null); // { blockId, message, isTimeout }
 
-
   const clearFeeds = () => {
     setSamples([]); setQuestion("");
     setQaFeed([]); setSetFeed([]); setObFeed([]); setQuizFeed([]); setQuizError(null); setMode(null);
   };
 
-  // Populates the wizard's subject/chapter/topic state from a scope object
-  // shaped like /chat/history's "scope" (or /chat/mistakes/.../retry's) —
-  // used both to resume a past session and to land on a mistake-retry
-  // question, neither of which goes through the wizard's own pick-flow.
-  const applyScope = useCallback(async (sc) => {
-    if (sc.class_name) { setSelectedClass(sc.class_name); try { const r = await getSubjects(sc.class_name); setSubjectList(r.data || []); } catch { } }
-    if (sc.subject_id) { setSelectedSubject(String(sc.subject_id)); try { const r = await getChapters(sc.subject_id); setChapterList(r.data || []); } catch { } }
-    if (sc.chapter_id) { setSelectedChapter(String(sc.chapter_id)); try { const r = await getTopics(sc.chapter_id); setTopicList(r.data || []); } catch { } }
-    if (sc.topic_id) setSelectedTopicId(String(sc.topic_id));
-  }, []);
-
-  const loadHistory = useCallback(async (uid, sid, preferMode) => {
+  const loadHistory = useCallback(async (uid, sid) => {
     setSessionLoading(true); clearFeeds();
     try {
       const { data } = await chatHistory(sid);
@@ -255,30 +238,22 @@ export default function ChatbotPage() {
         // decided — jump straight past the wizard to the mode/feed view
         // rather than making them re-pick a subject with nothing to pick.
         setSkipToMode(true);
-        await applyScope(data.scope || {});
+        const sc = data.scope || {};
+        if (sc.class_name) { setSelectedClass(sc.class_name); try { const r = await getSubjects(sc.class_name); setSubjectList(r.data || []); } catch { } }
+        if (sc.subject_id) { setSelectedSubject(String(sc.subject_id)); try { const r = await getChapters(sc.subject_id); setChapterList(r.data || []); } catch { } }
+        if (sc.chapter_id) { setSelectedChapter(String(sc.chapter_id)); try { const r = await getTopics(sc.chapter_id); setTopicList(r.data || []); } catch { } }
+        if (sc.topic_id) setSelectedTopicId(String(sc.topic_id));
         setQaFeed((data.qa || []).map((q) => ({ id: newId(), question: q.question, answer: q.answer, context: q.context || "", explain: q.explain || null, explainLoading: false, loading: false })));
         setSetFeed((data.sets || []).map((s, i, arr) => ({ id: newId(), questions: s.questions || [], showAnswers: false, isLatest: i === arr.length - 1, loading: false })));
         setObFeed((data.oneByone || []).map((o, i, arr) => ({ id: newId(), contentId: o.content_id, question: o.question, hints: o.hints || [], hintsUsed: o.hints_used || 0, answer: o.answer || null, selfReport: o.self_report ?? null, isLatest: i === arr.length - 1, loading: false })));
-        setQuizFeed((data.quiz || []).map((qz, i, arr) => {
-          const answers = {};
-          (qz.questions || []).forEach((q) => { if (q.student_answer != null) answers[q.question_number] = q.student_answer; });
-          return { id: newId(), questions: qz.questions || [], answers, hints: qz.hints || {}, hintsUsed: qz.hints_used || {}, isLatest: i === arr.length - 1, loading: false };
-        }));
-        // A "re-practice this" link from Profile knows which mode the
-        // mistake it's pointing at lives in — honor that over the usual
-        // qa > set > oneByone > quiz priority when that feed is non-empty.
-        const hasMode = {
-          qa: (data.qa || []).length > 0, set: (data.sets || []).length > 0,
-          oneByone: (data.oneByone || []).length > 0, quiz: (data.quiz || []).length > 0,
-        };
-        if (preferMode && hasMode[preferMode]) setMode(preferMode);
-        else if (hasMode.qa) setMode("qa");
-        else if (hasMode.set) setMode("set");
-        else if (hasMode.oneByone) setMode("oneByone");
-        else if (hasMode.quiz) setMode("quiz");
+        setQuizFeed((data.quiz || []).map((qz, i, arr) => ({ id: newId(), questions: qz.questions || [], answers: qz.answers || {}, hints: qz.hints || {}, hintsUsed: qz.hints_used || {}, isLatest: i === arr.length - 1, loading: false })));
+        if ((data.qa || []).length) setMode("qa");
+        else if ((data.sets || []).length) setMode("set");
+        else if ((data.oneByone || []).length) setMode("oneByone");
+        else if ((data.quiz || []).length) setMode("quiz");
       }
     } catch { } finally { setSessionLoading(false); }
-  }, [applyScope]);
+  }, []);
 
   const refreshSessions = useCallback(async (uid) => {
     setSessionsListLoading(true);
@@ -323,90 +298,12 @@ export default function ChatbotPage() {
     navigate("/", { state: { splash: true } });
   };
 
-  const openSession = async (sid, preferMode) => {
+  const openSession = async (sid) => {
     if (sid === activeSid || sessionLoading) return;
     setLoadingSid(sid);
     chat.setSessionId(sid);
-    await loadHistory(user.user_id, sid, preferMode);
+    await loadHistory(user.user_id, sid);
     setLoadingSid(null);
-  };
-
-  // A "re-practice" link from Profile's mistakes list arrives as
-  // /chatbot?session_id=123&mode=quiz — jump straight into that session (and
-  // that mode) once the user is known, the same way clicking it in the rail
-  // would, but landing on the feed the mistake actually came from.
-  const deepLinkHandled = useRef(false);
-  useEffect(() => {
-    if (deepLinkHandled.current || !user) return;
-    const sid = Number(searchParams.get("session_id"));
-    if (!sid) return;
-    deepLinkHandled.current = true;
-    openSession(sid, searchParams.get("mode") || undefined);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, searchParams]);
-
-  // "Fix this mistake" — a Profile mistakes-list link arrives as
-  // /chatbot?retry_content_id=501. This drops straight into the SAME
-  // session the mistake happened in (the backend reuses it), in the normal
-  // one-by-one mode, with the fresh similar-but-different question as its
-  // first block — not a separate flow bolted onto the page. Each block this
-  // produces carries retryOfMistake so the render below knows to swap in
-  // "try again / do later" instead of "next question" if it's answered
-  // wrong; answered right, it's indistinguishable from any other question.
-  const startRetry = async (contentId) => {
-    if (busy) return; setBusy(true);
-    setSkipToMode(true);
-    setMode("oneByone");
-    const id = newId();
-    setObFeed((f) => [...f.map((b) => ({ ...b, isLatest: false })), {
-      id, contentId: null, question: "", hints: [], hintsUsed: 0, answer: null,
-      selfReport: null, isLatest: true, loading: true, retryOfMistake: contentId,
-    }]);
-    try {
-      const { data } = await retryMistake(contentId);
-      if (data && data.content_id) {
-        chat.setSessionId(data.session_id);
-        setActiveSid(data.session_id);
-        if (data.scope) await applyScope(data.scope);
-        setObFeed((f) => f.map((b) => b.id === id ? { ...b, contentId: data.content_id, question: data.question || "", loading: false } : b));
-        refreshSessions(user.user_id);
-      } else {
-        setObFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b));
-      }
-    } catch { setObFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b)); }
-    setBusy(false);
-  };
-
-  const retryLinkHandled = useRef(false);
-  useEffect(() => {
-    if (retryLinkHandled.current || !user) return;
-    const rcid = Number(searchParams.get("retry_content_id"));
-    if (!rcid) return;
-    retryLinkHandled.current = true;
-    startRetry(rcid);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, searchParams]);
-
-  // "আবার চেষ্টা করো" on a wrongly-answered retry block — another
-  // similar-but-different question on the same mistake, appended the same
-  // way a normal "next question" would be (same session, already-known
-  // scope), just still tagged so it keeps the special buttons if missed again.
-  const retryAgainForBlock = async (mistakeContentId) => {
-    if (busy) return; setBusy(true);
-    const id = newId();
-    setObFeed((f) => [...f.map((b) => ({ ...b, isLatest: false })), {
-      id, contentId: null, question: "", hints: [], hintsUsed: 0, answer: null,
-      selfReport: null, isLatest: true, loading: true, retryOfMistake: mistakeContentId,
-    }]);
-    try {
-      const { data } = await retryMistake(mistakeContentId);
-      if (data && data.content_id) {
-        setObFeed((f) => f.map((b) => b.id === id ? { ...b, contentId: data.content_id, question: data.question || "", loading: false } : b));
-      } else {
-        setObFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b));
-      }
-    } catch { setObFeed((f) => f.map((b) => b.id === id ? { ...b, loading: false } : b)); }
-    setBusy(false);
   };
 
   const newChat = () => {
@@ -595,15 +492,11 @@ export default function ChatbotPage() {
     }
     setBusy(false);
   };
-  const selectQuizOption = (blockId, qnum, label, contentId) => {
-    let alreadyAnswered = false;
+  const selectQuizOption = (blockId, qnum, label) =>
     setQuizFeed((f) => f.map((b) => {
-      if (b.id !== blockId) return b;
-      if (b.answers[qnum] != null) { alreadyAnswered = true; return b; }
+      if (b.id !== blockId || b.answers[qnum] != null) return b;
       return { ...b, answers: { ...b.answers, [qnum]: label } };
     }));
-    if (!alreadyAnswered) chat.submitQuizAnswer(contentId, label);
-  };
   const quizHint = async (blockId, qnum, contentId) => {
     const block = quizFeed.find((b) => b.id === blockId);
     const used = block?.hintsUsed[qnum] || 0;
@@ -898,7 +791,7 @@ export default function ChatbotPage() {
                               else if (isSelected) { bg = "#fef2f2"; border = "1.5px solid #ef4444"; color = "#991b1b"; }
                             }
                             return (
-                              <button key={opt.label} onClick={() => selectQuizOption(b.id, q.question_number, opt.label, q.content_id)}
+                              <button key={opt.label} onClick={() => selectQuizOption(b.id, q.question_number, opt.label)}
                                 disabled={answered}
                                 style={{ textAlign: "left", padding: "10px 14px", borderRadius: "10px", background: bg, border, color, fontSize: "13px", fontWeight: 600, cursor: answered ? "default" : "pointer", transition: "all 0.15s" }}>
                                 {opt.label}. {opt.text}
@@ -1079,14 +972,7 @@ export default function ChatbotPage() {
                         <button onClick={() => obHint(b.id)} style={actionBtn("#f59e0b")}>{t.hintBtn} ({b.hintsUsed}/3)</button>
                       )}
                       {!b.answer && <button onClick={() => obReveal(b.id)} style={actionBtn("#64748b")}>{t.revealAns}</button>}
-                      {b.retryOfMistake && b.selfReport === false ? (
-                        <>
-                          <button onClick={() => retryAgainForBlock(b.retryOfMistake)} disabled={!b.isLatest || busy} style={actionBtn("#16a34a")}>{t.mistakeTryAgain}</button>
-                          <button onClick={nextOB} disabled={!b.isLatest || busy} style={actionBtn("#64748b")}>{t.mistakeMoveOn}</button>
-                        </>
-                      ) : (
-                        <button onClick={nextOB} disabled={!b.isLatest || busy} style={actionBtn("#16a34a")}>{t.nextQ}</button>
-                      )}
+                      <button onClick={nextOB} disabled={!b.isLatest || busy} style={actionBtn("#16a34a")}>{t.nextQ}</button>
                     </div>
                   </div>
                 )}

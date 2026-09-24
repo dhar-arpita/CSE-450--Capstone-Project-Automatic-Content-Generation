@@ -201,10 +201,6 @@ class GeneratedContent(Base):
      is_cache_seed = Column(Boolean, default=False, nullable=False)
      cache_version = Column(String(50), nullable=True)
      num_problems = Column(Integer, nullable=True)
-     # Set only on a freshly-generated "fix this mistake" question — points
-     # back at the original wrong question's content_id, so a correct answer
-     # here can resolve that original mistake. NULL for everything else.
-     retry_of_content_id = Column(Integer, ForeignKey("generated_content.content_id"), nullable=True)
      
      
      
@@ -264,10 +260,6 @@ class StudentInteraction(Base):
     timestamp = Column(TIMESTAMP,server_default=func.now())
     difficulty_level = Column(String(50))
     time_spent = Column(Integer)
-    # True once a "fix this mistake" retry of this (wrong) interaction was
-    # answered correctly. Only ever set on the ORIGINAL wrong interaction,
-    # never on the retry itself — /chat/mistakes filters these out.
-    resolved = Column(Boolean, default=False, nullable=False)
     
     
     
