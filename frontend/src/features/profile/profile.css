@@ -8,6 +8,7 @@
 
 /* ── identity header ───────────────────────────────────────────────────── */
 .pf-head {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 20px;
@@ -17,6 +18,56 @@
   color: #fff;
 }
 [data-theme="dark"] .pf-head { background: var(--dhi-surface-tint); color: var(--dhi-ink); }
+
+/* Only StudentProfilePage.js ever renders a <DhiMark className="pf-head-mark">
+   — ProfilePage.js (the teacher's, sharing this same .pf-head) never does, so
+   nothing below touches the teacher page even though the selectors aren't
+   role-scoped. Same two-part motion as the dashboard's hero mark: the whole
+   bird bobs, and its five triangles fly in once on load and keep a small
+   independent drift on top of that. */
+.pf-head-mark {
+  position: absolute;
+  right: clamp(14px, 2.4vw, 28px);
+  top: 50%;
+  transform: translateY(-50%);
+  width: clamp(72px, 9vw, 112px);
+  height: auto;
+  opacity: 1;
+  pointer-events: none;
+  animation: pf-mark-float 7s ease-in-out infinite;
+}
+@keyframes pf-mark-float {
+  0%, 100% { transform: translateY(-50%) rotate(0deg); }
+  50%      { transform: translateY(calc(-50% - 8px)) rotate(3deg); }
+}
+.pf-head-mark .dm-tri {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation:
+    pf-tri-assemble 700ms cubic-bezier(.25, .85, .35, 1.1) both,
+    pf-tri-flock var(--dm-float-dur, 6.5s) ease-in-out var(--dm-float-delay, 700ms) infinite;
+}
+@keyframes pf-tri-assemble {
+  0%   { transform: translate(var(--dm-dx), var(--dm-dy)) rotate(var(--dm-rot)) scale(.55); opacity: 0; }
+  65%  { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+}
+@keyframes pf-tri-flock {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(var(--dm-float-y, -5px)) rotate(var(--dm-float-rot, 2deg)); }
+}
+.pf-head-mark .dm-tri-1 { --dm-dx: -30px; --dm-dy: -18px; --dm-rot: -24deg; --dm-float-dur: 6.4s; --dm-float-delay: 700ms;  --dm-float-y: -4px; --dm-float-rot: 3deg; }
+.pf-head-mark .dm-tri-2 { --dm-dx: 24px;  --dm-dy: -22px; --dm-rot: 20deg;  --dm-float-dur: 7.2s; --dm-float-delay: 850ms;  --dm-float-y: -6px; --dm-float-rot: -2deg; }
+.pf-head-mark .dm-tri-3 { --dm-dx: 20px;  --dm-dy: 16px;  --dm-rot: -14deg; --dm-float-dur: 6.8s; --dm-float-delay: 1000ms; --dm-float-y: -3px; --dm-float-rot: 2deg; }
+.pf-head-mark .dm-tri-4 { --dm-dx: -18px; --dm-dy: 20px;  --dm-rot: 17deg;  --dm-float-dur: 7.6s; --dm-float-delay: 780ms;  --dm-float-y: -5px; --dm-float-rot: -3deg; }
+.pf-head-mark .dm-tri-5 { --dm-dx: 30px;  --dm-dy: -10px; --dm-rot: 28deg;  --dm-float-dur: 6.1s; --dm-float-delay: 900ms;  --dm-float-y: -4px; --dm-float-rot: 2deg; }
+@media (prefers-reduced-motion: reduce) {
+  .pf-head-mark { animation: none; }
+  .pf-head-mark .dm-tri { animation: none; }
+}
+@media (max-width: 520px) {
+  .pf-head-mark { display: none; }
+}
 
 .pf-avatar {
   flex: 0 0 auto;
@@ -58,6 +109,13 @@ html[lang="bn"] .pf-role { letter-spacing: 0; text-transform: none; }
   background: var(--dhi-surface-raised);
   border-color: var(--dhi-line-strong);
 }
+
+/* .pf-head's background stays a dark green in light mode (see .pf-head
+   above), so --dhi-forest text on it was barely legible — white instead.
+   Dark mode flips .pf-head to a pale background, where forest-on-pale
+   already reads fine, so that theme keeps the original color. */
+.pf-change-class-btn { color: #fff; }
+[data-theme="dark"] .pf-change-class-btn { color: var(--dhi-forest); }
 
 /* ── overview cards ────────────────────────────────────────────────────── */
 .pf-section-label {
@@ -279,196 +337,3 @@ html[lang="bn"] .pf-section-label { letter-spacing: .02em; text-transform: none;
 .pf-class-fill:only-child { border-radius: 999px; }
 .pf-fill-content { background: var(--viz-1); border-color: var(--viz-1-line); }
 .pf-fill-uploads { background: var(--viz-4); border-color: var(--viz-4-line); }
-
-
-/* ── all content ────────────────────────────────────────────────────────
-   Every worksheet, quiz, note and upload this teacher has, in one table
-   that runs the full width of the working column — the same width as the
-   calendar/chart/classes row above it. */
-.pf-all {
-  padding: clamp(20px, 2.4vw, 26px);
-  border: 1px solid var(--dhi-line);
-  border-radius: 18px;
-  background: var(--dhi-surface-raised);
-}
-
-.pf-all-head h2 {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0 0 5px;
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-.pf-all-head h2 svg { color: var(--dhi-forest); }
-.pf-all-head p { margin: 0 0 18px; font-size: .9rem; color: var(--dhi-muted); line-height: 1.55; max-width: 58ch; }
-
-.pf-all-controls {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 18px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--dhi-line);
-}
-.pf-all-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-
-.pf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.pf-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 14px;
-  border: 1px solid var(--dhi-line-strong);
-  border-radius: 999px;
-  background: var(--dhi-surface);
-  color: var(--dhi-ink-soft);
-  font: inherit;
-  font-size: .85rem;
-  font-weight: 650;
-  cursor: pointer;
-  transition: border-color .16s ease, background .16s ease, color .16s ease;
-}
-.pf-chip svg { width: 15px; height: 15px; }
-.pf-chip:hover { background: var(--dhi-surface-sunken); }
-.pf-chip.is-active {
-  border-color: var(--chip-tone, var(--dhi-forest));
-  background: var(--chip-wash, var(--dhi-surface-tint));
-  color: var(--chip-tone, var(--dhi-forest));
-}
-
-.pf-all-selects { display: flex; flex-wrap: wrap; gap: 10px; }
-.pf-all-select { position: relative; display: inline-flex; align-items: center; }
-.pf-all-select select {
-  appearance: none;
-  padding: 8px 32px 8px 13px;
-  border: 1px solid var(--dhi-line-strong);
-  border-radius: 11px;
-  background: var(--dhi-field);
-  color: var(--dhi-ink);
-  font: inherit;
-  font-size: .85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-.pf-all-select svg {
-  position: absolute;
-  right: 10px;
-  width: 14px;
-  height: 14px;
-  color: var(--dhi-muted);
-  pointer-events: none;
-}
-
-.pf-all-note {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  margin: 0;
-  padding: 18px 2px;
-  font-size: .9rem;
-  color: var(--dhi-muted);
-}
-.pf-all-note-bad { color: var(--dhi-danger); }
-
-.pf-all-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 42px 14px;
-  border: 1px dashed var(--dhi-line-strong);
-  border-radius: 14px;
-  background: var(--dhi-surface-sunken);
-  text-align: center;
-}
-.pf-all-empty-mark {
-  display: grid;
-  place-items: center;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: var(--dhi-surface-tint);
-  color: var(--dhi-forest);
-}
-.pf-all-empty p { margin: 0; font-size: .92rem; color: var(--dhi-muted); }
-
-.pf-all-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 560px;
-  overflow-y: auto;
-}
-.pf-all-row {
-  display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 16px;
-  padding: 13px 6px;
-  border-bottom: 1px solid var(--dhi-line);
-  transition: background .15s ease;
-}
-.pf-all-row:hover { background: var(--dhi-surface-sunken); }
-.pf-all-row:last-child { border-bottom: none; }
-
-.pf-all-mark {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  background: var(--row-wash, var(--dhi-surface-tint));
-  color: var(--row-tone, var(--dhi-forest));
-  flex: 0 0 auto;
-}
-.pf-all-mark svg { width: 18px; height: 18px; }
-
-.pf-all-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.pf-all-name {
-  font-size: .95rem;
-  font-weight: 650;
-  color: var(--dhi-ink);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.pf-all-meta {
-  font-size: .82rem;
-  color: var(--dhi-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.pf-all-tags { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
-.pf-all-diff, .pf-all-lang, .pf-all-status {
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: .74rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.pf-all-diff { background: var(--dhi-surface-tint); color: var(--dhi-forest); }
-.pf-all-lang { background: transparent; border: 1px solid var(--dhi-line-strong); color: var(--dhi-muted); font-weight: 650; }
-.pf-all-status { background: var(--dhi-surface-tint); color: var(--dhi-forest); text-transform: capitalize; }
-.pf-all-status-failed { background: var(--dhi-danger-wash); color: var(--dhi-danger); }
-.pf-all-status-pending, .pf-all-status-processing { background: var(--acc-4-wash); color: var(--acc-4); }
-html[lang="bn"] .pf-all-status { text-transform: none; }
-
-.pf-all-when {
-  flex: 0 0 auto;
-  min-width: 84px;
-  font-size: .82rem;
-  color: var(--dhi-muted);
-  text-align: right;
-  white-space: nowrap;
-}
-
-@media (max-width: 780px) {
-  .pf-all-controls { flex-direction: column; align-items: stretch; }
-  .pf-all-row { grid-template-columns: 34px minmax(0, 1fr); row-gap: 6px; }
-  .pf-all-tags, .pf-all-when { grid-column: 2; justify-self: start; text-align: left; }
-}

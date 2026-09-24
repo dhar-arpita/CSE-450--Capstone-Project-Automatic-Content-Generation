@@ -8,11 +8,14 @@
 // student needs: a way to update their own class.
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import DhiMark from "../../shared/brand/DhiMark";
 import { useI18n } from "../../shared/i18n";
-import { getMyTotals, getMyActivity, getMySubjects, getClasses, updateMyClass } from "../../shared/services/api";
+import {
+  getMyTotals, getMyActivity, getMySubjects, getMyMistakes, getClasses, updateMyClass,
+} from "../../shared/services/api";
 import AppShell from "../../shared/ui/AppShell";
 import {
-  IconCalendar, IconChart, IconChatbot, IconNotes, IconQuiz, IconSheet, IconUser2,
+  IconAlert, IconCalendar, IconChart, IconChatbot, IconNotes, IconQuiz, IconSheet, IconUser2,
 } from "../../shared/ui/icons";
 import "./profile.css";
 import "../../shared/ui/studio.css";
@@ -31,6 +34,13 @@ const TXT = {
     subjectSub: "ওয়ার্কশিট, কুইজ, নোট আর প্রজ্ঞার সেশন মিলিয়ে",
     subjectEmpty: "এখনো কোনো বিষয়ে প্র্যাকটিস শুরু হয়নি।",
     loadFailed: "এই অংশটা এখন লোড হচ্ছে না।",
+    mistakeTitle: "যেসব প্রশ্নে ভুল হয়েছে",
+    mistakeSub: "প্রজ্ঞার সাথে প্র্যাকটিস করার সময় — আবার চেষ্টা করো",
+    mistakeEmpty: "এখনো কোনো ভুল নেই — দারুণ করছ!",
+    mistakeYourAns: "তোমার উত্তর",
+    mistakeCorrectAns: "সঠিক উত্তর",
+    mistakeRetry: "ভুল সুধরাও",
+    mistakeQuiz: "কুইজ", mistakePractice: "প্র্যাকটিস",
     classLabel: "ক্লাস",
     changeClass: "পরিবর্তন করো",
     saveClass: "সংরক্ষণ করো",
@@ -53,6 +63,13 @@ const TXT = {
     subjectSub: "Worksheets, quizzes, notes, and Progga sessions, together",
     subjectEmpty: "No subject activity yet.",
     loadFailed: "Could not load this right now.",
+    mistakeTitle: "Questions you got wrong",
+    mistakeSub: "From practicing with Progga — try them again",
+    mistakeEmpty: "No mistakes yet — nicely done!",
+    mistakeYourAns: "Your answer",
+    mistakeCorrectAns: "Correct answer",
+    mistakeRetry: "Fix this mistake",
+    mistakeQuiz: "Quiz", mistakePractice: "Practice",
     classLabel: "Class",
     changeClass: "Change",
     saveClass: "Save",
@@ -177,6 +194,50 @@ function SubjectBreakdown({ items, failed, t }) {
   );
 }
 
+/* Recently wrong practice/quiz questions from Progga, each with a link back
+   into that exact chat session (?session_id=&mode=) so the student can pick
+   up right where the mistake happened instead of starting over. */
+/* Recently wrong practice/quiz questions from Progga, each with a link into
+   the chatbot session to actually fix it (a fresh, similar-but-different
+   question on the same topic) — the fixing flow lives on ChatbotPage.js,
+   not here, so this is just the link. */
+function MistakeRow({ m, t }) {
+  const navigate = useNavigate();
+  const scopeLabel = [m.subject_name, m.chapter_name, m.topic_name].filter(Boolean).join(" / ");
+
+  return (
+    <li className="pf-mistake-row">
+      <div className="pf-mistake-main">
+        <span className="pf-mistake-tag">{m.content_type === "quiz_question" ? t.mistakeQuiz : t.mistakePractice}</span>
+        {scopeLabel && <span className="pf-mistake-scope">{scopeLabel}</span>}
+      </div>
+      <p className="pf-mistake-q">{m.question}</p>
+      {m.your_answer && (
+        <p className="pf-mistake-ans is-wrong"><strong>{t.mistakeYourAns}:</strong> {m.your_answer}</p>
+      )}
+      {m.correct_answer && (
+        <p className="pf-mistake-ans is-right"><strong>{t.mistakeCorrectAns}:</strong> {m.correct_answer}</p>
+      )}
+      <button type="button" className="pf-mistake-retry" onClick={() => navigate(`/chatbot?retry_content_id=${m.content_id}`)}>
+        {t.mistakeRetry}
+      </button>
+    </li>
+  );
+}
+
+function MistakesList({ items, failed, t }) {
+  if (failed) return <p className="pf-empty">{t.loadFailed}</p>;
+  if (!items.length) return <p className="pf-empty">{t.mistakeEmpty}</p>;
+
+  return (
+    <ul className="pf-mistakes">
+      {items.map((m) => (
+        <MistakeRow key={`${m.content_id}-${m.session_id}`} m={m} t={t} />
+      ))}
+    </ul>
+  );
+}
+
 function MiniCalendar({ activeDays, t, locale }) {
   const today = new Date();
   const year = today.getFullYear();
@@ -254,8 +315,8 @@ function ClassEditor({ user, onUpdated, t }) {
     return (
       <span style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
         <span className="pf-role">{t.classLabel}: {user?.class_name || "—"}</span>
-        <button type="button" onClick={startEdit}
-          style={{ border: "none", background: "none", color: "var(--dhi-forest)", fontWeight: 650, fontSize: ".86rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>
+        <button type="button" className="pf-change-class-btn" onClick={startEdit}
+          style={{ border: "none", background: "none", fontWeight: 650, fontSize: ".86rem", cursor: "pointer", textDecoration: "underline", textUnderlineOffset: "3px" }}>
           {t.changeClass}
         </button>
         {msg && (
@@ -294,6 +355,8 @@ export default function StudentProfilePage() {
   const [activity, setActivity] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [subjectsFailed, setSubjectsFailed] = useState(false);
+  const [mistakes, setMistakes] = useState([]);
+  const [mistakesFailed, setMistakesFailed] = useState(false);
   const navigate = useNavigate();
 
   const { lang } = useI18n();
@@ -313,6 +376,9 @@ export default function StudentProfilePage() {
     getMySubjects(6)
       .then(({ data }) => { setSubjects(data?.items || []); setSubjectsFailed(false); })
       .catch((err) => { console.error("Could not load subject activity:", err); setSubjectsFailed(true); });
+    getMyMistakes(8)
+      .then(({ data }) => { setMistakes(data?.items || []); setMistakesFailed(false); })
+      .catch((err) => { console.error("Could not load mistakes:", err); setMistakesFailed(true); });
   }, [navigate]);
 
   const handleLogout = () => {
@@ -356,6 +422,7 @@ export default function StudentProfilePage() {
           {user?.email && <p>{user.email}</p>}
           <ClassEditor user={user} onUpdated={handleClassUpdated} t={t} />
         </div>
+        <DhiMark className="pf-head-mark" />
       </section>
 
       <section>
@@ -410,6 +477,14 @@ export default function StudentProfilePage() {
           </header>
           <SubjectBreakdown items={subjects} failed={subjectsFailed} t={t} />
         </div>
+      </section>
+
+      <section className="pf-panel pf-mistakes-panel">
+        <header className="pf-panel-head">
+          <h2><IconAlert />{t.mistakeTitle}</h2>
+          <p>{t.mistakeSub}</p>
+        </header>
+        <MistakesList items={mistakes} failed={mistakesFailed} t={t} />
       </section>
     </AppShell>
   );

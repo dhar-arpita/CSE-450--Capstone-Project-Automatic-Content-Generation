@@ -3,7 +3,7 @@ import {
   chatQaSamples, chatQaAsk, chatExplainMore,
   chatPracticeGenerate,
   chatSessionStart, chatSessionHint, chatSessionAnswer,
-  chatSessionNext, chatSessionEnd, chatQuizGenerate,
+  chatSessionNext, chatSessionEnd, chatQuizGenerate, chatQuizAnswer,
 } from "./api";
 import { pollJobUntilDone } from "./useJobPolling";
 
@@ -96,6 +96,18 @@ export function useChatSession({ studentId, subjectId, chapterId = null, topicId
     return data;
   }, []);
 
+  // Grades a chatbot quiz answer server-side and persists it, so it shows up
+  // both on resume and in the Profile "mistakes" list — previously grading
+  // only happened in the browser and was never sent back.
+  const submitQuizAnswer = useCallback(async (contentId, selectedOption) => {
+    const sid = sessionIdRef.current;
+    if (sid == null) return null;
+    try {
+      const { data } = await chatQuizAnswer({ session_id: sid, content_id: contentId, selected_option: selectedOption });
+      return data;
+    } catch { return null; }
+  }, []);
+
   const endSession = useCallback(async () => {
     const sid = sessionIdRef.current;
     sessionIdRef.current = null;
@@ -122,7 +134,7 @@ export function useChatSession({ studentId, subjectId, chapterId = null, topicId
   return {
     askSamples, ask, explainMore,
     practiceSet, quizSet,
-    startSession, nextQuestion, getHint, showAnswer,
+    startSession, nextQuestion, getHint, showAnswer, submitQuizAnswer,
     endSession, resetSession, setSessionId, getSessionId,
   };
 }

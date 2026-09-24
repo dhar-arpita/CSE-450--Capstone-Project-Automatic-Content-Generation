@@ -139,12 +139,58 @@ html[lang="bn"] .db-head h2 { letter-spacing: 0; line-height: 1.45; }
 .is-student .db-card:hover {
   transform: translateY(-4px) rotate(-.6deg) scale(1.015);
 }
+/* The whole mark still bobs as one piece — the visible "it's floating"
+   motion — with the per-triangle jitter below layered on top of that for
+   extra life. A dedicated keyframes (not the shared teen-float from
+   teen-theme.css) because a CSS animation fully replaces the transform
+   property for as long as it runs, so reusing teen-float's own
+   translateY(0) base would wipe out the -50% that keeps the mark anchored
+   to `top` and let .db-hero's overflow:hidden crop it again. */
 .is-student .db-hero-mark {
-  animation: teen-float 7s ease-in-out infinite;
+  top: 42%;
+  animation: hero-mark-float 7s ease-in-out infinite;
 }
+@keyframes hero-mark-float {
+  0%, 100% { transform: translateY(-50%) rotate(0deg); }
+  50%      { transform: translateY(calc(-50% - 12px)) rotate(3deg); }
+}
+
+/* Each triangle gets its own transform origin (its own center, not the
+   SVG's 0,0) so it scales/rotates in place — .dm-tri-N below only sets the
+   per-triangle scatter start point and float rhythm via custom properties;
+   the animations themselves are shared. */
+.is-student .db-hero-mark .dm-tri {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation:
+    dm-assemble 700ms cubic-bezier(.25, .85, .35, 1.1) both,
+    dm-flock var(--dm-float-dur, 6.5s) ease-in-out var(--dm-float-delay, 700ms) infinite;
+}
+/* Flies in from a scattered, faded, rotated start to its real position —
+   plays once on mount, then holds (via the "both" fill-mode) until the
+   float animation below takes over the same property. */
+@keyframes dm-assemble {
+  0%   { transform: translate(var(--dm-dx), var(--dm-dy)) rotate(var(--dm-rot)) scale(.55); opacity: 0; }
+  65%  { opacity: 1; }
+  100% { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+}
+/* A gentle, small idle drift — later in the animation list than dm-assemble,
+   so once its own delay elapses it takes over the transform (per the CSS
+   Animations cascade: the later-listed active animation wins). */
+@keyframes dm-flock {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(var(--dm-float-y, -6px)) rotate(var(--dm-float-rot, 2deg)); }
+}
+.is-student .db-hero-mark .dm-tri-1 { --dm-dx: -34px; --dm-dy: -22px; --dm-rot: -26deg; --dm-float-dur: 6.4s; --dm-float-delay: 700ms;  --dm-float-y: -5px; --dm-float-rot: 3deg; }
+.is-student .db-hero-mark .dm-tri-2 { --dm-dx: 28px;  --dm-dy: -26px; --dm-rot: 22deg;  --dm-float-dur: 7.2s; --dm-float-delay: 850ms;  --dm-float-y: -7px; --dm-float-rot: -2deg; }
+.is-student .db-hero-mark .dm-tri-3 { --dm-dx: 24px;  --dm-dy: 20px;  --dm-rot: -16deg; --dm-float-dur: 6.8s; --dm-float-delay: 1000ms; --dm-float-y: -4px; --dm-float-rot: 2deg; }
+.is-student .db-hero-mark .dm-tri-4 { --dm-dx: -22px; --dm-dy: 24px;  --dm-rot: 19deg;  --dm-float-dur: 7.6s; --dm-float-delay: 780ms;  --dm-float-y: -6px; --dm-float-rot: -3deg; }
+.is-student .db-hero-mark .dm-tri-5 { --dm-dx: 36px;  --dm-dy: -12px; --dm-rot: 32deg;  --dm-float-dur: 6.1s; --dm-float-delay: 900ms;  --dm-float-y: -5px; --dm-float-rot: 2deg; }
+
 @media (prefers-reduced-motion: reduce) {
   .is-student .db-card:hover { transform: translateY(-3px); }
   .is-student .db-hero-mark { animation: none; }
+  .is-student .db-hero-mark .dm-tri { animation: none; }
 }
 .db-card:focus-visible { outline: 2px solid var(--dhi-bloom); outline-offset: 3px; }
 
@@ -200,6 +246,9 @@ html[lang="bn"] .db-badge { letter-spacing: 0; font-size: .76rem; }
    platform-wide stat tiles with something personal to read on landing. */
 .db-progress-note { display: flex; flex-direction: column; gap: 14px; }
 .db-progress-msg {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin: 0;
   padding: 16px 20px;
   border-radius: 16px;
@@ -209,6 +258,17 @@ html[lang="bn"] .db-badge { letter-spacing: 0; font-size: .76rem; }
   font-weight: 650;
   line-height: 1.55;
 }
+.db-progress-icon {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--dhi-surface-raised);
+  color: var(--dhi-forest);
+}
+.db-progress-icon svg { width: 17px; height: 17px; }
 .db-continue {
   display: flex;
   align-items: center;
@@ -239,6 +299,32 @@ html[lang="bn"] .db-badge { letter-spacing: 0; font-size: .76rem; }
 @media (prefers-reduced-motion: reduce) {
   .db-continue { transition: none; }
   .db-continue:hover { transform: none; }
+}
+
+/* Same shape as .db-continue, warning-toned — only ever rendered once open
+   mistakes cross MISTAKE_REMINDER_THRESHOLD, so a student who fixes their
+   mistakes as they go never sees this at all. */
+.db-mistake-reminder {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 22px;
+  border: 1.4px solid var(--dhi-danger);
+  border-radius: 16px;
+  background: var(--dhi-danger-wash, rgba(220, 38, 38, .1));
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform .18s cubic-bezier(.2, .8, .2, 1);
+}
+.db-mistake-reminder:hover { transform: translateY(-2px); }
+.db-mistake-reminder-text { font-size: .92rem; font-weight: 650; color: var(--dhi-danger); }
+.db-mistake-reminder-cta { flex: 0 0 auto; font-size: .9rem; font-weight: 700; color: var(--dhi-danger); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .db-mistake-reminder { transition: none; }
+  .db-mistake-reminder:hover { transform: none; }
 }
 
 /* ── stat row ──────────────────────────────────────────────────────────── */
