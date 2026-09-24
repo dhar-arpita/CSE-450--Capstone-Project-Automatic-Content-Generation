@@ -159,6 +159,29 @@ export const IconBolt = () => (
   </svg>
 );
 
+export const IconRocket = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M12 2.5c2.6 1.8 4.2 4.8 4.2 8.4 0 2.4-.7 4.6-1.9 6.4L12 21l-2.3-3.7c-1.2-1.8-1.9-4-1.9-6.4 0-3.6 1.6-6.6 4.2-8.4Z" />
+    <circle cx="12" cy="10" r="1.6" />
+    <path d="M8.3 15.8 5.6 17.5l.4-3.3M15.7 15.8l2.7 1.7-.4-3.3" />
+  </svg>
+);
+
+export const IconTrendUp = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M3.5 16.5 9 11l4 3.5L20.5 6" />
+    <path d="M15 6h5.5v5.5" />
+  </svg>
+);
+
+export const IconTrophy = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M7 4h10v4.2c0 2.9-2.2 5.3-5 5.6-2.8-.3-5-2.7-5-5.6V4Z" />
+    <path d="M7 5.5H4.6C4.3 5.5 4 5.8 4 6.1c0 2 1.6 3.6 3.6 3.6M17 5.5h2.4c.3 0 .6.3.6.6 0 2-1.6 3.6-3.6 3.6" />
+    <path d="M12 13.8V17M9 20h6M9.5 17h5" />
+  </svg>
+);
+
 export const IconDownload = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
     <path d="M4 15.5V18a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2.5" />

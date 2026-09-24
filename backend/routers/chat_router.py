@@ -247,6 +247,12 @@ class SessionEndRequest(BaseModel):
     session_id: int
 
 
+class QuizAnswerRequest(BaseModel):
+    session_id: int
+    content_id: int
+    selected_option: str
+
+
 
 # Helper for generating one question
 
@@ -604,6 +610,17 @@ def practice_session_answer(
         interaction.hints_used = req.hints_used
         interaction.is_correct = req.self_report
         interaction.time_spent = req.time_spent
+        # This question is itself a "fix this mistake" retry (see
+        # /mistakes/{content_id}/retry) and the student got it right this
+        # time — resolve the ORIGINAL wrong interaction it was standing in
+        # for, so /chat/mistakes stops listing it. A wrong retry changes
+        # nothing here; the mistake just stays open for another attempt.
+        if req.self_report and content.retry_of_content_id:
+            original = db.query(StudentInteraction).filter(
+                StudentInteraction.content_id == content.retry_of_content_id
+            ).first()
+            if original:
+                original.resolved = True
         db.commit()
 
     return {"answer": content.answer_key}
@@ -725,6 +742,7 @@ def chat_history(
         StudentInteraction.session_id == session.session_id
     ).all()
     correct_map = {i.content_id: i.is_correct for i in interactions}
+    answer_map = {i.content_id: i.student_answer for i in interactions}
 
     qa, sets, oneByone, quiz = [], [], [], []
 
@@ -771,6 +789,7 @@ def chat_history(
                 "question_text": r.display_body or "",
                 "options": qdata.get("options", []),
                 "correct_option": qdata.get("correct_option"),
+                "student_answer": answer_map.get(r.content_id),
             }
             if qnum == 1 or not quiz:
                 quiz.append({"questions": [entry]})
@@ -889,3 +908,198 @@ def chat_quiz_generate(
             "session_id": req.session_id,
         },
     )
+
+
+@router.post("/quiz/answer")
+def chat_quiz_answer(
+    req: QuizAnswerRequest,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Records the option a student picked for a chatbot quiz question, so it
+    can be graded server-side and later show up in the mistakes list — quiz
+    grading used to happen only in the browser and was never persisted."""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+
+    content = db.query(GeneratedContent).filter(
+        GeneratedContent.content_id == req.content_id,
+        GeneratedContent.content_type == "quiz_question",
+    ).first()
+    owns_content = (
+        content
+        and content.learning_session_id == req.session_id
+        and db.query(LearningSession).filter(
+            LearningSession.session_id == req.session_id,
+            LearningSession.student_id == current_user.user_id,
+        ).first()
+    )
+    if not owns_content:
+        return {"message": "Question not found."}
+
+    try:
+        qdata = json.loads(content.answer_key) if content.answer_key else {}
+    except Exception:
+        qdata = {}
+    correct_option = qdata.get("correct_option")
+    is_correct = (req.selected_option == correct_option) if correct_option else None
+
+    interaction = db.query(StudentInteraction).filter(
+        StudentInteraction.content_id == req.content_id,
+        StudentInteraction.session_id == req.session_id,
+    ).first()
+    if interaction:
+        interaction.student_answer = req.selected_option
+        interaction.is_correct = is_correct
+        db.commit()
+
+    return {"correct_option": correct_option, "is_correct": is_correct}
+
+
+@router.get("/mistakes")
+def chat_mistakes(
+    limit: int = 10,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Recently wrong practice/quiz questions, newest first, so Profile can
+    show "what you got wrong" with a link back into that chat session."""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view mistakes")
+
+    limit = max(1, min(limit, 30))
+
+    base = (
+        db.query(StudentInteraction, GeneratedContent, LearningSession)
+        .join(GeneratedContent, GeneratedContent.content_id == StudentInteraction.content_id)
+        .join(LearningSession, LearningSession.session_id == StudentInteraction.session_id)
+        .filter(
+            LearningSession.student_id == current_user.user_id,
+            StudentInteraction.is_correct.is_(False),
+            StudentInteraction.resolved.is_(False),
+            GeneratedContent.content_type.in_(["practice_question", "quiz_question"]),
+        )
+    )
+    # Separate from the page itself: the reminder on Dashboard needs the real
+    # count even when the list view below only shows the first `limit`.
+    total = base.count()
+    rows = base.order_by(GeneratedContent.generated_at.desc()).limit(limit).all()
+
+    items = []
+    for interaction, content, session in rows:
+        chapter_id = None
+        subject_id = session.scope_subject_id
+        topic_name = chapter_name = subject_name = None
+
+        if content.topic_id:
+            topic = db.query(Topic).filter(Topic.topic_id == content.topic_id).first()
+            if topic:
+                topic_name = topic.name
+                chapter_id = topic.chapter_id
+        chapter_id = chapter_id or session.scope_chapter_id
+        if chapter_id:
+            chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+            if chapter:
+                chapter_name = chapter.name
+                subject_id = subject_id or chapter.subject_id
+        if subject_id:
+            subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+            if subject:
+                subject_name = subject.name
+
+        if content.content_type == "quiz_question":
+            try:
+                qdata = json.loads(content.answer_key) if content.answer_key else {}
+            except Exception:
+                qdata = {}
+            correct_answer = qdata.get("correct_text") or qdata.get("correct_option")
+            your_answer = interaction.student_answer
+        else:
+            correct_answer = content.answer_key or ""
+            your_answer = None
+
+        items.append({
+            "content_id": content.content_id,
+            "session_id": session.session_id,
+            "content_type": content.content_type,
+            "question": content.display_body or "",
+            "correct_answer": correct_answer,
+            "your_answer": your_answer,
+            "subject_name": subject_name,
+            "chapter_name": chapter_name,
+            "topic_name": topic_name,
+            "at": content.generated_at.isoformat() if content.generated_at else None,
+        })
+
+    return {"items": items, "total": total}
+
+
+@router.post("/mistakes/{content_id}/retry")
+def retry_mistake(
+    content_id: int,
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """A similar-but-different question on the same topic as a past wrong
+    answer — not the exact same question again, so getting it right this
+    time actually means the concept, not just that question, is understood.
+    Answered through the normal /practice/session/answer, which resolves the
+    original mistake (via retry_of_content_id) if self_report comes back
+    true."""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can use chatbot")
+
+    content = db.query(GeneratedContent).filter(
+        GeneratedContent.content_id == content_id,
+        GeneratedContent.content_type.in_(["practice_question", "quiz_question"]),
+    ).first()
+    owns_content = content and content.learning_session_id and db.query(LearningSession).filter(
+        LearningSession.session_id == content.learning_session_id,
+        LearningSession.student_id == current_user.user_id,
+    ).first()
+    if not owns_content:
+        return {"message": "Question not found."}
+
+    orig_session = db.query(LearningSession).filter(
+        LearningSession.session_id == content.learning_session_id
+    ).first()
+
+    s = _resolve_scope(db, orig_session.scope_subject_id, orig_session.scope_chapter_id, content.topic_id)
+    assert_student_class(db, current_user, s["class_name"])
+    ctx = _scope_context(s)
+    if _no_content(ctx):
+        ctx = ""
+
+    exclude = [content.display_body] if content.display_body else []
+    q = _generate_one_question(s, ctx, content.difficulty_level or "medium", exclude, content.language or "bangla")
+    if not q.get("question"):
+        return {"message": "Try again, please. Question generation failed."}
+
+    # The SAME session the mistake happened in, not a new one — the student
+    # is continuing that practice session, just on a fixed-up question.
+    retry_session = _get_or_create_session(
+        db, current_user.user_id, s["topic_id"], content.learning_session_id,
+        subject_id=s["subject_id"], chapter_id=s["chapter_id"],
+    )
+    new_content = _save_interaction(
+        db, retry_session, s["topic_id"],
+        content_type="practice_question",
+        display_body=q["question"],
+        answer_key=q.get("answer", ""),
+        difficulty_level=content.difficulty_level or "medium",
+        language=content.language or "bangla",
+        hints_used=0,
+        is_correct=None,
+    )
+    new_content.retry_of_content_id = content.content_id
+    db.commit()
+
+    return {
+        "session_id": retry_session.session_id,
+        "content_id": new_content.content_id,
+        "question": q["question"],
+        # The frontend needs this to populate its subject/chapter/topic state
+        # (the same shape /chat/history's "scope" already uses) — landing on
+        # a retry has nothing pre-selected the way a resumed session does.
+        "scope": s,
+    }

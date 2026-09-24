@@ -117,6 +117,11 @@ export const getMySubjects = (limit = 6) => api.get(`/stats/me/subjects?limit=${
 // moving up a class each year.
 export const updateMyClass = (className) =>
   api.patch("/students/me/class", { class_name: className });
+// Recently wrong practice/quiz questions, for the Profile "mistakes" list.
+export const getMyMistakes = (limit = 10) => api.get(`/chat/mistakes?limit=${limit}`);
+// A fresh, similar-but-different question on the same topic as a past
+// mistake — "fix this mistake" instead of re-showing the exact same one.
+export const retryMistake = (contentId) => api.post(`/chat/mistakes/${contentId}/retry`);
 
 
 // ──── CURRICULUM ENDPOINTS ────
@@ -160,6 +165,7 @@ export const chatSessionAnswer = (body) => api.post("/chat/practice/session/answ
 export const chatSessionNext = (body) => api.post("/chat/practice/session/next", body);
 export const chatSessionEnd = (body) => api.patch("/chat/practice/session/end", body);
 export const chatQuizGenerate = (body) => api.post("/chat/quiz/generate", body);
+export const chatQuizAnswer = (body) => api.post("/chat/quiz/answer", body);
 
 
 // ──── WORKSHEET GENERATION ────
