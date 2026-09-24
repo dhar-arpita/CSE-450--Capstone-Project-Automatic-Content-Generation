@@ -7,7 +7,7 @@ import weasyprint
 from core.config import get_db
 from core.security import get_current_user_from_header
 from models.db_models import (
-    Chapter, Class, GeneratedContent, LearningSession, LearningSessionTopic, Subject, TeacherSession, TeacherSessionTopic, Topic, User,
+    Chapter, Class, GeneratedContent, LearningSession, LearningSessionTopic, Student, Subject, TeacherSession, TeacherSessionTopic, Topic, User,
 )
 from services.generation_service import (
     search_curriculum_context_for_quiz,
@@ -18,6 +18,7 @@ from services.cache_service import (
     CACHE_VERSION,
     FIXED_DIFFICULTY,
     QUIZ_CONTENT_TYPE_BY_SCOPE,
+    QUIZ_SCOPE_BY_CONTENT_TYPE,
     effective_quiz_questions,
     normalize_key,
     resolve_chain_for_key,
@@ -292,10 +293,42 @@ def get_worksheet(
     except (ValueError, SyntaxError):
         visuals = {}
 
+    # Reused by all three studios (worksheet/study-note/quiz) to reopen a
+    # saved piece of content, so the caller's curriculum picker can be filled
+    # back in exactly as it was — not just topic_id, which chapter- and
+    # subject-scope quizzes don't even have. Those two columns are only ever
+    # set directly for that reason (see migration 001); everything else only
+    # ever gets topic_id, so chapter/subject are derived from it here.
+    topic_id = content.topic_id
+    chapter_id = content.chapter_id
+    subject_id = content.subject_id
+    if topic_id and not chapter_id:
+        topic = db.query(Topic).filter(Topic.topic_id == topic_id).first()
+        if topic:
+            chapter_id = topic.chapter_id
+    if chapter_id and not subject_id:
+        chapter = db.query(Chapter).filter(Chapter.chapter_id == chapter_id).first()
+        if chapter:
+            subject_id = chapter.subject_id
+    class_name = None
+    if subject_id:
+        subject = db.query(Subject).filter(Subject.subject_id == subject_id).first()
+        class_name = subject.class_name if subject else None
+
     return {
         "content_id": content.content_id,
-        "topic_id": content.topic_id,
+        "content_type": content.content_type,
+        "topic_id": topic_id,
+        "chapter_id": chapter_id,
+        "subject_id": subject_id,
+        "class_name": class_name,
+        # Only meaningful for quiz_topic/quiz_chapter/quiz_subject — None for
+        # worksheet/study_note, which QuizGenerator's own scope control has
+        # no use for reading anyway.
+        "quiz_scope": QUIZ_SCOPE_BY_CONTENT_TYPE.get(content.content_type),
         "difficulty_level": content.difficulty_level,
+        "language": content.language,
+        "num_problems": content.num_problems if content.num_problems is not None else (len(problems) or None),
         # The rendered sheet, so a worksheet picked out of the teacher's list
         # can be shown without regenerating anything.
         "html": content.display_body,
@@ -351,7 +384,7 @@ def list_my_content(
             TeacherSession, TeacherSession.session_id == GeneratedContent.teacher_session_id
         ).filter(TeacherSession.teacher_id == current_user.user_id)
 
-    rows = (
+    rows_query = (
         base
         # The chain is coalesced because it is not always complete: a chapter-scope
         # quiz has no topic_id and a subject-scope quiz has neither topic nor
@@ -368,10 +401,19 @@ def list_my_content(
         )
         .filter(GeneratedContent.content_type.in_(wanted))
         .filter(GeneratedContent.is_cache_seed.is_(False))
-        .order_by(GeneratedContent.generated_at.desc())
-        .limit(limit)
-        .all()
     )
+
+    if current_user.role == "student":
+        # A student's class can change (Profile's "change class"). Content
+        # made under an old class stays in the database for history, but
+        # nothing here can act on it anymore — generating from it again is
+        # refused by assert_student_class. This list is "what can I pick up
+        # right now", so it only ever shows the student's CURRENT class.
+        student = db.query(Student).filter(Student.student_id == current_user.user_id).first()
+        if student and student.class_name:
+            rows_query = rows_query.filter(Subject.class_name == student.class_name)
+
+    rows = rows_query.order_by(GeneratedContent.generated_at.desc()).limit(limit).all()
 
     return {
         "content_type": content_type,

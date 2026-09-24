@@ -193,7 +193,7 @@
       quiz: "Quiz Generation",
       notes: "Study Note Generation",
       upload: "Custom Uploads (Optional)",
-      chatbot: "Practice with Progga",
+      chatbot: "Practice with Proggya",
       profile: "Profile",
     },
     notif: {

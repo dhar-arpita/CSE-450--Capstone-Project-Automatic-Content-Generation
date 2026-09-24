@@ -9,7 +9,7 @@ import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
 import AppShell from "../../shared/ui/AppShell";
 import SavedContentList from "../../shared/ui/SavedContentList";
-import { IconCheck, IconQuiz, IconSpark } from "../../shared/ui/icons";
+import { IconAlert, IconArrowLeft, IconCheck, IconQuiz, IconSpark } from "../../shared/ui/icons";
 import QuizGenerator from "./QuizGenerator";
 import "../../shared/ui/studio.css";
 
@@ -40,12 +40,14 @@ const TXT = {
     wizardChapterSub: "একটা অধ্যায় বেছে নাও, অথবা পুরো বিষয়ের উপর কুইজ বানাও",
     wizardTopicTitle: "কোন টপিক?",
     wizardTopicSub: "একটা টপিক বেছে নাও, অথবা পুরো অধ্যায়ের উপর কুইজ বানাও",
-    back: "← পেছনে যাও",
+    back: "পেছনে যাও",
     noSubjects: "এই ক্লাসের জন্য কোনো বিষয় পাওয়া যায়নি।",
     noChapters: "এই বিষয়ে কোনো অধ্যায় পাওয়া যায়নি।",
     noTopics: "এই অধ্যায়ে কোনো টপিক পাওয়া যায়নি।",
     skipSubject: "+ সরাসরি এই বিষয়ের ওপর Quiz বানাও",
     skipChapter: "+ সরাসরি এই অধ্যায়ের ওপর Quiz বানাও",
+    scopeMismatch: (savedClass, myClass) =>
+      `এটা ${savedClass}-এর জন্য বানানো হয়েছিল, তোমার এখনকার ক্লাস ${myClass} — তাই এখান থেকে নতুন করে বানানো যাবে না, শুধু দেখতে পারবে।`,
   },
   english: {
     breadcrumb: "Quiz Studio",
@@ -72,12 +74,14 @@ const TXT = {
     wizardChapterSub: "Pick a chapter, or quiz the whole subject",
     wizardTopicTitle: "Which topic?",
     wizardTopicSub: "Pick a topic, or quiz the whole chapter",
-    back: "← Back",
+    back: "Back",
     noSubjects: "No subjects found for this class.",
     noChapters: "No chapters found for this subject.",
     noTopics: "No topics found for this chapter.",
     skipSubject: "+ Generate a quiz on this whole subject",
     skipChapter: "+ Generate a quiz on this whole chapter",
+    scopeMismatch: (savedClass, myClass) =>
+      `This was made for ${savedClass}, and your class is now ${myClass} — so it can't be generated again from here, only viewed.`,
   },
 };
 
@@ -174,6 +178,11 @@ export default function QuizPage() {
   const [openRequest, setOpenRequest] = useState(null);
   const [activeContentId, setActiveContentId] = useState(null);
   const [listVersion, setListVersion] = useState(0);
+  // Set when a saved quiz belongs to a class the student isn't in anymore
+  // (their own class can change — see Profile). It's still theirs to look
+  // back at, so the preview still opens; there's just nothing to pre-fill,
+  // since generating again would only get refused server-side.
+  const [scopeMismatchClass, setScopeMismatchClass] = useState(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -237,6 +246,35 @@ export default function QuizPage() {
     } catch (err) { console.error(err); }
   };
 
+  // Opening a saved quiz fills the curriculum picker back in to match it —
+  // not just so the preview reads correctly, but so "generate again" right
+  // there regenerates on the same subject/chapter/topic by default, with
+  // just the settings (scope/language/difficulty/count) free to change.
+  const applyScope = async ({ subjectId, chapterId, topicId, className }) => {
+    if (className && user?.class_name && className !== user.class_name) {
+      // A saved quiz from before the student's class changed —
+      // assert_student_class on the backend will correctly refuse to
+      // regenerate on a class they're not in anymore, so there's nothing
+      // to pre-fill here; just explain why Generate won't work.
+      setScopeMismatchClass(className);
+      return;
+    }
+    setScopeMismatchClass(null);
+    if (className) {
+      setSelectedClass(className);
+      try { const { data } = await getSubjects(className); setSubjectList(data || []); } catch (err) { console.error(err); }
+    }
+    if (subjectId) {
+      setSelectedSubject(String(subjectId));
+      try { const { data } = await getChapters(subjectId); setChapterList(data || []); } catch (err) { console.error(err); }
+    }
+    if (chapterId) {
+      setSelectedChapter(String(chapterId));
+      try { const { data } = await getTopics(chapterId); setTopicList(data || []); } catch (err) { console.error(err); }
+    }
+    if (topicId) setSelectedTopicId(String(topicId));
+  };
+
   // Wizard-only: going back a step just clears that level's selection and
   // everything under it — chapterList/subjectList are still cached from the
   // forward trip, so no refetch is needed.
@@ -250,10 +288,12 @@ export default function QuizPage() {
     setSelectedChapter(""); setTopicList([]); setSelectedTopicId("");
   };
   // Undoes whichever way "generate" was reached — a topic pick (clearing it
-  // lands back on the topic step) or a skip from chapter/subject (clearing
-  // the flag lands back wherever selectedChapter/selectedSubject say it
-  // should, since the step is derived from that state either way).
+  // lands back on the topic step), a skip from chapter/subject (clearing the
+  // flag lands back wherever selectedChapter/selectedSubject say it should),
+  // or a saved-quiz click from the rail (clearing openRequest below).
   const backFromGenerate = () => {
+    setOpenRequest(null);
+    setScopeMismatchClass(null);
     setSkipToGenerate(false);
     setSelectedTopicId("");
   };
@@ -262,6 +302,12 @@ export default function QuizPage() {
     : !selectedChapter ? "chapter"
     : !selectedTopicId ? "topic"
     : "generate";
+  // A saved-quiz click from the rail sets openRequest regardless of which
+  // wizard step the student is on — without this, the generator that
+  // actually reacts to openRequest never mounts until they've clicked all
+  // the way to "generate" themselves, so the click on the saved item
+  // visibly did nothing (the bug this fixes).
+  const showGenerate = wizardStep === "generate" || !!openRequest;
   const selectedSubjectName = subjectList.find((s) => String(s.subject_id) === String(selectedSubject))?.name || "";
   const selectedChapterObj = chapterList.find((c) => String(c.chapter_id) === String(selectedChapter));
   const selectedChapterName = selectedChapterObj ? `Ch ${selectedChapterObj.chapter_no}: ${selectedChapterObj.name}` : "";
@@ -308,7 +354,7 @@ export default function QuizPage() {
 
       {isStudentWithClass ? (
         <>
-          {wizardStep === "subject" && (
+          {!openRequest && wizardStep === "subject" && (
             <section className="as-panel gw-step">
               <header className="gw-step-head">
                 <span className="gw-step-no">1</span>
@@ -329,10 +375,10 @@ export default function QuizPage() {
             </section>
           )}
 
-          {wizardStep === "chapter" && (
+          {!openRequest && wizardStep === "chapter" && (
             <section className="as-panel gw-step">
               <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "4px" }}>
-                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToSubjectStep}>{t.back}</button>
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToSubjectStep}><IconArrowLeft /> {t.back}</button>
                 <button type="button" className="gw-sample-open" style={{ marginBottom: 0 }} onClick={() => setSkipToGenerate(true)}>
                   {t.skipSubject}
                 </button>
@@ -360,10 +406,10 @@ export default function QuizPage() {
             </section>
           )}
 
-          {wizardStep === "topic" && (
+          {!openRequest && wizardStep === "topic" && (
             <section className="as-panel gw-step">
               <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "4px" }}>
-                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToChapterStep}>{t.back}</button>
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToChapterStep}><IconArrowLeft /> {t.back}</button>
                 <button type="button" className="gw-sample-open" style={{ marginBottom: 0 }} onClick={() => setSkipToGenerate(true)}>
                   {t.skipChapter}
                 </button>
@@ -387,16 +433,18 @@ export default function QuizPage() {
             </section>
           )}
 
-          {wizardStep === "generate" && (
+          {showGenerate && (
             <section className="as-panel gw-step">
               <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
-                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backFromGenerate}>{t.back}</button>
-                <WizardCrumbs
-                  subjectName={selectedSubjectName}
-                  chapterName={selectedChapterName}
-                  onSubject={backToSubjectStep}
-                  onChapter={backToChapterStep}
-                />
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backFromGenerate}><IconArrowLeft /> {t.back}</button>
+                {selectedSubjectName && (
+                  <WizardCrumbs
+                    subjectName={selectedSubjectName}
+                    chapterName={selectedChapterName}
+                    onSubject={backToSubjectStep}
+                    onChapter={backToChapterStep}
+                  />
+                )}
               </div>
               <header className="gw-step-head">
                 <span className="gw-step-no is-done"><IconCheck /></span>
@@ -404,6 +452,12 @@ export default function QuizPage() {
                   <h2>{t.step2Title}</h2>
                 </div>
               </header>
+              {scopeMismatchClass && (
+                <p className="wg-note wg-note-wait" role="status">
+                  <IconAlert />
+                  {t.scopeMismatch(scopeMismatchClass, user?.class_name)}
+                </p>
+              )}
               <QuizGenerator
                 selectedSubject={selectedSubject}
                 selectedChapter={selectedChapter}
@@ -412,6 +466,8 @@ export default function QuizPage() {
                 openRequest={openRequest}
                 onContentChange={setActiveContentId}
                 onGenerated={() => setListVersion((v) => v + 1)}
+                onOpenedScope={applyScope}
+                autoFillFromSaved
               />
             </section>
           )}

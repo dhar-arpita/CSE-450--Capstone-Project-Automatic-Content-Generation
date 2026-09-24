@@ -4,7 +4,7 @@ import { useI18n } from "../../shared/i18n";
 import { login } from "../../shared/services/api";
 import AuthShell from "./AuthShell";
 import { Alert, Field, PasswordField, Submit } from "./fields";
-import { IconLock, IconMail } from "./icons";
+import { IconArrow, IconLock, IconMail } from "./icons";
 import { LOGIN_PATH, ROLES } from "./roles";
 import "./auth.css";
 
@@ -91,7 +91,7 @@ export default function LoginPage({ role }) {
         action={
           wrongRole ? (
             <Link className="au-alert-link" to={LOGIN_PATH[wrongRole]}>
-              {t(`auth.roleName.${wrongRole}`)} →
+              {t(`auth.roleName.${wrongRole}`)} <IconArrow />
             </Link>
           ) : null
         }

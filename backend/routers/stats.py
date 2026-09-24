@@ -98,7 +98,7 @@ def my_totals(
     total_of = lambda types: sum(by_type.get(t, 0) for t in types)  # noqa: E731
 
     # A student doesn't upload files — the fourth tile is how many practice
-    # sessions with Progga they've started instead.
+    # sessions with Proggya they've started instead.
     if current_user.role == "student":
         sessions = (
             db.query(func.count(LearningSession.session_id))

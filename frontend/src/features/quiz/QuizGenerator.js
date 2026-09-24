@@ -66,7 +66,10 @@ const Chevron = () => (
 
 export default function QuizGenerator({
   selectedSubject, selectedChapter, selectedTopicId, language = "bangla",
-  openRequest = null, onContentChange, onGenerated,
+  openRequest = null, onContentChange, onGenerated, onOpenedScope,
+  // Only the student wizard passes this — the teacher flow must stay
+  // exactly as it always has: opening a saved quiz only shows it.
+  autoFillFromSaved = false,
 }) {
   const t = TXT[language] || TXT.bangla;
 
@@ -128,6 +131,18 @@ export default function QuizGenerator({
         if (cancelled) return;
         setQuizHTML(data?.html || "");
         setContentId(data?.content_id ?? openRequest.contentId);
+        if (autoFillFromSaved) {
+          // Fill the settings back in exactly as this quiz was made, so
+          // "generate again" needs no re-picking — student flow only.
+          if (data?.quiz_scope) setScope(data.quiz_scope);
+          if (data?.difficulty_level) setDifficulty(data.difficulty_level);
+          if (data?.num_problems) setNumQuestions(data.num_problems);
+          if (data?.language) { setContentLanguage(data.language); setLanguagePinned(true); }
+          onOpenedScope?.({
+            subjectId: data?.subject_id, chapterId: data?.chapter_id,
+            topicId: data?.topic_id, className: data?.class_name,
+          });
+        }
       })
       .catch((err) => {
         console.error("Could not open saved quiz:", err);

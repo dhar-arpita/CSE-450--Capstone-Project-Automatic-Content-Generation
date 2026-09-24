@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from google.genai import types
 from routers.jobs import dispatch_job
 
@@ -15,7 +16,7 @@ from core.config import (
 from qdrant_client.models import Filter, FieldCondition, MatchValue
 
 from models.db_models import (
-    Subject, Chapter, Topic, User,
+    Subject, Chapter, Topic, User, Student,
     LearningSession, StudentInteraction, GeneratedContent,
 )
 from services.rag_service import get_embedding, load_prompt_template
@@ -836,8 +837,11 @@ def chat_sessions(
     if current_user.role != "student":
         raise HTTPException(status_code=403, detail="Only students can view sessions")
     
-    student_id = current_user.user_id 
-    
+    student_id = current_user.user_id
+
+    student = db.query(Student).filter(Student.student_id == student_id).first()
+    my_class = student.class_name if student else None
+
     sessions = db.query(LearningSession).filter(
         LearningSession.student_id == student_id
     ).order_by(LearningSession.session_id.desc()).all()
@@ -851,16 +855,30 @@ def chat_sessions(
             continue
 
         subject_name = None
+        session_class = None
         if s.scope_subject_id:
             subj = db.query(Subject).filter(Subject.subject_id == s.scope_subject_id).first()
-            subject_name = subj.name if subj else None
+            if subj:
+                subject_name = subj.name
+                session_class = subj.class_name
         elif first.topic_id:
             topic = db.query(Topic).filter(Topic.topic_id == first.topic_id).first()
             if topic:
                 chapter = db.query(Chapter).filter(Chapter.chapter_id == topic.chapter_id).first()
                 if chapter:
                     subject = db.query(Subject).filter(Subject.subject_id == chapter.subject_id).first()
-                    subject_name = subject.name if subject else None
+                    if subject:
+                        subject_name = subject.name
+                        session_class = subject.class_name
+
+        # A session started under a class the student has since moved on
+        # from (Profile's "change class") — every endpoint that would resume
+        # it (ask a question, generate a quiz, fix a mistake) refuses it via
+        # assert_student_class anyway, so there's no reason to list it here.
+        # Only skips on a CONFIRMED mismatch; an unresolved class stays in,
+        # same as it would have shown before this filter existed.
+        if my_class and session_class and session_class != my_class:
+            continue
 
         out.append({
             "session_id": s.session_id,
@@ -1034,6 +1052,104 @@ def chat_mistakes(
     return {"items": items, "total": total}
 
 
+@router.get("/mistakes/topics")
+def chat_mistakes_topics(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """Unresolved mistakes grouped by topic (the same scope a retry question
+    is generated from) — the entry list for the chatbot's dedicated "practice
+    mistakes" mode. Grouping matters because a retry always stays on the
+    mistake's own topic (see retry_mistake below): working through a batch
+    topic by topic, instead of a random mix, means every question a student
+    sees while fixing one group actually belongs to that group. Scoped to
+    the student's CURRENT class, same conservative rule as the endpoints
+    around this one."""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view this")
+
+    student = db.query(Student).filter(Student.student_id == current_user.user_id).first()
+    my_class = student.class_name if student else None
+
+    rows = (
+        db.query(StudentInteraction, GeneratedContent, LearningSession)
+        .join(GeneratedContent, GeneratedContent.content_id == StudentInteraction.content_id)
+        .join(LearningSession, LearningSession.session_id == StudentInteraction.session_id)
+        .filter(
+            LearningSession.student_id == current_user.user_id,
+            StudentInteraction.is_correct.is_(False),
+            StudentInteraction.resolved.is_(False),
+            GeneratedContent.content_type.in_(["practice_question", "quiz_question"]),
+        )
+        .order_by(GeneratedContent.generated_at.desc())
+        .all()
+    )
+
+    # Same bulk-prefetch as /mistakes/breakdown — one query per table
+    # instead of one per row.
+    topic_ids = {c.topic_id for _, c, _ in rows if c.topic_id}
+    topics_by_id = {
+        t.topic_id: t
+        for t in (db.query(Topic).filter(Topic.topic_id.in_(topic_ids)).all() if topic_ids else [])
+    }
+
+    chapter_ids = {s.scope_chapter_id for _, _, s in rows if s.scope_chapter_id}
+    chapter_ids |= {t.chapter_id for t in topics_by_id.values() if t.chapter_id}
+    chapters_by_id = {
+        c.chapter_id: c
+        for c in (db.query(Chapter).filter(Chapter.chapter_id.in_(chapter_ids)).all() if chapter_ids else [])
+    }
+
+    subject_ids = {s.scope_subject_id for _, _, s in rows if s.scope_subject_id}
+    subject_ids |= {c.subject_id for c in chapters_by_id.values() if c.subject_id}
+    subjects_by_id = {
+        s.subject_id: s
+        for s in (db.query(Subject).filter(Subject.subject_id.in_(subject_ids)).all() if subject_ids else [])
+    }
+
+    groups = {}   # group key -> group dict
+    order = []    # first-seen order (rows are already newest-first)
+
+    for interaction, content, session in rows:
+        topic = topics_by_id.get(content.topic_id) if content.topic_id else None
+        chapter_id = (topic.chapter_id if topic else None) or session.scope_chapter_id
+        chapter = chapters_by_id.get(chapter_id) if chapter_id else None
+        subject_id = session.scope_subject_id or (chapter.subject_id if chapter else None)
+        subject = subjects_by_id.get(subject_id) if subject_id else None
+
+        if my_class and subject and subject.class_name and subject.class_name != my_class:
+            continue
+
+        # The group a question can actually be re-generated within is
+        # exactly as specific as retry_mistake's own scope resolution goes:
+        # topic if there is one, else chapter, else subject.
+        if content.topic_id:
+            key, label = f"topic:{content.topic_id}", (topic.name if topic else None)
+        elif chapter_id:
+            key, label = f"chapter:{chapter_id}", (chapter.name if chapter else None)
+        elif subject_id:
+            key, label = f"subject:{subject_id}", (subject.name if subject else None)
+        else:
+            key, label = "unscoped", None
+
+        if key not in groups:
+            groups[key] = {
+                "label": label,
+                "subject_name": subject.name if subject else None,
+                "subject_id": subject_id,
+                "chapter_id": chapter_id,
+                "topic_id": content.topic_id,
+                "content_ids": [],
+            }
+            order.append(key)
+        groups[key]["content_ids"].append(content.content_id)
+
+    topics = [{**groups[k], "count": len(groups[k]["content_ids"])} for k in order]
+    topics.sort(key=lambda g: -g["count"])
+
+    return {"topics": topics}
+
+
 @router.post("/mistakes/{content_id}/retry")
 def retry_mistake(
     content_id: int,
@@ -1102,4 +1218,148 @@ def retry_mistake(
         # (the same shape /chat/history's "scope" already uses) — landing on
         # a retry has nothing pre-selected the way a resumed session does.
         "scope": s,
+    }
+
+
+@router.get("/mistakes/breakdown")
+def chat_mistakes_breakdown(
+    current_user: User = Depends(get_current_user_from_header),
+    db: Session = Depends(get_db),
+):
+    """A progress-tracker view of wrong answers, not the raw list /chat/mistakes
+    returns — grouped by subject (which topics need work), by difficulty
+    (easy mistakes vs. hard ones), and a hint/time comparison as a struggle
+    signal (heavy hint use even on a right answer suggests shaky footing,
+    not real mastery). Scoped to the student's CURRENT class only — same
+    reasoning as /generate/my/content and /chat/sessions: a class can change
+    (Profile), and content from a class they've left isn't something this
+    progress view should still be judging them on."""
+    if current_user.role != "student":
+        raise HTTPException(status_code=403, detail="Only students can view this")
+
+    student = db.query(Student).filter(Student.student_id == current_user.user_id).first()
+    my_class = student.class_name if student else None
+
+    rows = (
+        db.query(StudentInteraction, GeneratedContent, LearningSession)
+        .join(GeneratedContent, GeneratedContent.content_id == StudentInteraction.content_id)
+        .join(LearningSession, LearningSession.session_id == StudentInteraction.session_id)
+        .filter(
+            LearningSession.student_id == current_user.user_id,
+            StudentInteraction.is_correct.isnot(None),
+            GeneratedContent.content_type.in_(["practice_question", "quiz_question"]),
+        )
+        .all()
+    )
+
+    # Resolving each row's subject means walking content -> topic -> chapter
+    # -> subject (or the session's own scope_chapter_id/scope_subject_id as
+    # a shortcut). Doing that walk with a fresh query per row was the slow
+    # part here — one student's mistake history is a few hundred rows, and
+    # each row could cost up to three round trips to the (remote) database.
+    # Topic/Chapter/Subject are a small, mostly-repeated set of ids across
+    # those rows, so fetch each table once in bulk and do the walk with
+    # dict lookups instead — same resolution logic, no per-row queries.
+    topic_ids = {c.topic_id for _, c, _ in rows if c.topic_id}
+    topic_chapter = {
+        t.topic_id: t.chapter_id
+        for t in (db.query(Topic).filter(Topic.topic_id.in_(topic_ids)).all() if topic_ids else [])
+    }
+
+    chapter_ids = {s.scope_chapter_id for _, _, s in rows if s.scope_chapter_id}
+    chapter_ids |= {cid for cid in topic_chapter.values() if cid}
+    chapter_subject = {
+        c.chapter_id: c.subject_id
+        for c in (db.query(Chapter).filter(Chapter.chapter_id.in_(chapter_ids)).all() if chapter_ids else [])
+    }
+
+    # Also pull every subject in the student's current class here, in the
+    # same round trip — the pie chart on the profile page wants a slice for
+    # each of them (at 0% if untouched), not just the ones a mistake
+    # resolved to.
+    subject_ids = {s.scope_subject_id for _, _, s in rows if s.scope_subject_id}
+    subject_ids |= {sid for sid in chapter_subject.values() if sid}
+    subject_filter = Subject.subject_id.in_(subject_ids) if subject_ids else None
+    if my_class:
+        class_filter = Subject.class_name == my_class
+        subject_filter = or_(subject_filter, class_filter) if subject_filter is not None else class_filter
+    subjects_by_id = {
+        s.subject_id: s
+        for s in (db.query(Subject).filter(subject_filter).all() if subject_filter is not None else [])
+    }
+
+    by_subject = {}      # subject_name -> {"wrong": n, "total": n}
+    by_difficulty = {}   # difficulty level -> {"wrong": n, "total": n}
+    hints_wrong, hints_right = [], []
+    time_wrong, time_right = [], []
+
+    for interaction, content, session in rows:
+        chapter_id = topic_chapter.get(content.topic_id) if content.topic_id else None
+        chapter_id = chapter_id or session.scope_chapter_id
+        subject_id = session.scope_subject_id or chapter_subject.get(chapter_id)
+        subject = subjects_by_id.get(subject_id) if subject_id else None
+        subject_name = subject.name if subject else None
+        subject_class = subject.class_name if subject else None
+
+        # A confirmed mismatch against the student's current class — skip
+        # entirely (this interaction belongs to a class they've since left).
+        # An unresolved class (subject_name is None) is kept, same
+        # conservative rule as /chat/sessions.
+        if my_class and subject_class and subject_class != my_class:
+            continue
+
+        is_wrong = interaction.is_correct is False
+        difficulty = (interaction.difficulty_level or content.difficulty_level or "medium").lower()
+
+        if subject_name:
+            row = by_subject.setdefault(subject_name, {"wrong": 0, "total": 0})
+            row["total"] += 1
+            if is_wrong:
+                row["wrong"] += 1
+
+        drow = by_difficulty.setdefault(difficulty, {"wrong": 0, "total": 0})
+        drow["total"] += 1
+        if is_wrong:
+            drow["wrong"] += 1
+
+        hints = interaction.hints_used or 0
+        secs = interaction.time_spent
+        (hints_wrong if is_wrong else hints_right).append(hints)
+        if secs:
+            (time_wrong if is_wrong else time_right).append(secs)
+
+    def avg(values):
+        return round(sum(values) / len(values), 1) if values else None
+
+    # The pie chart on the profile page is meant to read as "every subject in
+    # your class, and how your mistakes split across them" — a subject the
+    # student hasn't gotten wrong yet (or hasn't touched at all) still needs a
+    # slice, at 0%, so it isn't silently missing from that picture. (Class
+    # subjects were already fetched into subjects_by_id above, in the same
+    # query as the mistake-resolution lookup — no extra round trip here.)
+    if my_class:
+        for subject in subjects_by_id.values():
+            if subject.class_name == my_class:
+                by_subject.setdefault(subject.name, {"wrong": 0, "total": 0})
+
+    return {
+        "by_subject": [
+            {
+                "subject_name": name,
+                "wrong": v["wrong"],
+                "total": v["total"],
+                "accuracy": round(100 * (v["total"] - v["wrong"]) / v["total"]) if v["total"] else None,
+            }
+            for name, v in sorted(by_subject.items(), key=lambda kv: (-kv[1]["wrong"], kv[0]))
+        ],
+        "by_difficulty": [
+            {"difficulty": level, "wrong": v["wrong"], "total": v["total"]}
+            for level, v in by_difficulty.items()
+        ],
+        "struggle": {
+            "avg_hints_wrong": avg(hints_wrong),
+            "avg_hints_right": avg(hints_right),
+            "avg_time_wrong": avg(time_wrong),
+            "avg_time_right": avg(time_right),
+        },
     }

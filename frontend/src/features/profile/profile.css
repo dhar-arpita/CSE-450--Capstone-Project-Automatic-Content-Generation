@@ -308,9 +308,76 @@ html[lang="bn"] .pf-section-label { letter-spacing: .02em; text-transform: none;
 .pf-fill-content { background: var(--viz-1); border-color: var(--viz-1-line); }
 .pf-fill-uploads { background: var(--viz-4); border-color: var(--viz-4-line); }
 
-/* ── mistakes: wrong Progga answers, with a way back in ────────────────── */
+/* ── mistakes: wrong Proggya answers, with a way back in ────────────────── */
 .pf-mistakes-panel { margin-top: 18px; }
 .pf-mistakes-panel .pf-panel-head h2 svg { color: var(--dhi-danger); }
+
+/* ── breakdown: aggregate read on the mistakes above, not the list itself ─ */
+.pf-breakdown { display: flex; flex-direction: column; gap: 20px; }
+.pf-breakdown-block { display: flex; flex-direction: column; gap: 10px; }
+.pf-breakdown-label {
+  margin: 0;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--dhi-muted);
+}
+html[lang="bn"] .pf-breakdown-label { letter-spacing: 0; text-transform: none; font-size: .88rem; }
+
+.pf-breakdown-headline { margin: 0; font-size: 1.02rem; font-weight: 700; color: var(--dhi-ink); }
+
+.pf-pie-cols { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.pf-pie-cols .pf-breakdown-block { flex: 1 1 280px; min-width: 260px; }
+
+.pf-pie-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.pf-pie-chart { flex: none; }
+.pf-pie-empty { fill: var(--dhi-surface-sunken); }
+.pf-pie-slice { stroke: var(--dhi-surface-raised); stroke-width: 1.5; }
+.pf-pie-label {
+  fill: #fff;
+  font-family: var(--dhi-sans);
+  font-size: 11px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, .35);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.pf-pie-legend { list-style: none; margin: 0; padding: 0; flex: 1 1 140px; min-width: 120px; display: flex; flex-direction: column; gap: 8px; }
+.pf-pie-legend li { display: flex; align-items: center; gap: 8px; font-size: .86rem; }
+.pf-pie-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.pf-pie-name { font-weight: 650; color: var(--dhi-ink); }
+.pf-pie-val { font-weight: 700; color: var(--dhi-muted); font-size: .82rem; white-space: nowrap; }
+
+/* Placeholder shape for the breakdown panel while it's still loading — same
+   layout as the real pie + legend, so nothing jumps when the data lands,
+   and a soft pulse instead of the panel's error text so a slow fetch never
+   reads as "this is broken." */
+@keyframes pf-skel-pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+.pf-skel {
+  display: block;
+  background: var(--dhi-surface-sunken);
+  border-radius: 8px;
+  animation: pf-skel-pulse 1.4s ease-in-out infinite;
+}
+.pf-skel-label { width: 90px; height: 12px; margin-bottom: 2px; }
+.pf-skel-circle { width: 190px; height: 190px; border-radius: 50%; flex: none; }
+.pf-skel-line { width: 100%; height: 14px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  .pf-skel { animation: none; opacity: .7; }
+}
+
+.pf-struggle-note {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: var(--dhi-surface-sunken);
+  font-size: .86rem;
+  font-weight: 600;
+  color: var(--dhi-ink-soft);
+}
 
 .pf-mistakes {
   list-style: none;

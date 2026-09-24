@@ -51,7 +51,12 @@ const stageLabel = (stage, t) => {
 
 export default function WorksheetGenerator({
   selectedTopicId, user, sampleFile, language = "bangla",
-  openRequest = null, onContentChange, onGenerated,
+  openRequest = null, onContentChange, onGenerated, onOpenedScope,
+  // Only the student wizard passes this — opening a saved worksheet there
+  // refills the picker and settings so "generate again" needs no re-picking.
+  // The teacher flow must stay exactly as it always has: pick everything
+  // yourself, and opening a saved one only shows it, nothing more.
+  autoFillFromSaved = false,
 }) {
   const t = TXT[language] || TXT.bangla;
   const [worksheetHTML, setWorksheetHTML] = useState("");
@@ -114,6 +119,19 @@ export default function WorksheetGenerator({
         setWorksheetHTML(data?.html || "");
         setContentId(data?.content_id ?? openRequest.contentId);
         setShowRefine(false);
+        if (autoFillFromSaved) {
+          // Fill the settings back in exactly as this worksheet was made,
+          // so "generate again" needs no re-picking — student flow only.
+          if (data?.difficulty_level) {
+            setDifficulty(data.difficulty_level.charAt(0).toUpperCase() + data.difficulty_level.slice(1));
+          }
+          if (data?.num_problems) setNumQuestions(data.num_problems);
+          if (data?.language) { setContentLanguage(data.language); setLanguagePinned(true); }
+          onOpenedScope?.({
+            subjectId: data?.subject_id, chapterId: data?.chapter_id,
+            topicId: data?.topic_id, className: data?.class_name,
+          });
+        }
       })
       .catch((err) => {
         console.error("Could not open saved worksheet:", err);

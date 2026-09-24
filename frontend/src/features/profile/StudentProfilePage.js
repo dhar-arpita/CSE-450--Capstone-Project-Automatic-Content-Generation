@@ -11,11 +11,11 @@ import { useNavigate } from "react-router-dom";
 import DhiMark from "../../shared/brand/DhiMark";
 import { useI18n } from "../../shared/i18n";
 import {
-  getMyTotals, getMyActivity, getMySubjects, getMyMistakes, getClasses, updateMyClass,
+  getMyTotals, getMyActivity, getMySubjects, getMyMistakes, getMyMistakeBreakdown, getClasses, updateMyClass,
 } from "../../shared/services/api";
 import AppShell from "../../shared/ui/AppShell";
 import {
-  IconAlert, IconCalendar, IconChart, IconChatbot, IconNotes, IconQuiz, IconSheet, IconUser2,
+  IconAlert, IconCalendar, IconChart, IconChatbot, IconNotes, IconPulse, IconQuiz, IconSheet, IconUser2,
 } from "../../shared/ui/icons";
 import "./profile.css";
 import "../../shared/ui/studio.css";
@@ -41,6 +41,17 @@ const TXT = {
     mistakeCorrectAns: "সঠিক উত্তর",
     mistakeRetry: "ভুল সুধরাও",
     mistakeQuiz: "কুইজ", mistakePractice: "প্র্যাকটিস",
+    breakdownTitle: "দুর্বলতার জায়গা",
+    breakdownSub: "কোথায় বেশি ভুল হচ্ছে — বিষয়, কঠিনতা, আর কতটা কষ্ট হচ্ছে তার হিসাব",
+    breakdownHeadline: (subject) => `সবচেয়ে বেশি ভুল হচ্ছে ${subject}-এ`,
+    bySubjectLabel: "বিষয় অনুযায়ী",
+    byDifficultyLabel: "কঠিনতা অনুযায়ী",
+    difficultyLabels: { easy: "সহজ", medium: "মাঝারি", hard: "কঠিন", mixed: "অন্যান্য" },
+    struggleLabel: "কতটা কষ্ট হচ্ছে",
+    struggleHints: (wrong, right) =>
+      `ভুল উত্তরে গড়ে ${wrong}টা Hint লেগেছে, ঠিক উত্তরে গড়ে ${right}টা।`,
+    struggleTime: (wrong, right) =>
+      `ভুল উত্তরে গড়ে ${wrong} সেকেন্ড সময় লেগেছে, ঠিক উত্তরে গড়ে ${right} সেকেন্ড।`,
     classLabel: "ক্লাস",
     changeClass: "পরিবর্তন করো",
     saveClass: "সংরক্ষণ করো",
@@ -53,23 +64,34 @@ const TXT = {
   english: {
     breadcrumb: "Profile",
     overview: "Overview",
-    worksheets: "Worksheets", quizzes: "Quiz questions", notes: "Study notes", sessions: "Progga sessions",
+    worksheets: "Worksheets", quizzes: "Quiz questions", notes: "Study notes", sessions: "Proggya sessions",
     calendarTitle: "This month",
     calendarKey: "Days you practiced",
     chartTitle: "Usage over time",
     chartSub: "What you did per day, last 30 days",
     chartEmpty: "Nothing yet in the last 30 days — get started!",
     subjectTitle: "Subjects you've practiced",
-    subjectSub: "Worksheets, quizzes, notes, and Progga sessions, together",
+    subjectSub: "Worksheets, quizzes, notes, and Proggya sessions, together",
     subjectEmpty: "No subject activity yet.",
     loadFailed: "Could not load this right now.",
     mistakeTitle: "Questions you got wrong",
-    mistakeSub: "From practicing with Progga — try them again",
+    mistakeSub: "From practicing with Proggya — try them again",
     mistakeEmpty: "No mistakes yet — nicely done!",
     mistakeYourAns: "Your answer",
     mistakeCorrectAns: "Correct answer",
     mistakeRetry: "Fix this mistake",
     mistakeQuiz: "Quiz", mistakePractice: "Practice",
+    breakdownTitle: "Where you're weak",
+    breakdownSub: "Which subjects, which difficulty, and how much it's costing you",
+    breakdownHeadline: (subject) => `Most of your mistakes are in ${subject}`,
+    bySubjectLabel: "By subject",
+    byDifficultyLabel: "By difficulty",
+    difficultyLabels: { easy: "Easy", medium: "Medium", hard: "Hard", mixed: "Other" },
+    struggleLabel: "How much it's costing you",
+    struggleHints: (wrong, right) =>
+      `Wrong answers used ${wrong} hints on average, right ones used ${right}.`,
+    struggleTime: (wrong, right) =>
+      `Wrong answers took ${wrong}s on average, right ones took ${right}s.`,
     classLabel: "Class",
     changeClass: "Change",
     saveClass: "Save",
@@ -194,10 +216,7 @@ function SubjectBreakdown({ items, failed, t }) {
   );
 }
 
-/* Recently wrong practice/quiz questions from Progga, each with a link back
-   into that exact chat session (?session_id=&mode=) so the student can pick
-   up right where the mistake happened instead of starting over. */
-/* Recently wrong practice/quiz questions from Progga, each with a link into
+/* Recently wrong practice/quiz questions from Proggya, each with a link into
    the chatbot session to actually fix it (a fresh, similar-but-different
    question on the same topic) — the fixing flow lives on ChatbotPage.js,
    not here, so this is just the link. */
@@ -218,7 +237,7 @@ function MistakeRow({ m, t }) {
       {m.correct_answer && (
         <p className="pf-mistake-ans is-right"><strong>{t.mistakeCorrectAns}:</strong> {m.correct_answer}</p>
       )}
-      <button type="button" className="pf-mistake-retry" onClick={() => navigate(`/chatbot?retry_content_id=${m.content_id}`)}>
+      <button type="button" className="pf-mistake-retry" onClick={() => navigate(`/chatbot?fix_content_id=${m.content_id}`)}>
         {t.mistakeRetry}
       </button>
     </li>
@@ -235,6 +254,199 @@ function MistakesList({ items, failed, t }) {
         <MistakeRow key={`${m.content_id}-${m.session_id}`} m={m} t={t} />
       ))}
     </ul>
+  );
+}
+
+// A qualitative palette, cycled per slice — subjects are a category, not a
+// scale, so color just needs to tell slices apart, not rank them.
+const SUBJECT_COLORS = [
+  "var(--dhi-danger)", "var(--viz-4)", "var(--viz-2)",
+  "var(--viz-3)", "var(--dhi-violet)", "var(--viz-1)",
+];
+// Difficulty *is* a scale, so its colors carry meaning: green→amber→red,
+// same traffic-light reading a student already has from everywhere else.
+const DIFFICULTY_COLORS = {
+  easy: "var(--viz-1)", medium: "var(--viz-4)", hard: "var(--dhi-danger)", mixed: "var(--dhi-violet)",
+};
+
+// A point on a circle of radius r around (cx, cy), at `deg` degrees
+// clockwise from the top — matches how a clock face reads, which is the
+// natural way to reason about slice angles.
+function polarPoint(cx, cy, r, deg) {
+  const rad = ((deg - 90) * Math.PI) / 180;
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+}
+
+function wedgePath(cx, cy, r, startDeg, endDeg) {
+  const start = polarPoint(cx, cy, r, endDeg);
+  const end = polarPoint(cx, cy, r, startDeg);
+  const largeArc = endDeg - startDeg > 180 ? 1 : 0;
+  return `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y} Z`;
+}
+
+/* A filled pie (not a donut) built from plain SVG paths — no chart library
+   in this app. Each slice big enough to hold text gets its subject/level
+   name and share printed right on it, same read-at-a-glance style as a
+   normal pie chart; slices too thin for that (including 0%-share ones,
+   which have no wedge to print on at all) still get their row in the
+   legend next to it, so nothing is silently missing from the picture. */
+function SlicePie({ segments, size = 190 }) {
+  const cx = 100, cy = 100, r = 96;
+  const total = segments.reduce((sum, s) => sum + s.value, 0);
+  const withShare = segments
+    .filter((s) => s.value > 0)
+    .map((s) => ({ ...s, sweep: (s.value / total) * 360 }));
+
+  let angle = 0;
+
+  return (
+    <svg viewBox="0 0 200 200" width={size} height={size} className="pf-pie-chart" role="img" aria-hidden="true">
+      {total <= 0 ? (
+        <circle cx={cx} cy={cy} r={r} className="pf-pie-empty" />
+      ) : withShare.length === 1 ? (
+        <circle cx={cx} cy={cy} r={r} fill={withShare[0].color} />
+      ) : (
+        withShare.map((seg) => {
+          const start = angle;
+          const end = angle + seg.sweep;
+          angle = end;
+          const mid = (start + end) / 2;
+          const labelPt = polarPoint(cx, cy, r * 0.62, mid);
+          let rot = mid;
+          if (rot > 90 && rot < 270) rot += 180;
+          return (
+            <g key={seg.key}>
+              <path d={wedgePath(cx, cy, r, start, end)} fill={seg.color} className="pf-pie-slice" />
+              {seg.sweep >= 20 && (
+                <text
+                  x={labelPt.x}
+                  y={labelPt.y}
+                  transform={`rotate(${rot} ${labelPt.x} ${labelPt.y})`}
+                  textAnchor="middle"
+                  className="pf-pie-label"
+                >
+                  <tspan x={labelPt.x} dy="-0.25em">{seg.name}</tspan>
+                  <tspan x={labelPt.x} dy="1.15em">{seg.share}%</tspan>
+                </text>
+              )}
+            </g>
+          );
+        })
+      )}
+    </svg>
+  );
+}
+
+function PieBlock({ label, rows }) {
+  return (
+    <div className="pf-breakdown-block">
+      <h3 className="pf-breakdown-label">{label}</h3>
+      <div className="pf-pie-row">
+        <SlicePie segments={rows.map((r) => ({ key: r.key, value: r.wrong, color: r.color, name: r.name, share: r.share }))} />
+        <ul className="pf-pie-legend">
+          {rows.map((r) => (
+            <li key={r.key}>
+              <span className="pf-pie-dot" style={{ background: r.color }} />
+              <span className="pf-pie-name">{r.name} <span className="pf-pie-val">({r.share}%)</span></span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+/* Not the raw list above — an aggregate read on wrong answers, scoped to
+   the student's current class by the backend: which subjects need the most
+   work, whether mistakes cluster in easy or hard questions, and a struggle
+   signal from hint use (heavy hints even on a right answer suggests shaky
+   footing, not real mastery). Shown as two pie charts — "where is my trouble
+   split up" is a share-of-the-whole question, which a bar of raw counts
+   answered less directly than a glance at a pie does. */
+function PieSkeleton() {
+  return (
+    <div className="pf-pie-cols" aria-hidden="true">
+      {[0, 1].map((i) => (
+        <div className="pf-breakdown-block" key={i}>
+          <span className="pf-skel pf-skel-label" />
+          <div className="pf-pie-row">
+            <span className="pf-skel pf-skel-circle" />
+            <div className="pf-pie-legend">
+              {[0, 1, 2].map((j) => <span className="pf-skel pf-skel-line" key={j} />)}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MistakeBreakdown({ data, failed, loading, t }) {
+  if (loading && !data) return <PieSkeleton />;
+  if (failed) return <p className="pf-empty">{t.loadFailed}</p>;
+  if (!data) return <p className="pf-empty">{t.loadFailed}</p>;
+
+  // Every subject in the student's class is included here (the backend
+  // fills in 0/0 for ones with no mistakes yet), on purpose — the pie is
+  // meant to read as "how it splits across the whole class," not just the
+  // subjects that happen to have a mistake in them.
+  const bySubject = data.by_subject || [];
+  const diffOrder = ["easy", "medium", "hard", "mixed"];
+  const byDifficulty = (data.by_difficulty || [])
+    .filter((d) => d.wrong > 0)
+    .sort((a, b) => diffOrder.indexOf(a.difficulty) - diffOrder.indexOf(b.difficulty));
+  const struggle = data.struggle || {};
+  const hasAnyMistake = bySubject.some((s) => s.wrong > 0) || byDifficulty.some((d) => d.wrong > 0);
+
+  if (!hasAnyMistake) {
+    return <p className="pf-empty">{t.mistakeEmpty}</p>;
+  }
+
+  const subjectTotal = bySubject.reduce((sum, s) => sum + s.wrong, 0) || 1;
+  const subjectRows = bySubject.map((s, i) => ({
+    key: s.subject_name,
+    name: s.subject_name,
+    wrong: s.wrong,
+    share: Math.round((s.wrong / subjectTotal) * 100),
+    color: SUBJECT_COLORS[i % SUBJECT_COLORS.length],
+  }));
+
+  const difficultyTotal = byDifficulty.reduce((sum, d) => sum + d.wrong, 0) || 1;
+  const difficultyRows = byDifficulty.map((d) => ({
+    key: d.difficulty,
+    name: t.difficultyLabels[d.difficulty] || d.difficulty,
+    wrong: d.wrong,
+    share: Math.round((d.wrong / difficultyTotal) * 100),
+    color: DIFFICULTY_COLORS[d.difficulty] || "var(--dhi-muted)",
+  }));
+
+  return (
+    <div className="pf-breakdown">
+      {subjectRows.length > 0 && subjectRows[0].wrong > 0 && (
+        <p className="pf-breakdown-headline">{t.breakdownHeadline(subjectRows[0].name)}</p>
+      )}
+
+      {(subjectRows.length > 0 || difficultyRows.length > 0) && (
+        <div className="pf-pie-cols">
+          {subjectRows.length > 0 && <PieBlock label={t.bySubjectLabel} rows={subjectRows} />}
+          {difficultyRows.length > 0 && <PieBlock label={t.byDifficultyLabel} rows={difficultyRows} />}
+        </div>
+      )}
+
+      {(struggle.avg_hints_wrong != null || struggle.avg_hints_right != null) && (
+        <div className="pf-breakdown-block">
+          <h3 className="pf-breakdown-label">{t.struggleLabel}</h3>
+          <p className="pf-struggle-note">
+            {t.struggleHints(struggle.avg_hints_wrong ?? 0, struggle.avg_hints_right ?? 0)}
+          </p>
+          {(struggle.avg_time_wrong != null || struggle.avg_time_right != null) && (
+            <p className="pf-struggle-note">
+              {t.struggleTime(struggle.avg_time_wrong ?? 0, struggle.avg_time_right ?? 0)}
+            </p>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -357,6 +569,9 @@ export default function StudentProfilePage() {
   const [subjectsFailed, setSubjectsFailed] = useState(false);
   const [mistakes, setMistakes] = useState([]);
   const [mistakesFailed, setMistakesFailed] = useState(false);
+  const [breakdown, setBreakdown] = useState(null);
+  const [breakdownFailed, setBreakdownFailed] = useState(false);
+  const [breakdownLoading, setBreakdownLoading] = useState(true);
   const navigate = useNavigate();
 
   const { lang } = useI18n();
@@ -379,6 +594,10 @@ export default function StudentProfilePage() {
     getMyMistakes(8)
       .then(({ data }) => { setMistakes(data?.items || []); setMistakesFailed(false); })
       .catch((err) => { console.error("Could not load mistakes:", err); setMistakesFailed(true); });
+    getMyMistakeBreakdown()
+      .then(({ data }) => { setBreakdown(data || null); setBreakdownFailed(false); })
+      .catch((err) => { console.error("Could not load mistake breakdown:", err); setBreakdownFailed(true); })
+      .finally(() => setBreakdownLoading(false));
   }, [navigate]);
 
   const handleLogout = () => {
@@ -477,6 +696,14 @@ export default function StudentProfilePage() {
           </header>
           <SubjectBreakdown items={subjects} failed={subjectsFailed} t={t} />
         </div>
+      </section>
+
+      <section className="pf-panel pf-mistakes-panel">
+        <header className="pf-panel-head">
+          <h2><IconPulse />{t.breakdownTitle}</h2>
+          <p>{t.breakdownSub}</p>
+        </header>
+        <MistakeBreakdown data={breakdown} failed={breakdownFailed} loading={breakdownLoading} t={t} />
       </section>
 
       <section className="pf-panel pf-mistakes-panel">

@@ -8,7 +8,7 @@ import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
 import AppShell from "../../shared/ui/AppShell";
 import SavedContentList from "../../shared/ui/SavedContentList";
-import { IconCheck, IconNotes, IconSpark } from "../../shared/ui/icons";
+import { IconAlert, IconArrowLeft, IconCheck, IconNotes, IconSpark } from "../../shared/ui/icons";
 import StudyNoteGenerator from "./StudyNoteGenerator";
 import "../../shared/ui/studio.css";
 
@@ -39,10 +39,12 @@ const TXT = {
     wizardChapterSub: "একটা অধ্যায় বেছে নাও",
     wizardTopicTitle: "কোন টপিক?",
     wizardTopicSub: "একটা টপিক বেছে নাও, তারপর স্টাডি নোট বানানো শুরু করো",
-    back: "← পেছনে যাও",
+    back: "পেছনে যাও",
     noSubjects: "এই ক্লাসের জন্য কোনো বিষয় পাওয়া যায়নি।",
     noChapters: "এই বিষয়ে কোনো অধ্যায় পাওয়া যায়নি।",
     noTopics: "এই অধ্যায়ে কোনো টপিক পাওয়া যায়নি।",
+    scopeMismatch: (savedClass, myClass) =>
+      `এটা ${savedClass}-এর জন্য বানানো হয়েছিল, তোমার এখনকার ক্লাস ${myClass} — তাই এখান থেকে নতুন করে বানানো যাবে না, শুধু দেখতে পারবে।`,
   },
   english: {
     breadcrumb: "Study Note Studio",
@@ -69,10 +71,12 @@ const TXT = {
     wizardChapterSub: "Pick a chapter",
     wizardTopicTitle: "Which topic?",
     wizardTopicSub: "Pick a topic, then start building your study note",
-    back: "← Back",
+    back: "Back",
     noSubjects: "No subjects found for this class.",
     noChapters: "No chapters found for this subject.",
     noTopics: "No topics found for this chapter.",
+    scopeMismatch: (savedClass, myClass) =>
+      `This was made for ${savedClass}, and your class is now ${myClass} — so it can't be generated again from here, only viewed.`,
   },
 };
 
@@ -157,6 +161,11 @@ export default function StudyNotePage() {
   const [openRequest, setOpenRequest] = useState(null);
   const [activeContentId, setActiveContentId] = useState(null);
   const [listVersion, setListVersion] = useState(0);
+  // Set when a saved note belongs to a class the student isn't in anymore
+  // (their own class can change — see Profile). It's still theirs to look
+  // back at, so the preview still opens; there's just nothing to pre-fill,
+  // since generating again would only get refused server-side.
+  const [scopeMismatchClass, setScopeMismatchClass] = useState(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -220,6 +229,35 @@ export default function StudyNotePage() {
     } catch (err) { console.error(err); }
   };
 
+  // Opening a saved note fills the curriculum picker back in to match it —
+  // not just so the preview reads correctly, but so "generate again" right
+  // there regenerates on the same subject/chapter/topic by default, with
+  // just the settings (language) free to change.
+  const applyScope = async ({ subjectId, chapterId, topicId, className }) => {
+    if (className && user?.class_name && className !== user.class_name) {
+      // A saved note from before the student's class changed —
+      // assert_student_class on the backend will correctly refuse to
+      // regenerate on a class they're not in anymore, so there's nothing
+      // to pre-fill here; just explain why Generate won't work.
+      setScopeMismatchClass(className);
+      return;
+    }
+    setScopeMismatchClass(null);
+    if (className) {
+      setSelectedClass(className);
+      try { const { data } = await getSubjects(className); setSubjectList(data || []); } catch (err) { console.error(err); }
+    }
+    if (subjectId) {
+      setSelectedSubject(String(subjectId));
+      try { const { data } = await getChapters(subjectId); setChapterList(data || []); } catch (err) { console.error(err); }
+    }
+    if (chapterId) {
+      setSelectedChapter(String(chapterId));
+      try { const { data } = await getTopics(chapterId); setTopicList(data || []); } catch (err) { console.error(err); }
+    }
+    if (topicId) setSelectedTopicId(String(topicId));
+  };
+
   // Wizard-only: going back a step just clears that level's selection and
   // everything under it — chapterList/subjectList are still cached from the
   // forward trip, so no refetch is needed.
@@ -232,6 +270,14 @@ export default function StudyNotePage() {
   };
   const backToTopicStep = () => { setSelectedTopicId(""); };
   const wizardStep = !selectedSubject ? "subject" : !selectedChapter ? "chapter" : !selectedTopicId ? "topic" : "generate";
+  // A saved-note click from the rail sets openRequest regardless of which
+  // wizard step the student is on — without this, the generator that
+  // actually reacts to openRequest never mounts until they've clicked all
+  // the way to "generate" themselves, so the click on the saved item visibly
+  // did nothing (the bug this fixes). Clearing openRequest on the way back
+  // out returns to whatever step selectedSubject/Chapter/Topic already say.
+  const showGenerate = wizardStep === "generate" || !!openRequest;
+  const backFromGenerate = () => { setOpenRequest(null); setScopeMismatchClass(null); backToTopicStep(); };
   const selectedSubjectName = subjectList.find((s) => String(s.subject_id) === String(selectedSubject))?.name || "";
   const selectedChapterObj = chapterList.find((c) => String(c.chapter_id) === String(selectedChapter));
   const selectedChapterName = selectedChapterObj ? `Ch ${selectedChapterObj.chapter_no}: ${selectedChapterObj.name}` : "";
@@ -277,7 +323,7 @@ export default function StudyNotePage() {
 
       {isStudentWithClass ? (
         <>
-          {wizardStep === "subject" && (
+          {!openRequest && wizardStep === "subject" && (
             <section className="as-panel gw-step">
               <header className="gw-step-head">
                 <span className="gw-step-no">1</span>
@@ -298,9 +344,9 @@ export default function StudyNotePage() {
             </section>
           )}
 
-          {wizardStep === "chapter" && (
+          {!openRequest && wizardStep === "chapter" && (
             <section className="as-panel gw-step">
-              <button type="button" className="gw-back-btn" onClick={backToSubjectStep}>{t.back}</button>
+              <button type="button" className="gw-back-btn" onClick={backToSubjectStep}><IconArrowLeft /> {t.back}</button>
               <header className="gw-step-head">
                 <span className="gw-step-no">2</span>
                 <div className="gw-step-text">
@@ -324,9 +370,9 @@ export default function StudyNotePage() {
             </section>
           )}
 
-          {wizardStep === "topic" && (
+          {!openRequest && wizardStep === "topic" && (
             <section className="as-panel gw-step">
-              <button type="button" className="gw-back-btn" onClick={backToChapterStep}>{t.back}</button>
+              <button type="button" className="gw-back-btn" onClick={backToChapterStep}><IconArrowLeft /> {t.back}</button>
               <header className="gw-step-head">
                 <span className="gw-step-no">3</span>
                 <div className="gw-step-text">
@@ -346,16 +392,18 @@ export default function StudyNotePage() {
             </section>
           )}
 
-          {wizardStep === "generate" && (
+          {showGenerate && (
             <section className="as-panel gw-step">
               <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "12px", marginBottom: "18px" }}>
-                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backToTopicStep}>{t.back}</button>
-                <WizardCrumbs
-                  subjectName={selectedSubjectName}
-                  chapterName={selectedChapterName}
-                  onSubject={backToSubjectStep}
-                  onChapter={backToChapterStep}
-                />
+                <button type="button" className="gw-back-btn" style={{ marginBottom: 0 }} onClick={backFromGenerate}><IconArrowLeft /> {t.back}</button>
+                {selectedSubjectName && (
+                  <WizardCrumbs
+                    subjectName={selectedSubjectName}
+                    chapterName={selectedChapterName}
+                    onSubject={backToSubjectStep}
+                    onChapter={backToChapterStep}
+                  />
+                )}
               </div>
               <header className="gw-step-head">
                 <span className="gw-step-no is-done"><IconCheck /></span>
@@ -363,12 +411,20 @@ export default function StudyNotePage() {
                   <h2>{t.step2Title}</h2>
                 </div>
               </header>
+              {scopeMismatchClass && (
+                <p className="wg-note wg-note-wait" role="status">
+                  <IconAlert />
+                  {t.scopeMismatch(scopeMismatchClass, user?.class_name)}
+                </p>
+              )}
               <StudyNoteGenerator
                 selectedTopicId={selectedTopicId}
                 language={language}
                 openRequest={openRequest}
                 onContentChange={setActiveContentId}
                 onGenerated={() => setListVersion((v) => v + 1)}
+                onOpenedScope={applyScope}
+                autoFillFromSaved
               />
             </section>
           )}

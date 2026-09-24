@@ -49,6 +49,13 @@ export const IconArrow = () => (
   </svg>
 );
 
+/* The mirror of IconArrow — "back" one step, not "next." */
+export const IconArrowLeft = () => (
+  <svg viewBox="0 0 24 24" width="16" height="16" {...stroke} strokeWidth="2.1" aria-hidden="true">
+    <path d="M19 12H6M11 6l-6 6 6 6" />
+  </svg>
+);
+
 export const IconAlert = () => (
   <svg viewBox="0 0 24 24" width="17" height="17" {...stroke} aria-hidden="true">
     <circle cx="12" cy="12" r="9" />
@@ -315,5 +322,83 @@ export const IconShare = () => (
   <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
     <circle cx="12" cy="12" r="8.4" />
     <path d="M12 3.6V12l6.6 5.2" />
+  </svg>
+);
+
+/* ── chatbot (Progga) modes and feed markers ─────────────────────────────── */
+
+/* A speech bubble with a question mark — "ask", distinct from IconQuiz's
+   plain circle so the two chatbot modes don't share a silhouette. */
+export const IconAsk = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5H10l-4.2 3.3a.6.6 0 0 1-1-.5V16H6.5A2.5 2.5 0 0 1 4 13.5v-7Z" />
+    <path d="M9.8 9a2.3 2.3 0 0 1 4.4.7c0 1.5-2.2 1.8-2.2 3.2" />
+    <path d="M12 14.6h.01" />
+  </svg>
+);
+
+/* A checklist — one line + check per question, the practice-set mode. */
+export const IconChecklist = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M9.5 6h9M9.5 12h9M9.5 18h9" />
+    <path d="m4 6 1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2" />
+  </svg>
+);
+
+/* A bullseye — step-by-step, one focused question at a time. */
+export const IconTarget = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <circle cx="12" cy="12" r="8.4" />
+    <circle cx="12" cy="12" r="4.6" />
+    <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+  </svg>
+);
+
+/* Two arrows looping — repeat/retry, used for both the "fix mistakes" mode
+   and any "try again" action. */
+export const IconRepeat = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M4.5 12a7.5 7.5 0 0 1 12.6-5.5L19.5 8" />
+    <path d="M19.5 4.5V8h-3.5" />
+    <path d="M19.5 12a7.5 7.5 0 0 1-12.6 5.5L4.5 16" />
+    <path d="M4.5 19.5V16H8" />
+  </svg>
+);
+
+export const IconBulb = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M9 18h6M10 21h4" />
+    <path d="M12 3.5a5.8 5.8 0 0 0-3.4 10.5c.6.5 1 1.2 1 2h4.8c0-.8.4-1.5 1-2A5.8 5.8 0 0 0 12 3.5Z" />
+  </svg>
+);
+
+/* A diagonal ruler — formula/working-out. */
+export const IconRuler = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M4 15.5 15.5 4l4.5 4.5L8.5 20 4 15.5Z" />
+    <path d="m8.5 11.5 1.5 1.5M11.5 8.5 13 10M14.5 5.5 16 7" />
+  </svg>
+);
+
+/* A map pin — the one thing worth marking, a summary. */
+export const IconPin = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M12 21s6.5-5.8 6.5-11A6.5 6.5 0 0 0 5.5 10c0 5.2 6.5 11 6.5 11Z" />
+    <circle cx="12" cy="10" r="2.2" />
+  </svg>
+);
+
+export const IconKey = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <circle cx="7.5" cy="14.5" r="3.5" />
+    <path d="M10 12 18.5 3.5M16 6l2 2M13.5 8.5l2 2" />
+  </svg>
+);
+
+/* Two hemispheres — an analogy, a different way of seeing the same idea. */
+export const IconBrain = () => (
+  <svg viewBox="0 0 24 24" width="18" height="18" {...stroke} aria-hidden="true">
+    <path d="M9.5 4.2a2.6 2.6 0 0 0-2.6 2.6v.3A2.8 2.8 0 0 0 5 9.7v.6a2.8 2.8 0 0 0 1 5.3 2.6 2.6 0 0 0 3.5 2.6 2.4 2.4 0 0 0 2.5-2.4V6.8a2.6 2.6 0 0 0-2.5-2.6Z" />
+    <path d="M14.5 4.2a2.6 2.6 0 0 1 2.6 2.6v.3a2.8 2.8 0 0 1 1.9 2.6v.6a2.8 2.8 0 0 1-1 5.3 2.6 2.6 0 0 1-3.5 2.6 2.4 2.4 0 0 1-2.5-2.4V6.8a2.6 2.6 0 0 1 2.5-2.6Z" />
   </svg>
 );

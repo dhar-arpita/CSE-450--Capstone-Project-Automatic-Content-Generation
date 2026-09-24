@@ -119,9 +119,15 @@ export const updateMyClass = (className) =>
   api.patch("/students/me/class", { class_name: className });
 // Recently wrong practice/quiz questions, for the Profile "mistakes" list.
 export const getMyMistakes = (limit = 10) => api.get(`/chat/mistakes?limit=${limit}`);
+// Aggregated view of wrong answers (by subject, by difficulty, hint/time
+// struggle signal) — the Profile progress tracker, not the raw list above.
+export const getMyMistakeBreakdown = () => api.get(`/chat/mistakes/breakdown`);
 // A fresh, similar-but-different question on the same topic as a past
 // mistake — "fix this mistake" instead of re-showing the exact same one.
 export const retryMistake = (contentId) => api.post(`/chat/mistakes/${contentId}/retry`);
+// Unresolved mistakes grouped by topic — the entry list for the chatbot's
+// dedicated "practice mistakes" mode.
+export const getMistakeTopics = () => api.get(`/chat/mistakes/topics`);
 
 
 // ──── CURRICULUM ENDPOINTS ────

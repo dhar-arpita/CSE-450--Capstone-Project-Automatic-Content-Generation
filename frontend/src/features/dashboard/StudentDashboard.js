@@ -5,7 +5,7 @@ import { useI18n } from "../../shared/i18n";
 import { getMyActivity, getMyTotals, chatSessions, getMyMistakes } from "../../shared/services/api";
 import AppShell from "../../shared/ui/AppShell";
 import {
-  IconBolt, IconChatbot, IconNotes, IconQuiz, IconRocket, IconSchool,
+  IconArrow, IconBolt, IconChatbot, IconNotes, IconQuiz, IconRocket, IconSchool,
   IconSheet, IconSpark, IconTrendUp, IconTrophy,
 } from "../../shared/ui/icons";
 import "./Dashboard.css";
@@ -22,9 +22,9 @@ const DASHBOARD_STRINGS = {
     greetingEvening: "Good evening",
     defaultStudent: "Student",
     heroDesc:
-      "Generate custom worksheets, interactive quizzes, and concise notes from your syllabus chapters, or practice with Progga whenever you're stuck.",
+      "Generate custom worksheets, interactive quizzes, and concise notes from your syllabus chapters, or practice with Proggya whenever you're stuck.",
     statStreak: "Day Streak",
-    statSessions: "Progga Sessions",
+    statSessions: "Proggya Sessions",
     continueLabel: "Continue where you left off",
     continueCta: "Continue",
     mistakeReminder: (n) => `You have ${n} unfixed mistakes waiting — go fix them`,
@@ -51,8 +51,8 @@ const DASHBOARD_STRINGS = {
         desc: "Summarize key concepts into clean, structured revision notes ready for your next class.",
       },
       chatbot: {
-        title: "Practice with Progga",
-        desc: "Ask questions and get instant answers, hints, and explanations from Progga, your AI study companion.",
+        title: "Practice with Proggya",
+        desc: "Ask questions and get instant answers, hints, and explanations from Proggya, your AI study companion.",
       },
     },
     workflowSteps: [
@@ -74,7 +74,7 @@ const DASHBOARD_STRINGS = {
       {
         step: "04",
         title: "Practice & Revise",
-        desc: "Work through it at your own pace, or ask Progga whenever something doesn't click.",
+        desc: "Work through it at your own pace, or ask Proggya whenever something doesn't click.",
       },
     ],
   },
@@ -449,13 +449,13 @@ export default function StudentDashboard() {
               <span className="db-continue-label">{t.continueLabel}</span>
               <span className="db-continue-subject">{recentSession.subject_name || "—"}</span>
             </span>
-            <span className="db-continue-cta">{t.continueCta} →</span>
+            <span className="db-continue-cta">{t.continueCta} <IconArrow /></span>
           </button>
         )}
         {mistakeTotal >= MISTAKE_REMINDER_THRESHOLD && (
           <button type="button" className="db-mistake-reminder" onClick={() => navigate("/profile")}>
             <span className="db-mistake-reminder-text">{t.mistakeReminder(mistakeTotal)}</span>
-            <span className="db-mistake-reminder-cta">{t.mistakeReminderCta} →</span>
+            <span className="db-mistake-reminder-cta">{t.mistakeReminderCta} <IconArrow /></span>
           </button>
         )}
       </section>
