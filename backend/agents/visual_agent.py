@@ -15,6 +15,13 @@ def _normalize_visual_result(parsed) -> dict:
     """
     if isinstance(parsed, dict):
         return parsed
+    # The whole expected object wrapped in a one-element array. Wrapping that as
+    # problem_visuals would turn the object itself into a "visual" with no
+    # problem_id, which crashed the refine task.
+    if (isinstance(parsed, list) and len(parsed) == 1
+            and isinstance(parsed[0], dict) and "problem_visuals" in parsed[0]):
+        print("[Visual Agent] Model wrapped the result object in a list — unwrapping")
+        return parsed[0]
     if isinstance(parsed, list):
         print("[Visual Agent] Model returned a list — wrapping as problem_visuals")
         return {"robot_mascot": "", "problem_visuals": parsed}

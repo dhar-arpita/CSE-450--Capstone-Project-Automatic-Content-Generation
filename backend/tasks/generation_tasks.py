@@ -303,6 +303,51 @@ def generate_quiz_task(self, job_id):
 # Moved verbatim from the old synchronous POST /generate/refine handler; only
 # the HTTP errors became exceptions and stage reports were added.
 
+def _saved_problems(content):
+    """The worksheet's localized problems as last saved, or None if unreadable."""
+    try:
+        parsed = ast.literal_eval(content.answer_key) if content.answer_key else None
+    except (ValueError, SyntaxError):
+        return None
+    if not isinstance(parsed, dict):
+        return None
+    return parsed.get("localized_problems")
+
+
+def _visual_problem_id(visual):
+    """The integer problem id a visual-agent entry belongs to, or None."""
+    if not isinstance(visual, dict):
+        return None
+    pid = visual.get("problem_id", visual.get("id"))
+    try:
+        return int(pid)
+    except (TypeError, ValueError):
+        return None
+
+
+def _difficulty_changes(diff_refs):
+    """{problem_id: new_difficulty} across all change_difficulty refinements."""
+    return {
+        c["problem_id"]: c["new_difficulty"]
+        for r in diff_refs
+        for c in r.get("changes", [])
+    }
+
+
+def _refined_difficulty(original, problems, difficulty_changes):
+    """
+    The worksheet's difficulty after per-problem changes: the one level every
+    problem now shares, or "mixed" when they differ.
+    """
+    if not difficulty_changes:
+        return original
+    levels = {}
+    for p in problems:
+        level = difficulty_changes.get(p["id"], original) or ""
+        levels.setdefault(level.strip().lower(), level)
+    return next(iter(levels.values())) if len(levels) == 1 else "mixed"
+
+
 def _refine(db, job, user):
     params = job.params
     content_id = params["content_id"]
@@ -313,15 +358,31 @@ def _refine(db, job, user):
     ).first()
     if not content:
         raise ValueError("Content not found")
+    # The endpoint refuses seeds, but the row may have been promoted while the
+    # job sat in the queue. Refining a seed would change it for every user.
+    if content.is_cache_seed:
+        raise ValueError("This worksheet is a shared cached copy and cannot be refined")
     topic, chapter, subject = resolve_topic_chain(db, content.topic_id)
     _detach(db, content, topic, chapter, subject)
+
+    # Every agent defaults to English, so pass the worksheet's own language or
+    # rewritten problems and the worksheet labels come back in English.
+    language = content.language or "english"
+
+    # Start from the saved problems, not a copy sent by the client: a stale
+    # client copy would overwrite a newer refine. Jobs queued before this
+    # change still carry current_problems, which is only used as a fallback.
+    problems = _saved_problems(content)
+    if problems is None:
+        problems = params.get("current_problems")
+    if not problems:
+        raise ValueError("This worksheet has no saved problems to refine")
 
     _stage(db, job.job_id, STAGE_REFINING)
     curriculum_context = search_curriculum_context(content.topic_id, topic.name, chapter.chapter_id)
 
     remove_refs = [r for r in refinements_list if r["type"] == "remove_problem"]
 
-    problems = params["current_problems"]
     id_remap = None
 
     if remove_refs:
@@ -355,7 +416,7 @@ def _refine(db, job, user):
     new_localized = []
     if needs_processing:
         _stage(db, job.job_id, STAGE_LOCALIZATION)
-        loc_result = run_localization_agent({"problems": needs_processing})
+        loc_result = run_localization_agent({"problems": needs_processing}, language=language)
         new_localized = loc_result.get("localized_problems", [])
 
         if not new_localized:
@@ -418,24 +479,37 @@ def _refine(db, job, user):
     new_visual_output = {"robot_mascot": "", "problem_visuals": []}
     if problems_needing_new_visuals["localized_problems"]:
         _stage(db, job.job_id, STAGE_VISUALS)
-        new_visual_output = run_visual_agent(problems_needing_new_visuals, "")
+        new_visual_output = run_visual_agent(problems_needing_new_visuals, "", language=language)
 
+    # Model output: an entry may name its problem "id" instead of "problem_id",
+    # give it as a string, or omit it. Skip what cannot be matched rather than
+    # failing the whole refine over one diagram.
     new_visual_map = {}
     for v in new_visual_output.get("problem_visuals", []):
-        new_visual_map[v["problem_id"]] = v
+        pid = _visual_problem_id(v)
+        if pid is None:
+            print(f"[Refine] Skipping visual with no usable problem id: {str(v)[:120]}")
+            continue
+        new_visual_map[pid] = dict(v, problem_id=pid)
+
+    # A problem rewritten to a new difficulty is a different problem; its old
+    # diagram shows the old numbers, so it must never be carried over.
+    difficulty_changes = _difficulty_changes(diff_refs)
 
     final_visuals = []
     for p in all_localized:
         pid = p["id"]
         if pid in new_visual_map:
             final_visuals.append(new_visual_map[pid])
-        elif pid in old_visual_map:
+        elif pid in old_visual_map and pid not in difficulty_changes:
             final_visuals.append(old_visual_map[pid])
 
     visual_output = {
         "robot_mascot": old_visuals.get("robot_mascot", new_visual_output.get("robot_mascot", "")),
         "problem_visuals": final_visuals
     }
+
+    difficulty = _refined_difficulty(content.difficulty_level, all_localized, difficulty_changes)
 
     _stage(db, job.job_id, STAGE_COMPILING)
     worksheet_html = run_compiler_agent(
@@ -445,8 +519,9 @@ def _refine(db, job, user):
         subject_name=subject.name,
         chapter_name=chapter.name,
         topic_name=topic.name,
-        difficulty=content.difficulty_level,
-        style_description=""
+        difficulty=difficulty,
+        style_description="",
+        language=language,
     )
 
     _stage(db, job.job_id, STAGE_SAVING)
@@ -456,6 +531,10 @@ def _refine(db, job, user):
     row.display_body = worksheet_html
     row.answer_key = str(localization_output)
     row.explanation = str(visual_output)
+    # Keep the columns the cache key is built from in step with the content:
+    # promoting this row to a seed files it under num_problems/difficulty_level.
+    row.num_problems = len(all_localized)
+    row.difficulty_level = difficulty
     db.commit()
 
     return content_id, {
