@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
+import usePersistedState from "../../shared/services/usePersistedState";
 import AppShell from "../../shared/ui/AppShell";
 import SavedContentList from "../../shared/ui/SavedContentList";
 import { IconCheck, IconSheet, IconSpark } from "../../shared/ui/icons";
@@ -169,10 +170,17 @@ export default function GeneratePage() {
   const [chapterList, setChapterList] = useState([]);
   const [topicList, setTopicList] = useState([]);
 
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedChapter, setSelectedChapter] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
+  // Persisted (not plain useState): a worksheet takes 5-7 minutes to
+  // generate, and nobody sits on one page that long. Keeping the wizard's
+  // picks in localStorage means a student who wanders off to check their
+  // profile mid-generation lands straight back on this same "generate"
+  // step on return — not back at step one — so WorksheetGenerator (and the
+  // job-polling it owns) remounts immediately instead of only once the
+  // picker is redone from scratch.
+  const [selectedClass, setSelectedClass] = usePersistedState("wizard:worksheet:class", "");
+  const [selectedSubject, setSelectedSubject] = usePersistedState("wizard:worksheet:subject", "");
+  const [selectedChapter, setSelectedChapter] = usePersistedState("wizard:worksheet:chapter", "");
+  const [selectedTopicId, setSelectedTopicId] = usePersistedState("wizard:worksheet:topic", "");
 
   const [sampleFile, setSampleFile] = useState(null);
   const [showSampleInput, setShowSampleInput] = useState(false);
@@ -193,19 +201,40 @@ export default function GeneratePage() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
+    // Restoring a persisted wizard pick means restoring the option lists
+    // underneath it too — otherwise the picker's own state points at a
+    // subject/chapter nothing in subjectList/chapterList can resolve a name
+    // for. Read once at mount (the closed-over selectedSubject/Chapter are
+    // whatever usePersistedState's lazy initializer found in localStorage);
+    // handleXChange below takes over for every pick made after this.
+    const restoreChain = async (baseClass) => {
+      try {
+        const { data: subs } = await getSubjects(baseClass);
+        setSubjectList(subs || []);
+        if (!selectedSubject) return;
+        const { data: chs } = await getChapters(selectedSubject);
+        setChapterList(chs || []);
+        if (!selectedChapter) return;
+        const { data: tps } = await getTopics(selectedChapter);
+        setTopicList(tps || []);
+      } catch (err) {
+        console.error("Could not restore worksheet wizard selection", err);
+      }
+    };
+
     if (parsedUser.role === "student" && parsedUser.class_name) {
       // A student's class is fixed at signup — skip the class picker and go
       // straight to that class's subjects instead of making them pick it
       // again every time.
       setSelectedClass(parsedUser.class_name);
-      getSubjects(parsedUser.class_name)
-        .then(({ data }) => setSubjectList(data || []))
-        .catch((err) => console.error("Subjects load failed", err));
+      restoreChain(parsedUser.class_name);
     } else {
       getClasses()
         .then(({ data }) => setClassList(data || []))
         .catch((err) => console.error("Classes load failed", err));
+      if (selectedClass) restoreChain(selectedClass);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // Pre-existing student accounts predate the class field and have no
@@ -218,7 +247,7 @@ export default function GeneratePage() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
     navigate("/", { state: { splash: true } });
   };

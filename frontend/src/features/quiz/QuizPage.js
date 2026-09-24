@@ -7,6 +7,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
+import usePersistedState from "../../shared/services/usePersistedState";
 import AppShell from "../../shared/ui/AppShell";
 import SavedContentList from "../../shared/ui/SavedContentList";
 import { IconCheck, IconQuiz, IconSpark } from "../../shared/ui/icons";
@@ -167,13 +168,18 @@ export default function QuizPage() {
   const [chapterList, setChapterList] = useState([]);
   const [topicList, setTopicList] = useState([]);
 
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedChapter, setSelectedChapter] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
+  // Persisted (not plain useState): quiz generation runs for minutes in the
+  // background, so a student who steps away mid-generation needs to land
+  // back on this same wizard step on return — not step one — so
+  // QuizGenerator (and the job-polling it owns) remounts immediately. See
+  // GeneratePage.js for the same fix on the worksheet studio.
+  const [selectedClass, setSelectedClass] = usePersistedState("wizard:quiz:class", "");
+  const [selectedSubject, setSelectedSubject] = usePersistedState("wizard:quiz:subject", "");
+  const [selectedChapter, setSelectedChapter] = usePersistedState("wizard:quiz:chapter", "");
+  const [selectedTopicId, setSelectedTopicId] = usePersistedState("wizard:quiz:topic", "");
   // Wizard-only: true once the student picks "generate on the whole
   // subject/chapter" instead of narrowing further.
-  const [skipToGenerate, setSkipToGenerate] = useState(false);
+  const [skipToGenerate, setSkipToGenerate] = usePersistedState("wizard:quiz:skip", "");
 
   const [openRequest, setOpenRequest] = useState(null);
   const [activeContentId, setActiveContentId] = useState(null);
@@ -188,16 +194,35 @@ export default function QuizPage() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
+    // Restoring a persisted wizard pick means restoring the option lists
+    // underneath it too. Read once at mount (selectedSubject/Chapter here
+    // are whatever usePersistedState's lazy initializer found in
+    // localStorage); handleXChange below takes over after that.
+    const restoreChain = async (baseClass) => {
+      try {
+        const { data: subs } = await getSubjects(baseClass);
+        setSubjectList(subs || []);
+        if (!selectedSubject) return;
+        const { data: chs } = await getChapters(selectedSubject);
+        setChapterList(chs || []);
+        if (!selectedChapter) return;
+        const { data: tps } = await getTopics(selectedChapter);
+        setTopicList(tps || []);
+      } catch (err) {
+        console.error("Could not restore quiz wizard selection", err);
+      }
+    };
+
     if (parsedUser.role === "student" && parsedUser.class_name) {
       setSelectedClass(parsedUser.class_name);
-      getSubjects(parsedUser.class_name)
-        .then(({ data }) => setSubjectList(data || []))
-        .catch((err) => console.error("Subjects load failed", err));
+      restoreChain(parsedUser.class_name);
     } else {
       getClasses()
         .then(({ data }) => setClassList(data || []))
         .catch((err) => console.error("Classes load failed", err));
+      if (selectedClass) restoreChain(selectedClass);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const isStudentWithClass = user?.role === "student" && !!user?.class_name;
@@ -207,7 +232,7 @@ export default function QuizPage() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
     navigate("/", { state: { splash: true } });
   };

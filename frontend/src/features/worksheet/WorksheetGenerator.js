@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { generateWorksheet, downloadWorksheetPDF, getWorksheetDetails } from "../../shared/services/api";
 import useJobPolling from "../../shared/services/useJobPolling";
+import usePersistedState from "../../shared/services/usePersistedState";
 import { IconAlert, IconBolt, IconDownload } from "../../shared/ui/icons";
 import RefineWorksheet from "./RefineWorksheet";
 import "../../shared/ui/studio.css";
@@ -55,10 +56,16 @@ export default function WorksheetGenerator({
 }) {
   const t = TXT[language] || TXT.bangla;
   const [worksheetHTML, setWorksheetHTML] = useState("");
-  const [contentId, setContentId] = useState(null);
+  // Persisted (not plain useState): a refine can run for minutes, same as
+  // generation itself. Keeping which worksheet is open and whether its
+  // refine panel is open in localStorage means a student who wanders off
+  // mid-refine comes back to the same panel, open, still polling the same
+  // job — RefineWorksheet's own useJobPolling already falls back to its
+  // persisted job id on mount, so restoring these two is all that's needed.
+  const [contentId, setContentId] = usePersistedState("wizard:worksheet:contentId", "");
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
-  const [showRefine, setShowRefine] = useState(false);
+  const [showRefine, setShowRefine] = usePersistedState("wizard:worksheet:refineOpen", "");
   const [dispatchError, setDispatchError] = useState(null);
   const [waitingOnCache, setWaitingOnCache] = useState(false);
   const [openingSaved, setOpeningSaved] = useState(false);
@@ -85,7 +92,31 @@ export default function WorksheetGenerator({
 
   const isGenerating = waitingOnCache || openingSaved || status === "QUEUED" || status === "PROCESSING";
 
-  useEffect(() => { onContentChange?.(contentId); }, [contentId, onContentChange]);
+  // contentId round-trips through localStorage as a string once restored,
+  // but the rail compares it against GeneratedContent rows with `===` on a
+  // number — coerce here rather than there, so a restored refine still
+  // highlights the right saved item.
+  useEffect(() => {
+    onContentChange?.(contentId ? Number(contentId) : null);
+  }, [contentId, onContentChange]);
+
+  // Restoring a persisted "refine was open" flag means restoring the
+  // worksheet it was open on top of too — otherwise the overlay would pop
+  // up over a blank preview. Runs once at mount; a fresh generation or a
+  // newly opened saved worksheet sets worksheetHTML directly and doesn't
+  // need this.
+  useEffect(() => {
+    if (!showRefine || !contentId || worksheetHTML) return;
+    let cancelled = false;
+    getWorksheetDetails(contentId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setWorksheetHTML(data?.html || "");
+      })
+      .catch((err) => console.error("Could not restore worksheet behind refine panel:", err));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // When the polled job reaches SUCCESS, pull the html/content_id out of its
   // result — same shape the cache-hit response hands back directly.
