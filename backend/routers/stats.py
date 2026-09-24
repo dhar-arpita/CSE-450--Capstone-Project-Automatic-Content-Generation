@@ -71,6 +71,7 @@ def overview(
     )
 
     classes = db.query(func.count(Class.class_name)).scalar() or 0
+    teachers = db.query(func.count(User.user_id)).filter(User.role == "teacher").scalar() or 0
 
     return {
         "generated_content": total,
@@ -78,6 +79,7 @@ def overview(
         "quizzes": by_type.get("quiz_question", 0),
         "study_notes": by_type.get("study_note", 0),
         "classes": classes,
+        "teachers": teachers,
     }
 
 

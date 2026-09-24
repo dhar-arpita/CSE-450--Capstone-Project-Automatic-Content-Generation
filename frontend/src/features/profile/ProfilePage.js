@@ -72,7 +72,7 @@ const TXT = {
     loadFailed: "Could not load this right now.",
     classContent: "Content", classUploads: "Uploads",
     dow: ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"],
-    allTitle: "All your content",
+    allTitle: "All your contents",
     allSub: "Worksheets, quizzes, study notes and uploads — everything in one place, by class and subject.",
     allSearchPh: "Search by class, chapter or subject",
     allLoading: "Loading…",
@@ -525,7 +525,7 @@ export default function ProfilePage() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
     navigate("/", { state: { splash: true } });
   };

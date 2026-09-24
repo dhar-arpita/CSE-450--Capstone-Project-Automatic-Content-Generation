@@ -19,8 +19,7 @@ const DASHBOARD_STRINGS = {
       "Generate custom worksheets, interactive quizzes, and concise notes from existing syllabus chapters or your own uploaded materials in minutes.",
     statClasses: "Classes Available",
     statWorksheets: "Contents Generated",
-    statDifficulty: "Difficulty Levels",
-    difficultyLevels: ["Easy", "Medium", "Hard"],
+    statTeachers: "Teachers Joined",
     quickActionsTitle: "Quick Actions",
     quickActionsSubtitle: "Choose what you want to create or explore today",
     getStarted: "Get started",
@@ -80,8 +79,7 @@ const DASHBOARD_STRINGS = {
       "সিলেবাসের যেকোনো চ্যাপ্টার বা আপনার আপলোড করা ফাইল থেকে ওয়ার্কশিট, কুইজ আর কনসেপ্ট নোট তৈরি করুন চোখের পলকে।",
     statClasses: "শ্রেণি যুক্ত আছে",
     statWorksheets: "কনটেন্ট তৈরি হয়েছে",
-    statDifficulty: "ডিফিকাল্টি লেভেল",
-    difficultyLevels: ["সহজ", "মাঝারি", "কঠিন"],
+    statTeachers: "শিক্ষক যুক্ত আছেন",
     quickActionsTitle: "দ্রুত কাজ শুরু করুন",
     quickActionsSubtitle: "আজ ক্লাসের জন্য কী তৈরি করতে চান বেছে নিন",
     getStarted: "শুরু করুন",
@@ -186,39 +184,6 @@ function StatRing({ value, label, accent }) {
   );
 }
 
-/* Difficulty is three named settings, not a quantity — a ring reading "3" told
-   the reader a number where the useful information is the names. So: the same
-   ring as its neighbours, cut into one arc per level, with the names inside. */
-function StatLevels({ levels, label, accent }) {
-  const step = RING_C / levels.length;
-  const arc = step - 9;                     // 9 units of gap between segments
-  return (
-    <div className="db-stat" style={{ "--stat-accent": accent }}>
-      <div className="db-ring">
-        <svg viewBox="0 0 100 100" aria-hidden="true">
-          <circle className="db-ring-track" cx="50" cy="50" r={RING_R} />
-          {levels.map((level, i) => (
-            <circle
-              key={level}
-              className="db-ring-live"
-              cx="50"
-              cy="50"
-              r={RING_R}
-              strokeDasharray={`${arc} ${RING_C - arc}`}
-              strokeDashoffset={-i * step}
-              transform="rotate(-90 50 50)"
-            />
-          ))}
-        </svg>
-        <ul className="db-levels">
-          {levels.map((level) => <li key={level}>{level}</li>)}
-        </ul>
-      </div>
-      <span className="db-stat-label">{label}</span>
-    </div>
-  );
-}
-
 function FeatureCard({ Icon, title, description, accent, wash, badge, ctaText, onClick }) {
   return (
     <button
@@ -290,7 +255,7 @@ export default function Dashboard() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
 
     // Signing out lands on the landing page, and that is the one arrival there
@@ -404,7 +369,7 @@ export default function Dashboard() {
           label={t.statWorksheets}
           accent="var(--acc-2)"
         />
-        <StatLevels levels={t.difficultyLevels} label={t.statDifficulty} accent="var(--acc-3)" />
+        <StatRing value={counts?.teachers ?? null} label={t.statTeachers} accent="var(--acc-3)" />
       </section>
     </AppShell>
   );
