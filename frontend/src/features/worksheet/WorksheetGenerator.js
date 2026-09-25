@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { generateWorksheet, downloadWorksheetPDF, getWorksheetDetails } from "../../shared/services/api";
 import useJobPolling from "../../shared/services/useJobPolling";
+import usePersistedState from "../../shared/services/usePersistedState";
+import { addActiveJob, removeActiveJob } from "../../shared/services/activeJobsList";
 import { IconAlert, IconBolt, IconDownload } from "../../shared/ui/icons";
 import RefineWorksheet from "./RefineWorksheet";
 import "../../shared/ui/studio.css";
@@ -57,13 +59,29 @@ export default function WorksheetGenerator({
   // The teacher flow must stay exactly as it always has: pick everything
   // yourself, and opening a saved one only shows it, nothing more.
   autoFillFromSaved = false,
+  // "Subject · Chapter: Topic", for the ActiveJobsPanel row this dispatch
+  // adds — student wizard only (see autoFillFromSaved above).
+  scopeLabel = "",
 }) {
   const t = TXT[language] || TXT.bangla;
   const [worksheetHTML, setWorksheetHTML] = useState("");
-  const [contentId, setContentId] = useState(null);
+  // Persisted only in the student wizard (autoFillFromSaved is the same
+  // signal that flow already uses elsewhere) — a refine can run for
+  // minutes, same as generation itself. Keeping which worksheet is open and
+  // whether its refine panel is open in localStorage means a student who
+  // wanders off mid-refine comes back to the same panel, open, still
+  // polling the same job (useJobPolling above already falls back to its own
+  // persisted job id on mount — restoring these two is the rest of it). A
+  // teacher's session passes a null key, which makes this plain useState.
+  // Scoped by topic, not a single fixed key — this component remounts fresh
+  // per topic (see GeneratePage.js's key={...selectedTopicId}), and a plain
+  // fixed key here would leak whichever OTHER topic's worksheet was open
+  // last onto a topic that never generated anything itself (the bug this
+  // fixes: visiting a fresh topic showed a stale, unrelated worksheet).
+  const [contentId, setContentId] = usePersistedState(autoFillFromSaved ? `wizard:worksheet:contentId:${selectedTopicId}` : null, null);
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
-  const [showRefine, setShowRefine] = useState(false);
+  const [showRefine, setShowRefine] = usePersistedState(autoFillFromSaved ? `wizard:worksheet:refineOpen:${selectedTopicId}` : null, false);
   const [dispatchError, setDispatchError] = useState(null);
   const [waitingOnCache, setWaitingOnCache] = useState(false);
   const [openingSaved, setOpeningSaved] = useState(false);
@@ -81,16 +99,44 @@ export default function WorksheetGenerator({
 
   // dispatchedJobId is set the instant a new job is created. useJobPolling
   // itself also resumes any job already in progress for this key on mount
-  // (e.g. after a hard refresh), independent of this state.
+  // (e.g. after a hard refresh), independent of this state. Scoped by topic
+  // (student wizard only, where each topic remounts its own instance — see
+  // GeneratePage.js's key={...selectedTopicId}) so switching to a different
+  // topic never re-adopts the PREVIOUS topic's still-running job: that one
+  // keeps polling fine on its own, independently, in ActiveJobsPanel.
   const [dispatchedJobId, setDispatchedJobId] = useState(null);
-  const { status, stage, result, error } = useJobPolling(
-    dispatchedJobId,
-    "activeJob:worksheet"
-  );
+  const jobStorageKey = autoFillFromSaved ? `activeJob:worksheet:${selectedTopicId}` : "activeJob:worksheet";
+  const { status, stage, result, error } = useJobPolling(dispatchedJobId, jobStorageKey);
 
   const isGenerating = waitingOnCache || openingSaved || status === "QUEUED" || status === "PROCESSING";
 
-  useEffect(() => { onContentChange?.(contentId); }, [contentId, onContentChange]);
+  // contentId round-trips through localStorage as a string once restored,
+  // but the rail compares it against GeneratedContent rows with `===` on a
+  // number — coerce here rather than there, so a restored refine still
+  // highlights the right saved item.
+  useEffect(() => {
+    onContentChange?.(contentId ? Number(contentId) : null);
+  }, [contentId, onContentChange]);
+
+  // A restored contentId (this topic's OWN worksheet, from a previous visit
+  // — see the topic-scoped key above) has nothing behind it yet: only the
+  // id was persisted, never the html itself. Covers the refine-panel-open
+  // case too (no need to check showRefine separately — either way, this is
+  // the fetch that fills the preview in). Runs once at mount; a fresh
+  // generation or a newly opened saved worksheet sets worksheetHTML
+  // directly and doesn't need this.
+  useEffect(() => {
+    if (!contentId || worksheetHTML) return;
+    let cancelled = false;
+    getWorksheetDetails(contentId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setWorksheetHTML(data?.html || "");
+      })
+      .catch((err) => console.error("Could not restore worksheet:", err));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // When the polled job reaches SUCCESS, pull the html/content_id out of its
   // result — same shape the cache-hit response hands back directly.
@@ -100,6 +146,16 @@ export default function WorksheetGenerator({
       setContentId(result.content_id || null);
       setShowRefine(false);
       onGenerated?.();
+    }
+    if (status === "SUCCESS" || status === "FAILED") {
+      // This poll (fast, since it's the one actually on screen) already
+      // knows the job is done — tell ActiveJobsPanel's own slower poll of
+      // the SAME job to stop immediately, rather than waiting for it to
+      // notice on its own next tick. See ActiveJobsPanel.js for why that
+      // second poll exists at all (a different topic's still-running job
+      // needs someone watching it once this component unmounts) and why it
+      // deliberately runs slower (the backend's small DB pool).
+      if (autoFillFromSaved && dispatchedJobId) removeActiveJob("worksheet", dispatchedJobId);
     }
     // onGenerated is a refresh signal for the rail; re-running this effect when
     // the parent re-creates the callback would double-count it.
@@ -180,6 +236,9 @@ export default function WorksheetGenerator({
         onGenerated?.();
       } else {
         setDispatchedJobId(data.job_id);
+        if (autoFillFromSaved) {
+          addActiveJob("worksheet", { jobId: data.job_id, label: scopeLabel, dispatchedAt: Date.now(), storageKey: jobStorageKey });
+        }
       }
     } catch (err) {
       console.error("Worksheet request failed:", err);

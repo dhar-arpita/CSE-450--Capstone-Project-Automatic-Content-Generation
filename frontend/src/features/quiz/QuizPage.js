@@ -7,7 +7,9 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
+import usePersistedState from "../../shared/services/usePersistedState";
 import AppShell from "../../shared/ui/AppShell";
+import ActiveJobsPanel from "../../shared/ui/ActiveJobsPanel";
 import SavedContentList from "../../shared/ui/SavedContentList";
 import { IconAlert, IconArrowLeft, IconCheck, IconQuiz, IconSpark } from "../../shared/ui/icons";
 import QuizGenerator from "./QuizGenerator";
@@ -30,6 +32,8 @@ const TXT = {
     step2Title: "Quiz কনফিগারেশন ও জেনারেট",
     savedTitle: "আপনার তৈরি কুইজ",
     savedEmpty: "এখনো কোনো কুইজ তৈরি হয়নি — প্রথমটা বানিয়ে ফেলুন!",
+    activeJobsTitle: "এখন তৈরি হচ্ছে",
+    stageGenerating: "প্রশ্ন তৈরি হচ্ছে...", stageSaving: "সংরক্ষণ করা হচ্ছে...",
     savedLoading: "লোড হচ্ছে…",
     savedFailed: "আপনার কুইজগুলো আনা গেল না।",
     levels: { mixed: "মিক্সড", easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
@@ -64,6 +68,8 @@ const TXT = {
     step2Title: "Quiz Configuration & Generate",
     savedTitle: "Your generated quizzes",
     savedEmpty: "No quiz generated yet, get your first one!",
+    activeJobsTitle: "Generating now",
+    stageGenerating: "Writing questions...", stageSaving: "Saving...",
     savedLoading: "Loading…",
     savedFailed: "Could not load your quizzes.",
     levels: { mixed: "Mixed", easy: "Easy", medium: "Medium", hard: "Hard" },
@@ -155,7 +161,14 @@ function WizardCrumbs({ subjectName, chapterName, onSubject, onChapter }) {
 }
 
 export default function QuizPage() {
-  const [user, setUser] = useState(null);
+  // Read synchronously (not via an effect) so the student/teacher branch
+  // below is already correct on the very first render — usePersistedState's
+  // localStorage read only ever happens once, at mount, so "wait for an
+  // effect to tell us the role" would be one render too late to matter.
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
+  });
+  const isStudent = user?.role === "student";
   const navigate = useNavigate();
 
   const { lang } = useI18n();
@@ -167,13 +180,17 @@ export default function QuizPage() {
   const [chapterList, setChapterList] = useState([]);
   const [topicList, setTopicList] = useState([]);
 
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedChapter, setSelectedChapter] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
+  // Persisted (not plain useState) so a student's wizard picks survive
+  // navigating away mid-generation and coming back — see GeneratePage.js
+  // for the same fix on the worksheet studio, including why teacher's own
+  // picks stay unpersisted (wiped right back out in the mount effect below).
+  const [selectedClass, setSelectedClass] = usePersistedState(isStudent ? "wizard:quiz:class" : null, "");
+  const [selectedSubject, setSelectedSubject] = usePersistedState(isStudent ? "wizard:quiz:subject" : null, "");
+  const [selectedChapter, setSelectedChapter] = usePersistedState(isStudent ? "wizard:quiz:chapter" : null, "");
+  const [selectedTopicId, setSelectedTopicId] = usePersistedState(isStudent ? "wizard:quiz:topic" : null, "");
   // Wizard-only: true once the student picks "generate on the whole
   // subject/chapter" instead of narrowing further.
-  const [skipToGenerate, setSkipToGenerate] = useState(false);
+  const [skipToGenerate, setSkipToGenerate] = usePersistedState(isStudent ? "wizard:quiz:skip" : null, false);
 
   const [openRequest, setOpenRequest] = useState(null);
   const [activeContentId, setActiveContentId] = useState(null);
@@ -193,16 +210,41 @@ export default function QuizPage() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
-    if (parsedUser.role === "student" && parsedUser.class_name) {
+    if (parsedUser.role !== "student") {
+      getClasses()
+        .then(({ data }) => setClassList(data || []))
+        .catch((err) => console.error("Classes load failed", err));
+      return;
+    }
+
+    // Restoring a persisted wizard pick means restoring the option lists
+    // underneath it too. selectedSubject/selectedChapter here are whatever
+    // usePersistedState's lazy initializer already found in localStorage.
+    const restoreChain = async (baseClass) => {
+      try {
+        const { data: subs } = await getSubjects(baseClass);
+        setSubjectList(subs || []);
+        if (!selectedSubject) return;
+        const { data: chs } = await getChapters(selectedSubject);
+        setChapterList(chs || []);
+        if (!selectedChapter) return;
+        const { data: tps } = await getTopics(selectedChapter);
+        setTopicList(tps || []);
+      } catch (err) {
+        console.error("Could not restore quiz wizard selection", err);
+      }
+    };
+
+    if (parsedUser.class_name) {
       setSelectedClass(parsedUser.class_name);
-      getSubjects(parsedUser.class_name)
-        .then(({ data }) => setSubjectList(data || []))
-        .catch((err) => console.error("Subjects load failed", err));
+      restoreChain(parsedUser.class_name);
     } else {
       getClasses()
         .then(({ data }) => setClassList(data || []))
         .catch((err) => console.error("Classes load failed", err));
+      if (selectedClass) restoreChain(selectedClass);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   const isStudentWithClass = user?.role === "student" && !!user?.class_name;
@@ -212,7 +254,7 @@ export default function QuizPage() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
     navigate("/", { state: { splash: true } });
   };
@@ -311,6 +353,10 @@ export default function QuizPage() {
   const selectedSubjectName = subjectList.find((s) => String(s.subject_id) === String(selectedSubject))?.name || "";
   const selectedChapterObj = chapterList.find((c) => String(c.chapter_id) === String(selectedChapter));
   const selectedChapterName = selectedChapterObj ? `Ch ${selectedChapterObj.chapter_no}: ${selectedChapterObj.name}` : "";
+  const selectedTopicName = topicList.find((tp) => String(tp.topic_id) === String(selectedTopicId))?.name || "";
+  // The label an in-progress generation shows in the rail's active-jobs
+  // panel — as specific as whatever's actually been picked.
+  const scopeLabel = [selectedSubjectName, selectedTopicName || selectedChapterName].filter(Boolean).join(" · ");
 
   // A quiz needs a subject at minimum; topic and chapter only narrow it.
   const totalFields = isStudentWithClass ? 3 : 4;
@@ -327,7 +373,16 @@ export default function QuizPage() {
       onLogout={handleLogout}
       tone="quiz"
       rail={
-        <SavedContentList
+        <>
+          {isStudentWithClass && (
+            <ActiveJobsPanel
+              kind="quiz"
+              title={t.activeJobsTitle}
+              stageLabel={(stage) => (stage === "saving" ? t.stageSaving : t.stageGenerating)}
+              onJobDone={() => setListVersion((v) => v + 1)}
+            />
+          )}
+          <SavedContentList
           contentType={QUIZ_TYPES}
           version={listVersion}
           activeId={activeContentId}
@@ -341,7 +396,8 @@ export default function QuizPage() {
             levels: t.levels,
             languages: t.languages,
           }}
-        />
+          />
+        </>
       }
     >
       <section className="gw-head">
@@ -459,6 +515,13 @@ export default function QuizPage() {
                 </p>
               )}
               <QuizGenerator
+                // A fresh component instance per scope, so starting a second
+                // quiz generation on a different subject/chapter/topic isn't
+                // blocked by the FIRST one's still-in-progress job/disabled
+                // button — that job keeps polling fine on its own,
+                // independently, in ActiveJobsPanel. See GeneratePage.js for
+                // the same fix on the worksheet studio.
+                key={`${selectedSubject}:${selectedChapter}:${selectedTopicId}`}
                 selectedSubject={selectedSubject}
                 selectedChapter={selectedChapter}
                 selectedTopicId={selectedTopicId}
@@ -468,6 +531,7 @@ export default function QuizPage() {
                 onGenerated={() => setListVersion((v) => v + 1)}
                 onOpenedScope={applyScope}
                 autoFillFromSaved
+                scopeLabel={scopeLabel}
               />
             </section>
           )}

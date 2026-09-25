@@ -613,3 +613,24 @@ html[lang="bn"] .gw-head h1 { line-height: 1.35; letter-spacing: 0; }
   background: var(--tone);
   clip-path: polygon(0 0, 100% 50%, 0 100%);
 }
+
+/* ── active generations panel (rail, student wizard only) ─────────────────
+   Sits above the saved-content rail so a second (or third) generation
+   started on a different topic never loses its visible progress just
+   because the wizard has moved on from it. */
+.ajp-panel { margin-bottom: 18px; padding-bottom: 18px; border-bottom: 1px solid var(--dhi-line); }
+.ajp-title { margin: 0 0 12px; font-size: 1.05rem; font-weight: 700; line-height: 1.35; }
+.ajp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ajp-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 14px;
+  border: 1px solid var(--dhi-line);
+  border-radius: 12px;
+  background: var(--dhi-surface-sunken);
+  color: var(--tone);
+}
+.ajp-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ajp-label { font-size: .9rem; font-weight: 700; color: var(--dhi-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ajp-stage { font-size: .8rem; font-weight: 600; color: var(--dhi-muted); }

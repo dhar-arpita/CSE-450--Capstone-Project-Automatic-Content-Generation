@@ -19,12 +19,21 @@ const TIMEOUT_MS = 15 * 60 * 1000;
  *   for that case instead of forking this hook.
  * @param {string} [opts.statusField] - defaults to "status". Ingestion's
  *   endpoint calls the same concept "job_status".
+ * @param {number} [opts.fastIntervalMs] - defaults to 2000. A background
+ *   status widget (e.g. ActiveJobsPanel, watching a job nobody's actively
+ *   staring at) should pass a slower one — the backend's DB pool is small
+ *   (see core/config.py), and every concurrent poll loop is a connection.
+ * @param {number} [opts.slowIntervalMs] - defaults to 5000.
+ * @param {number} [opts.fastWindowMs] - defaults to 30000.
  *
  * Returns { status, stage, result, error, activeJobId }.
  */
 export default function useJobPolling(jobId, storageKey, opts = {}) {
   const buildUrl = opts.buildUrl || ((id) => `/jobs/${id}`);
   const statusField = opts.statusField || "status";
+  const fastInterval = opts.fastIntervalMs ?? FAST_INTERVAL_MS;
+  const slowInterval = opts.slowIntervalMs ?? SLOW_INTERVAL_MS;
+  const fastWindow = opts.fastWindowMs ?? FAST_WINDOW_MS;
 
   const resolvedInitialId =
     jobId ?? (storageKey ? localStorage.getItem(storageKey) : null);
@@ -104,11 +113,11 @@ export default function useJobPolling(jobId, storageKey, opts = {}) {
         }
 
         const elapsed = Date.now() - startTimeRef.current;
-        const nextDelay = elapsed < FAST_WINDOW_MS ? FAST_INTERVAL_MS : SLOW_INTERVAL_MS;
+        const nextDelay = elapsed < fastWindow ? fastInterval : slowInterval;
         timeoutIdRef.current = setTimeout(poll, nextDelay);
       } catch (err) {
         if (cancelled) return;
-        timeoutIdRef.current = setTimeout(poll, SLOW_INTERVAL_MS);
+        timeoutIdRef.current = setTimeout(poll, slowInterval);
       }
     };
 

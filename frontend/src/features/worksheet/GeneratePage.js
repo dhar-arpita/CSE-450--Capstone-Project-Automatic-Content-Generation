@@ -7,7 +7,9 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useI18n } from "../../shared/i18n";
 import { getClasses, getSubjects, getChapters, getTopics } from "../../shared/services/api";
+import usePersistedState from "../../shared/services/usePersistedState";
 import AppShell from "../../shared/ui/AppShell";
+import ActiveJobsPanel from "../../shared/ui/ActiveJobsPanel";
 import SavedContentList from "../../shared/ui/SavedContentList";
 import { IconAlert, IconArrowLeft, IconCheck, IconSheet, IconSpark } from "../../shared/ui/icons";
 import WorksheetGenerator from "./WorksheetGenerator";
@@ -36,6 +38,8 @@ const TXT = {
     savedEmpty: "এখনো কোনো ওয়ার্কশিট তৈরি হয়নি — প্রথমটা বানিয়ে ফেলুন!",
     savedLoading: "লোড হচ্ছে…",
     savedFailed: "আপনার ওয়ার্কশিটগুলো আনা গেল না।",
+    activeJobsTitle: "এখন তৈরি হচ্ছে",
+    stageGenerating: "প্রশ্ন লেখা হচ্ছে...", stageSaving: "সংরক্ষণ করা হচ্ছে...",
     levels: { easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
     languages: { bangla: "বাংলা", english: "ইংরেজি" },
     wizardSubjectTitle: "কোন বিষয়ে ওয়ার্কশিট বানাতে চাও?",
@@ -72,6 +76,8 @@ const TXT = {
     savedEmpty: "No worksheet generated yet, get your first one!",
     savedLoading: "Loading…",
     savedFailed: "Could not load your worksheets.",
+    activeJobsTitle: "Generating now",
+    stageGenerating: "Writing questions...", stageSaving: "Saving...",
     levels: { easy: "Easy", medium: "Medium", hard: "Hard" },
     languages: { bangla: "Bangla", english: "English" },
     wizardSubjectTitle: "Which subject do you want a worksheet for?",
@@ -154,7 +160,14 @@ function WizardCrumbs({ subjectName, chapterName, onSubject, onChapter }) {
 }
 
 export default function GeneratePage() {
-  const [user, setUser] = useState(null);
+  // Read synchronously (not via an effect) so the student/teacher branch
+  // below is already correct on the very first render — usePersistedState's
+  // localStorage read only ever happens once, at mount, so "wait for an
+  // effect to tell us the role" would be one render too late to matter.
+  const [user, setUser] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("user")); } catch { return null; }
+  });
+  const isStudent = user?.role === "student";
   const navigate = useNavigate();
 
   /* One language for the whole app. The dictionary below is keyed
@@ -169,10 +182,17 @@ export default function GeneratePage() {
   const [chapterList, setChapterList] = useState([]);
   const [topicList, setTopicList] = useState([]);
 
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedSubject, setSelectedSubject] = useState("");
-  const [selectedChapter, setSelectedChapter] = useState("");
-  const [selectedTopicId, setSelectedTopicId] = useState("");
+  // Persisted (not plain useState) so a student's wizard picks survive
+  // navigating away mid-generation and coming back — a worksheet takes a
+  // few minutes, and nobody sits on one page that long. A teacher's own
+  // picks are NOT meant to persist: isStudent (known synchronously, see
+  // above) gates the key to null for anyone else, which makes the hook a
+  // plain no-op useState for that session — nothing is ever read or
+  // written under these keys for a teacher.
+  const [selectedClass, setSelectedClass] = usePersistedState(isStudent ? "wizard:worksheet:class" : null, "");
+  const [selectedSubject, setSelectedSubject] = usePersistedState(isStudent ? "wizard:worksheet:subject" : null, "");
+  const [selectedChapter, setSelectedChapter] = usePersistedState(isStudent ? "wizard:worksheet:chapter" : null, "");
+  const [selectedTopicId, setSelectedTopicId] = usePersistedState(isStudent ? "wizard:worksheet:topic" : null, "");
 
   const [sampleFile, setSampleFile] = useState(null);
   const [showSampleInput, setShowSampleInput] = useState(false);
@@ -198,19 +218,46 @@ export default function GeneratePage() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
-    if (parsedUser.role === "student" && parsedUser.class_name) {
+    if (parsedUser.role !== "student") {
+      getClasses()
+        .then(({ data }) => setClassList(data || []))
+        .catch((err) => console.error("Classes load failed", err));
+      return;
+    }
+
+    // Restoring a persisted wizard pick means restoring the option lists
+    // underneath it too — otherwise the picker's own state points at a
+    // subject/chapter nothing in subjectList/chapterList can resolve a name
+    // for. selectedSubject/selectedChapter here are whatever
+    // usePersistedState's lazy initializer already found in localStorage.
+    const restoreChain = async (baseClass) => {
+      try {
+        const { data: subs } = await getSubjects(baseClass);
+        setSubjectList(subs || []);
+        if (!selectedSubject) return;
+        const { data: chs } = await getChapters(selectedSubject);
+        setChapterList(chs || []);
+        if (!selectedChapter) return;
+        const { data: tps } = await getTopics(selectedChapter);
+        setTopicList(tps || []);
+      } catch (err) {
+        console.error("Could not restore worksheet wizard selection", err);
+      }
+    };
+
+    if (parsedUser.class_name) {
       // A student's class is fixed at signup — skip the class picker and go
       // straight to that class's subjects instead of making them pick it
       // again every time.
       setSelectedClass(parsedUser.class_name);
-      getSubjects(parsedUser.class_name)
-        .then(({ data }) => setSubjectList(data || []))
-        .catch((err) => console.error("Subjects load failed", err));
+      restoreChain(parsedUser.class_name);
     } else {
       getClasses()
         .then(({ data }) => setClassList(data || []))
         .catch((err) => console.error("Classes load failed", err));
+      if (selectedClass) restoreChain(selectedClass);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
   // Pre-existing student accounts predate the class field and have no
@@ -223,7 +270,7 @@ export default function GeneratePage() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
     navigate("/", { state: { splash: true } });
   };
@@ -309,6 +356,10 @@ export default function GeneratePage() {
   const selectedSubjectName = subjectList.find((s) => String(s.subject_id) === String(selectedSubject))?.name || "";
   const selectedChapterObj = chapterList.find((c) => String(c.chapter_id) === String(selectedChapter));
   const selectedChapterName = selectedChapterObj ? `Ch ${selectedChapterObj.chapter_no}: ${selectedChapterObj.name}` : "";
+  const selectedTopicName = topicList.find((tp) => String(tp.topic_id) === String(selectedTopicId))?.name || "";
+  // The label an in-progress generation shows in the rail's active-jobs
+  // panel — as specific as whatever's actually been picked.
+  const scopeLabel = [selectedSubjectName, selectedTopicName || selectedChapterName].filter(Boolean).join(" · ");
 
   const totalFields = isStudentWithClass ? 3 : 4;
   const chosen = [
@@ -355,6 +406,13 @@ export default function GeneratePage() {
 
       <div style={{ marginTop: "22px" }}>
         <WorksheetGenerator
+          // Student wizard only: a fresh component instance per topic, so
+          // starting a second generation on a different topic isn't blocked
+          // by the FIRST one's still-in-progress job/button-disabled state —
+          // that job keeps polling fine on its own, independently, in
+          // ActiveJobsPanel. Teacher's own single dropdown-driven instance
+          // is untouched (key stays undefined, exactly as before).
+          key={isStudentWithClass ? selectedTopicId : undefined}
           selectedTopicId={selectedTopicId}
           user={user}
           sampleFile={sampleFile}
@@ -364,6 +422,7 @@ export default function GeneratePage() {
           onGenerated={() => setListVersion((v) => v + 1)}
           onOpenedScope={applyScope}
           autoFillFromSaved={isStudentWithClass}
+          scopeLabel={scopeLabel}
         />
       </div>
     </>
@@ -375,21 +434,31 @@ export default function GeneratePage() {
       user={user}
       onLogout={handleLogout}
       rail={
-        <SavedContentList
-          contentType="worksheet"
-          version={listVersion}
-          activeId={activeContentId}
-          locale={lang === "bn" ? "bn-BD" : "en-GB"}
-          onPick={(id) => setOpenRequest({ contentId: id, nonce: Date.now() })}
-          labels={{
-            title: t.savedTitle,
-            empty: t.savedEmpty,
-            loading: t.savedLoading,
-            failed: t.savedFailed,
-            levels: t.levels,
-            languages: t.languages,
-          }}
-        />
+        <>
+          {isStudentWithClass && (
+            <ActiveJobsPanel
+              kind="worksheet"
+              title={t.activeJobsTitle}
+              stageLabel={(stage) => (stage === "saving" ? t.stageSaving : t.stageGenerating)}
+              onJobDone={() => setListVersion((v) => v + 1)}
+            />
+          )}
+          <SavedContentList
+            contentType="worksheet"
+            version={listVersion}
+            activeId={activeContentId}
+            locale={lang === "bn" ? "bn-BD" : "en-GB"}
+            onPick={(id) => setOpenRequest({ contentId: id, nonce: Date.now() })}
+            labels={{
+              title: t.savedTitle,
+              empty: t.savedEmpty,
+              loading: t.savedLoading,
+              failed: t.savedFailed,
+              levels: t.levels,
+              languages: t.languages,
+            }}
+          />
+        </>
       }
     >
       <section className="gw-head">

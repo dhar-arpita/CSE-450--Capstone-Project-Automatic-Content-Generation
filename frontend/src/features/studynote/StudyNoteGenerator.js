@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { generateStudyNote, downloadWorksheetPDF, getWorksheetDetails } from "../../shared/services/api";
 import useJobPolling from "../../shared/services/useJobPolling";
+import usePersistedState from "../../shared/services/usePersistedState";
+import { addActiveJob, removeActiveJob } from "../../shared/services/activeJobsList";
 import { IconAlert, IconBolt, IconDownload, IconSheet } from "../../shared/ui/icons";
 import "../../shared/ui/studio.css";
 
@@ -47,11 +49,22 @@ export default function StudyNoteGenerator({
   // Only the student wizard passes this — the teacher flow must stay
   // exactly as it always has: opening a saved note only shows it.
   autoFillFromSaved = false,
+  // "Subject · Chapter: Topic", for the ActiveJobsPanel row this dispatch
+  // adds — student wizard only (see autoFillFromSaved above).
+  scopeLabel = "",
 }) {
   const t = TXT[language] || TXT.bangla;
 
   const [noteHTML, setNoteHTML] = useState("");
-  const [contentId, setContentId] = useState(null);
+  // Persisted only in the student wizard (autoFillFromSaved is the same
+  // signal that flow already uses elsewhere) — see WorksheetGenerator.js
+  // for the same fix and why a teacher's session passes a null key.
+  // Scoped by topic, not a single fixed key — this component remounts fresh
+  // per topic (see StudyNotePage.js's key={selectedTopicId}), and a plain
+  // fixed key here would leak whichever OTHER topic's note was open last
+  // onto a topic that never generated anything itself (the bug this fixes:
+  // visiting a fresh topic showed a stale, unrelated note).
+  const [contentId, setContentId] = usePersistedState(autoFillFromSaved ? `wizard:studynote:contentId:${selectedTopicId}` : null, null);
   const [dispatchError, setDispatchError] = useState(null);
   const [waitingOnCache, setWaitingOnCache] = useState(false);
   const [openingSaved, setOpeningSaved] = useState(false);
@@ -62,13 +75,24 @@ export default function StudyNoteGenerator({
     if (!languagePinned) setContentLanguage(language);
   }, [language, languagePinned]);
 
+  // Scoped by topic (student wizard only, where each topic remounts its own
+  // instance — see StudyNotePage.js's key={selectedTopicId}) so switching to
+  // a different topic never re-adopts the PREVIOUS topic's still-running
+  // job: that one keeps polling fine on its own, independently, in
+  // ActiveJobsPanel.
   const [dispatchedJobId, setDispatchedJobId] = useState(null);
-  const { status, stage, result, error } = useJobPolling(dispatchedJobId, "activeJob:studynote");
+  const jobStorageKey = autoFillFromSaved ? `activeJob:studynote:${selectedTopicId}` : "activeJob:studynote";
+  const { status, stage, result, error } = useJobPolling(dispatchedJobId, jobStorageKey);
 
   const isGenerating =
     waitingOnCache || openingSaved || status === "QUEUED" || status === "PROCESSING";
 
-  useEffect(() => { onContentChange?.(contentId); }, [contentId, onContentChange]);
+  // contentId round-trips through localStorage as a string once restored,
+  // but the rail compares it against GeneratedContent rows with `===` on a
+  // number — coerce here rather than there.
+  useEffect(() => {
+    onContentChange?.(contentId ? Number(contentId) : null);
+  }, [contentId, onContentChange]);
 
   useEffect(() => {
     if (status === "SUCCESS" && result) {
@@ -79,8 +103,31 @@ export default function StudyNoteGenerator({
         onGenerated?.();
       }
     }
+    if (status === "SUCCESS" || status === "FAILED") {
+      // This poll (fast, since it's the one on screen) already knows the
+      // job is done — tell ActiveJobsPanel's own slower poll of the SAME
+      // job to stop immediately. See WorksheetGenerator.js for the same fix.
+      if (autoFillFromSaved && dispatchedJobId) removeActiveJob("studynote", dispatchedJobId);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [status, result]);
+
+  // A restored contentId (student wizard, after navigating away and back)
+  // has nothing behind it yet — noteHTML isn't persisted, only which note
+  // was open. Runs once at mount; a fresh generation or a newly opened
+  // saved note sets noteHTML directly and doesn't need this.
+  useEffect(() => {
+    if (!contentId || noteHTML) return;
+    let cancelled = false;
+    getWorksheetDetails(contentId)
+      .then(({ data }) => {
+        if (cancelled) return;
+        setNoteHTML(data?.html || "");
+      })
+      .catch((err) => console.error("Could not restore study note:", err));
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (!openRequest?.contentId) return undefined;
@@ -130,6 +177,9 @@ export default function StudyNoteGenerator({
         onGenerated?.();
       } else {
         setDispatchedJobId(data.job_id);
+        if (autoFillFromSaved) {
+          addActiveJob("studynote", { jobId: data.job_id, label: scopeLabel, dispatchedAt: Date.now(), storageKey: jobStorageKey });
+        }
       }
     } catch (err) {
       console.error("Study note request failed:", err);
