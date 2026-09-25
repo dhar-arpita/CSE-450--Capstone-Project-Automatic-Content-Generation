@@ -71,17 +71,17 @@ export default function WorksheetGenerator({
   // whether its refine panel is open in localStorage means a student who
   // wanders off mid-refine comes back to the same panel, open, still
   // polling the same job (useJobPolling above already falls back to its own
-  // persisted job id on mount — restoring these two is the rest of it). A
-  // teacher's session passes a null key, which makes this plain useState.
+  // persisted job id on mount — restoring these two is the rest of it). The
+  // teacher's single, non-remounting instance uses one fixed key instead.
   // Scoped by topic, not a single fixed key — this component remounts fresh
   // per topic (see GeneratePage.js's key={...selectedTopicId}), and a plain
   // fixed key here would leak whichever OTHER topic's worksheet was open
   // last onto a topic that never generated anything itself (the bug this
   // fixes: visiting a fresh topic showed a stale, unrelated worksheet).
-  const [contentId, setContentId] = usePersistedState(autoFillFromSaved ? `wizard:worksheet:contentId:${selectedTopicId}` : null, null);
+  const [contentId, setContentId] = usePersistedState(autoFillFromSaved ? `wizard:worksheet:contentId:${selectedTopicId}` : "wizard:teacher:worksheet:contentId", null);
   const [difficulty, setDifficulty] = useState("Medium");
   const [numQuestions, setNumQuestions] = useState(5);
-  const [showRefine, setShowRefine] = usePersistedState(autoFillFromSaved ? `wizard:worksheet:refineOpen:${selectedTopicId}` : null, false);
+  const [showRefine, setShowRefine] = usePersistedState(autoFillFromSaved ? `wizard:worksheet:refineOpen:${selectedTopicId}` : "wizard:teacher:worksheet:refineOpen", false);
   const [dispatchError, setDispatchError] = useState(null);
   const [waitingOnCache, setWaitingOnCache] = useState(false);
   const [openingSaved, setOpeningSaved] = useState(false);
@@ -122,11 +122,12 @@ export default function WorksheetGenerator({
   // — see the topic-scoped key above) has nothing behind it yet: only the
   // id was persisted, never the html itself. Covers the refine-panel-open
   // case too (no need to check showRefine separately — either way, this is
-  // the fetch that fills the preview in). Runs once at mount; a fresh
+  // the fetch that fills the preview in). Teachers only get this restore
+  // when the refine panel was open. Runs once at mount; a fresh
   // generation or a newly opened saved worksheet sets worksheetHTML
   // directly and doesn't need this.
   useEffect(() => {
-    if (!contentId || worksheetHTML) return;
+    if (!contentId || worksheetHTML || (!autoFillFromSaved && !showRefine)) return;
     let cancelled = false;
     getWorksheetDetails(contentId)
       .then(({ data }) => {

@@ -184,17 +184,17 @@ export default function QuizPage() {
   const [chapterList, setChapterList] = useState([]);
   const [topicList, setTopicList] = useState([]);
 
-  // Persisted (not plain useState) so a student's wizard picks survive
-  // navigating away mid-generation and coming back — see GeneratePage.js
-  // for the same fix on the worksheet studio, including why teacher's own
-  // picks stay unpersisted (wiped right back out in the mount effect below).
-  const [selectedClass, setSelectedClass] = usePersistedState(isStudent ? "wizard:quiz:class" : null, "");
-  const [selectedSubject, setSelectedSubject] = usePersistedState(isStudent ? "wizard:quiz:subject" : null, "");
-  const [selectedChapter, setSelectedChapter] = usePersistedState(isStudent ? "wizard:quiz:chapter" : null, "");
-  const [selectedTopicId, setSelectedTopicId] = usePersistedState(isStudent ? "wizard:quiz:topic" : null, "");
+  // Persisted (not plain useState) so wizard picks survive navigating away
+  // mid-generation and coming back — see GeneratePage.js for the same fix
+  // on the worksheet studio, including why teacher and student keys differ.
+  const wizardPrefix = isStudent ? "wizard:quiz" : "wizard:teacher:quiz";
+  const [selectedClass, setSelectedClass] = usePersistedState(`${wizardPrefix}:class`, "");
+  const [selectedSubject, setSelectedSubject] = usePersistedState(`${wizardPrefix}:subject`, "");
+  const [selectedChapter, setSelectedChapter] = usePersistedState(`${wizardPrefix}:chapter`, "");
+  const [selectedTopicId, setSelectedTopicId] = usePersistedState(`${wizardPrefix}:topic`, "");
   // Wizard-only: true once the student picks "generate on the whole
   // subject/chapter" instead of narrowing further.
-  const [skipToGenerate, setSkipToGenerate] = usePersistedState(isStudent ? "wizard:quiz:skip" : null, false);
+  const [skipToGenerate, setSkipToGenerate] = usePersistedState(`${wizardPrefix}:skip`, false);
 
   const [openRequest, setOpenRequest] = useState(null);
   const [activeContentId, setActiveContentId] = useState(null);
@@ -214,13 +214,6 @@ export default function QuizPage() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
-    if (parsedUser.role !== "student") {
-      getClasses()
-        .then(({ data }) => setClassList(data || []))
-        .catch((err) => console.error("Classes load failed", err));
-      return;
-    }
-
     // Restoring a persisted wizard pick means restoring the option lists
     // underneath it too. selectedSubject/selectedChapter here are whatever
     // usePersistedState's lazy initializer already found in localStorage.
@@ -239,7 +232,7 @@ export default function QuizPage() {
       }
     };
 
-    if (parsedUser.class_name) {
+    if (parsedUser.role === "student" && parsedUser.class_name) {
       setSelectedClass(parsedUser.class_name);
       restoreChain(parsedUser.class_name);
     } else {

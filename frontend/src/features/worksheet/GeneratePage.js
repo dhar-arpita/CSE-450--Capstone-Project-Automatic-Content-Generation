@@ -186,17 +186,16 @@ export default function GeneratePage() {
   const [chapterList, setChapterList] = useState([]);
   const [topicList, setTopicList] = useState([]);
 
-  // Persisted (not plain useState) so a student's wizard picks survive
-  // navigating away mid-generation and coming back — a worksheet takes a
-  // few minutes, and nobody sits on one page that long. A teacher's own
-  // picks are NOT meant to persist: isStudent (known synchronously, see
-  // above) gates the key to null for anyone else, which makes the hook a
-  // plain no-op useState for that session — nothing is ever read or
-  // written under these keys for a teacher.
-  const [selectedClass, setSelectedClass] = usePersistedState(isStudent ? "wizard:worksheet:class" : null, "");
-  const [selectedSubject, setSelectedSubject] = usePersistedState(isStudent ? "wizard:worksheet:subject" : null, "");
-  const [selectedChapter, setSelectedChapter] = usePersistedState(isStudent ? "wizard:worksheet:chapter" : null, "");
-  const [selectedTopicId, setSelectedTopicId] = usePersistedState(isStudent ? "wizard:worksheet:topic" : null, "");
+  // Persisted (not plain useState) so wizard picks survive navigating away
+  // mid-generation and coming back — a worksheet takes a few minutes, and
+  // nobody sits on one page that long. Teachers and students get separate
+  // key prefixes (isStudent is known synchronously, see above), so one
+  // role's picks never leak into the other's wizard on a shared browser.
+  const wizardPrefix = isStudent ? "wizard:worksheet" : "wizard:teacher:worksheet";
+  const [selectedClass, setSelectedClass] = usePersistedState(`${wizardPrefix}:class`, "");
+  const [selectedSubject, setSelectedSubject] = usePersistedState(`${wizardPrefix}:subject`, "");
+  const [selectedChapter, setSelectedChapter] = usePersistedState(`${wizardPrefix}:chapter`, "");
+  const [selectedTopicId, setSelectedTopicId] = usePersistedState(`${wizardPrefix}:topic`, "");
 
   const [sampleFile, setSampleFile] = useState(null);
   const [showSampleInput, setShowSampleInput] = useState(false);
@@ -222,13 +221,6 @@ export default function GeneratePage() {
     const parsedUser = JSON.parse(storedUser);
     setUser(parsedUser);
 
-    if (parsedUser.role !== "student") {
-      getClasses()
-        .then(({ data }) => setClassList(data || []))
-        .catch((err) => console.error("Classes load failed", err));
-      return;
-    }
-
     // Restoring a persisted wizard pick means restoring the option lists
     // underneath it too — otherwise the picker's own state points at a
     // subject/chapter nothing in subjectList/chapterList can resolve a name
@@ -249,7 +241,7 @@ export default function GeneratePage() {
       }
     };
 
-    if (parsedUser.class_name) {
+    if (parsedUser.role === "student" && parsedUser.class_name) {
       // A student's class is fixed at signup — skip the class picker and go
       // straight to that class's subjects instead of making them pick it
       // again every time.
