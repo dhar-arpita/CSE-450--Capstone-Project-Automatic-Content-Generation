@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,dispatch POST /generate/worksheet,CatchResponseError('500 on dispatch'),1,2026-09-20T07:17:16Z,2026-09-20T07:17:16Z
