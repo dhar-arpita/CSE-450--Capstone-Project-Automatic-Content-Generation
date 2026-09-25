@@ -333,7 +333,7 @@ export default function StudentDashboard() {
       localStorage.removeItem(k)
     );
     Object.keys(localStorage)
-      .filter((k) => k.startsWith("activeJob:"))
+      .filter((k) => k.startsWith("activeJob:") || k.startsWith("wizard:"))
       .forEach((k) => localStorage.removeItem(k));
 
     // Signing out lands on the landing page, and that is the one arrival there

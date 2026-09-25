@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { listMyContent } from "../services/api";
 import { IconAlert, IconSpark } from "./icons";
+import SearchBox from "./SearchBox";
 import "./SavedContentList.css";
 
 /* The teacher's own back catalogue, in the right-hand rail.
@@ -20,6 +21,7 @@ export default function SavedContentList({
 }) {
   const [items, setItems] = useState(null);   // null = not loaded yet
   const [failed, setFailed] = useState(false);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -51,6 +53,16 @@ export default function SavedContentList({
   // raw value rather than dropping a label the caller did not supply.
   const difficulty = (raw) => labels.levels?.[(raw || "").toLowerCase()] ?? raw;
 
+  const q = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return items || [];
+    return (items || []).filter((it) =>
+      [it.topic_name, it.chapter_name, it.subject_name, it.class_name]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(q))
+    );
+  }, [items, q]);
+
   return (
     <section className="sc as-panel">
       <h3 className="sc-title">{labels.title}</h3>
@@ -71,9 +83,17 @@ export default function SavedContentList({
         </div>
       )}
 
-      {items !== null && items.length > 0 && (
-        <ul className="sc-list">
-          {items.map((it) => (
+      {items !== null && !failed && items.length > 0 && (
+        <SearchBox value={search} onChange={setSearch} placeholder={labels.searchPlaceholder} />
+      )}
+
+      {items !== null && items.length > 0 && filtered.length === 0 && (
+        <p className="sc-note" style={{ marginTop: "12px" }}>{labels.noResults}</p>
+      )}
+
+      {filtered.length > 0 && (
+        <ul className="sc-list" style={{ marginTop: items.length > 0 ? "12px" : 0 }}>
+          {filtered.map((it) => (
             <li key={it.content_id}>
               <button
                 type="button"

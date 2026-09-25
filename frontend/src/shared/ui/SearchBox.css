@@ -1,0 +1,56 @@
+.sbx {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--dhi-line-strong);
+  border-radius: 12px;
+  background: var(--dhi-field);
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+.sbx:focus-within {
+  border-color: var(--dhi-forest);
+  box-shadow: 0 0 0 3px var(--dhi-surface-tint);
+}
+.sbx-icon { flex: 0 0 auto; display: grid; place-items: center; color: var(--dhi-muted); }
+.sbx-input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+  font-size: .95rem;
+  color: var(--dhi-ink);
+  padding: 9px 0;
+  /* A long Bangla placeholder can outrun the box before it ever reaches
+     the character limit a Latin string would — fade it instead of letting
+     it hard-clip mid-glyph. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sbx-input::placeholder { color: var(--dhi-muted); }
+
+.sbx-clear {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--dhi-surface-sunken);
+  color: var(--dhi-muted);
+  cursor: pointer;
+  transition: background .15s ease, color .15s ease;
+}
+.sbx-clear:hover { background: var(--dhi-line); color: var(--dhi-ink); }
+.sbx-clear svg { width: 12px; height: 12px; }
+
+.sbx-sm { width: 100%; }
+.sbx-lg { min-width: 320px; }
+html[lang="bn"] .sbx-lg { min-width: 360px; }
+
+@media (max-width: 640px) {
+  .sbx-lg { min-width: 0; width: 100%; }
+}

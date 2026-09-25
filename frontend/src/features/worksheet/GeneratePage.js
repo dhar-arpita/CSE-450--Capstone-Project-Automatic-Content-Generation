@@ -40,6 +40,8 @@ const TXT = {
     savedFailed: "আপনার ওয়ার্কশিটগুলো আনা গেল না।",
     activeJobsTitle: "এখন তৈরি হচ্ছে",
     stageGenerating: "প্রশ্ন লেখা হচ্ছে...", stageSaving: "সংরক্ষণ করা হচ্ছে...",
+    searchPlaceholder: "ক্লাস, অধ্যায় বা বিষয় লিখে সার্চ করুন",
+    noResults: "এই সার্চে কিছু পাওয়া যায়নি।",
     levels: { easy: "সহজ", medium: "মাঝারি", hard: "কঠিন" },
     languages: { bangla: "বাংলা", english: "ইংরেজি" },
     wizardSubjectTitle: "কোন বিষয়ে ওয়ার্কশিট বানাতে চাও?",
@@ -78,6 +80,8 @@ const TXT = {
     savedFailed: "Could not load your worksheets.",
     activeJobsTitle: "Generating now",
     stageGenerating: "Writing questions...", stageSaving: "Saving...",
+    searchPlaceholder: "Search by class, chapter or subject",
+    noResults: "No matches for that search.",
     levels: { easy: "Easy", medium: "Medium", hard: "Hard" },
     languages: { bangla: "Bangla", english: "English" },
     wizardSubjectTitle: "Which subject do you want a worksheet for?",
@@ -456,6 +460,8 @@ export default function GeneratePage() {
               failed: t.savedFailed,
               levels: t.levels,
               languages: t.languages,
+              searchPlaceholder: t.searchPlaceholder,
+              noResults: t.noResults,
             }}
           />
         </>

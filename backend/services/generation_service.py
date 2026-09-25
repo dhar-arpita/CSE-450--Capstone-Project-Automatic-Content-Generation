@@ -156,7 +156,11 @@ def handle_add(problems, add_refs, topic, subject, chapter, content, curriculum_
         style_description=""
     )
 
-    new_problems = new_output.get("problems", [])
+    # The content agent reports failure as an empty list, not an exception.
+    # Fail the job rather than save a "successful" refine that added nothing.
+    new_problems = new_output.get("problems", [])[:total_to_add]
+    if not new_problems:
+        raise RuntimeError("Could not generate the new problems. Please try again.")
 
     for i, p in enumerate(new_problems):
         p["id"] = next_id + i
@@ -201,7 +205,11 @@ def handle_difficulty(problems, diff_refs, topic, subject, chapter, content):
         difficulty=content.difficulty_level
     )
 
-    changed = result.get("problems", to_change)
+    # A failed or short reply would otherwise drop problems silently: zip()
+    # below stops at the shorter list and merged would lose the rest.
+    changed = result.get("problems", [])
+    if result.get("error") or len(changed) != len(to_change):
+        raise RuntimeError("Could not change the difficulty of the selected problems. Please try again.")
 
     for orig, updated in zip(to_change, changed):
         updated["id"] = orig["id"]
@@ -235,7 +243,10 @@ def handle_simplify(problems, topic, subject, chapter, content):
         difficulty=content.difficulty_level
     )
 
-    simplified = result.get("problems", problems)
+    # Same silent-drop risk as handle_difficulty: every problem must come back.
+    simplified = result.get("problems", [])
+    if result.get("error") or {p.get("id") for p in simplified} != set(originals):
+        raise RuntimeError("Could not simplify the worksheet language. Please try again.")
 
     for p in simplified:
         orig = originals.get(p["id"])

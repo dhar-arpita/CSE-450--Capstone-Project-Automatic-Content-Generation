@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { listMyUploads } from "../services/api";
 import { IconAlert, IconUpload } from "./icons";
+import SearchBox from "./SearchBox";
 import "./SavedContentList.css";
 
 /* What this teacher has sent for ingestion, in the right-hand rail.
@@ -11,6 +12,7 @@ import "./SavedContentList.css";
 export default function UploadedList({ version = 0, labels, locale = "en-GB" }) {
   const [items, setItems] = useState(null);
   const [failed, setFailed] = useState(false);
+  const [search, setSearch] = useState("");
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -37,6 +39,16 @@ export default function UploadedList({ version = 0, labels, locale = "en-GB" }) 
 
   const statusLabel = (raw) => labels.statuses?.[(raw || "").toLowerCase()] ?? raw;
 
+  const q = search.trim().toLowerCase();
+  const filtered = useMemo(() => {
+    if (!q) return items || [];
+    return (items || []).filter((it) =>
+      [it.file_name, it.chapter_name, it.subject_name, it.class_name]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(q))
+    );
+  }, [items, q]);
+
   return (
     <section className="sc as-panel">
       <h3 className="sc-title">{labels.title}</h3>
@@ -54,9 +66,17 @@ export default function UploadedList({ version = 0, labels, locale = "en-GB" }) 
         </div>
       )}
 
-      {items !== null && items.length > 0 && (
-        <ul className="sc-list">
-          {items.map((it) => (
+      {items !== null && !failed && items.length > 0 && (
+        <SearchBox value={search} onChange={setSearch} placeholder={labels.searchPlaceholder} />
+      )}
+
+      {items !== null && items.length > 0 && filtered.length === 0 && (
+        <p className="sc-note" style={{ marginTop: "12px" }}>{labels.noResults}</p>
+      )}
+
+      {filtered.length > 0 && (
+        <ul className="sc-list" style={{ marginTop: items.length > 0 ? "12px" : 0 }}>
+          {filtered.map((it) => (
             <li className="sc-row" key={it.request_id}>
               <span className="sc-file">{it.file_name}</span>
               <span className="sc-item-meta">
